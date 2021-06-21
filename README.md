@@ -43,9 +43,9 @@ Well documented example applications cover the features:<br>
 * Viewport: Navigation<br>
   <p float="left">
     <img src="src/examples/2_navigation.gif" alt="1_scene" height="300">
-    <img src="src/examples/2_navigation_mouse_c.png" alt="2_navigation_mouse_code" width="360">
+    <img src="src/examples/2_navigation_update_c.png" alt="2_navigation_update_code" width="360">
     <img src="src/examples/2_navigation_setup_c.png" alt="2_navigation_setup_code" width="350">
-    <img src="src/examples/2_navigation_keyboard_c.png" alt="2_navigation_keyboard_code" height="300">
+    <img src="src/examples/2_navigation_mouse_c.png" alt="2_navigation_mouse_code" height="300">
   </p>
   Viewport navigation actions can be composed to set-up WASD(FPS)/DCC(orb) navigation style(s).<br>
   Keyboard navigation is agnostic to key-binding and is trivial to map keys to.<br>
