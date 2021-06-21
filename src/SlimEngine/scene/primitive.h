@@ -95,7 +95,7 @@ AABB getPrimitiveAABB(Primitive *primitive) {
     return aabb;
 }
 
-void transformPrimitive(Primitive *primitive, f32 yaw, f32 pitch, f32 roll) {
+void rotatePrimitive(Primitive *primitive, f32 yaw, f32 pitch, f32 roll) {
     quat rotation;
     if (roll) {
         rotation.amount = roll;

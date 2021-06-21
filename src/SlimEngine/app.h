@@ -189,13 +189,18 @@ void drawSceneToViewport(Scene *scene, Viewport *viewport) {
         switch (primitive->type) {
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:
-                drawCurve(viewport, Color(primitive->color), scene->curves + primitive->id, primitive, CURVE_STEPS);
+                drawCurve(viewport, Color(primitive->color),
+                          scene->curves + primitive->id, primitive,
+                          CURVE_STEPS);
                 break;
             case PrimitiveType_Box:
-                drawBox(viewport, Color(primitive->color), scene->boxes + primitive->id, primitive, BOX__ALL_SIDES);
+                drawBox(viewport, Color(primitive->color),
+                        scene->boxes + primitive->id, primitive,
+                        BOX__ALL_SIDES);
                 break;
             case PrimitiveType_Grid:
-                drawGrid(viewport, Color(primitive->color), scene->grids + primitive->id, primitive);
+                drawGrid(viewport, Color(primitive->color),
+                         scene->grids + primitive->id, primitive);
                 break;
             default:
                 break;

@@ -133,3 +133,39 @@ void drawNumber(PixelGrid *canvas, RGBA color, i32 number, i32 x, i32 y) {
     printNumberIntoString(number, &number_string);
     drawText(canvas, color, number_string.string, x - number_string.digit_count * FONT_WIDTH, y);
 }
+
+void drawHUD(PixelGrid *canvas, RGBA color, HUD *hud) {
+    i32 x = hud->position.x;
+    i32 y = hud->position.y;
+
+    i32 small_gap = (i32)((f32)FONT_HEIGHT * 1.2f);
+    i32 large_gap = FONT_HEIGHT + FONT_HEIGHT;
+
+    drawText(canvas, color, HUD_fps, x, y);
+    drawText(canvas, color, hud->fps.string, x + FONT_WIDTH * 8, y);
+
+    y += small_gap;
+
+    drawText(canvas, color, HUD_msf, x, y);
+    drawText(canvas, color, hud->msf.string, x + FONT_WIDTH * 8, y);
+
+    y += large_gap;
+
+    drawText(canvas, color, HUD_width, x, y);
+    drawText(canvas, color, hud->width.string, x + FONT_WIDTH * 8, y);
+
+    y += small_gap;
+
+    drawText(canvas, color, HUD_height, x, y);
+    drawText(canvas, color, hud->height.string, x + FONT_WIDTH * 8, y);
+
+    y += large_gap;
+
+    drawText(canvas, color, HUD_mouseX, x, y);
+    drawText(canvas, color, hud->mouseX.string, x + FONT_WIDTH * 8, y);
+
+    y += small_gap;
+
+    drawText(canvas, color, HUD_mouseY, x, y);
+    drawText(canvas, color, hud->mouseY.string, x + FONT_WIDTH * 8, y);
+}

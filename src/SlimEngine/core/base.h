@@ -258,3 +258,17 @@ void printNumberIntoString(i32 number, NumberStringBuffer *number_string) {
         number_string->string = buffer + 10;
     }
 }
+
+static char *HUD_fps    = "Fps    :";
+static char *HUD_msf    = "mic-s/f:";
+
+static char *HUD_width  = "Width  :";
+static char *HUD_height = "Height :";
+
+static char *HUD_mouseX = "Mouse X:";
+static char *HUD_mouseY = "Mouse Y:";
+
+typedef struct HUD {
+    NumberStringBuffer fps, msf, width, height, mouseX, mouseY;
+    vec2i position;
+} HUD;

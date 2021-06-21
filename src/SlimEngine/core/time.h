@@ -118,5 +118,6 @@ inline void startFrameTimer(Timer *timer) {
 inline void endFrameTimer(Timer *timer) {
     timer->ticks_after = timer->getTicks();
     accumulateTimer(timer);
-    if (timer->accumulated_ticks >= timer->ticks->per_tick.seconds) averageTimer(timer);
+    if (timer->accumulated_ticks >= timer->ticks->per_second / 4)
+        averageTimer(timer);
 }

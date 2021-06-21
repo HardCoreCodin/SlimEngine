@@ -12,8 +12,10 @@ void updateScene(Scene *scene, f32 delta_time) {
     Primitive *grid_prim  = &scene->primitives[3];
 
     helix_prim->scale.y = 3 + sinf(elapsed * 1.7f);
-    helix_prim->scale.x = helix_prim->scale.z = 1 - sinf(elapsed * 1.6f + 1) * 0.3f;
-    coil_prim->scale.x  = coil_prim->scale.z  = 1 + sinf(elapsed * 1.5f + 2) * 0.2f;
+    helix_prim->scale.x = 1 - sinf(elapsed * 1.6f + 1) * 0.3f;
+    coil_prim->scale.x  = 1 + sinf(elapsed * 1.5f + 2) * 0.2f;
+    helix_prim->scale.z = helix_prim->scale.x;
+    coil_prim->scale.z  = coil_prim->scale.x;
 
     Curve *coil  = &scene->curves[1];
     coil->thickness = 0.3f - sinf(elapsed * 1.4f + 3) * 0.1f;
@@ -21,9 +23,9 @@ void updateScene(Scene *scene, f32 delta_time) {
     f32 rot_speed = delta_time * 0.5f;
     box_prim->scale = getVec3Of(1 + sinf(elapsed * 2) * 0.2f);
     grid_prim->rotation.axis.y = 0.5f;
-    transformPrimitive(box_prim, rot_speed, -rot_speed, rot_speed);
-    transformPrimitive(coil_prim, -rot_speed, rot_speed, -rot_speed);
-    transformPrimitive(helix_prim, -rot_speed, -rot_speed, rot_speed);
+    rotatePrimitive(box_prim, rot_speed, -rot_speed, rot_speed);
+    rotatePrimitive(coil_prim, -rot_speed, rot_speed, -rot_speed);
+    rotatePrimitive(helix_prim, -rot_speed, -rot_speed, rot_speed);
 }
 void updateAndRender() {
     Timer *timer = &app->time.timers.update;
