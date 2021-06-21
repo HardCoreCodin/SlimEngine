@@ -33,7 +33,7 @@ Well documented example applications cover the features:<br>
 * Scene/camera setup and viewport drawing:<br>
   <p float="left">
     <img src="src/examples/1_scene.gif" alt="1_scene" height="300">
-    <img src="src/examples/1_scene_setup_c.png" alt="1_scene_setup_code" width="300">
+    <img src="src/examples/1_scene_setup_c.png" alt="1_scene_setup_code" width="320">
+    <img src="src/examples/1_scene_initialization_and_viewport_drawing_c.png" alt="1_scene_initialization_and_viewport_drawing_code" width="350">
     <img src="src/examples/1_scene_and_camera_setup_c.png" alt="1_scene_and_camera_setup_code" height="300">
-    <img src="src/examples/1_scene_initialization_and_viewport_drawing_c.png" alt="1_scene_initialization_and_viewport_drawing_code" width="300">
   </p>
