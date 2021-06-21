@@ -8,6 +8,7 @@ void onMouseButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff.x = 0;
     app->controls.mouse.pos_raw_diff.y = 0;
 }
+
 void onMouseButtonDoubleClicked(MouseButton *mouse_button) {
     if (mouse_button == &app->controls.mouse.left_button) {
         app->controls.mouse.is_captured = !app->controls.mouse.is_captured;
@@ -16,6 +17,7 @@ void onMouseButtonDoubleClicked(MouseButton *mouse_button) {
         onMouseButtonDown(mouse_button);
     }
 }
+
 void updateViewport(Viewport *vp, Mouse *mouse, f32 dt) {
     if (mouse->is_captured) {
         if (mouse->moved)         orientViewport(vp, mouse, dt);
