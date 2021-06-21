@@ -169,31 +169,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             break;
 
         case WM_SYSKEYUP:
-        case WM_KEYUP:
-            _keyChanged((u32)wParam, false);
-            break;
+        case WM_KEYUP: _keyChanged((u32)wParam, false); break;
 
-        case WM_MBUTTONUP:
-            _mouseButtonUp(  &app->controls.mouse.middle_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-            break;
-
-        case WM_MBUTTONDOWN:
-            _mouseButtonDown(&app->controls.mouse.middle_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-            break;
-
-        case WM_LBUTTONDOWN: _mouseButtonDown(&app->controls.mouse.left_button,  GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
-        case WM_LBUTTONUP  : _mouseButtonUp(  &app->controls.mouse.left_button,  GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
-        case WM_RBUTTONDOWN: _mouseButtonDown(&app->controls.mouse.right_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
-        case WM_RBUTTONUP:   _mouseButtonUp(  &app->controls.mouse.right_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
-
-        case WM_LBUTTONDBLCLK:
-            app->controls.mouse.double_clicked = true;
-            break;
-
-        case WM_MOUSEWHEEL:
-            _mouseWheelScrolled((f32)(GET_WHEEL_DELTA_WPARAM(wParam)) / (f32)(WHEEL_DELTA));
-            break;
-
+        case WM_MBUTTONUP:     _mouseButtonUp(  &app->controls.mouse.middle_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
+        case WM_MBUTTONDOWN:   _mouseButtonDown(&app->controls.mouse.middle_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
+        case WM_LBUTTONDOWN:   _mouseButtonDown(&app->controls.mouse.left_button,   GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
+        case WM_LBUTTONUP  :   _mouseButtonUp(  &app->controls.mouse.left_button,   GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
+        case WM_RBUTTONDOWN:   _mouseButtonDown(&app->controls.mouse.right_button,  GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
+        case WM_RBUTTONUP:     _mouseButtonUp(  &app->controls.mouse.right_button,  GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
+        case WM_LBUTTONDBLCLK: _mouseButtonDoubleClicked(&app->controls.mouse.left_button,   GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
+        case WM_RBUTTONDBLCLK: _mouseButtonDoubleClicked(&app->controls.mouse.right_button,  GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
+        case WM_MBUTTONDBLCLK: _mouseButtonDoubleClicked(&app->controls.mouse.middle_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
+        case WM_MOUSEWHEEL:    _mouseWheelScrolled((f32)(GET_WHEEL_DELTA_WPARAM(wParam)) / (f32)(WHEEL_DELTA)); break;
         case WM_MOUSEMOVE:
             _mouseMovementSet(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             _mousePositionSet(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));

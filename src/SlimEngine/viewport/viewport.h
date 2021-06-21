@@ -46,53 +46,53 @@ void initViewport(Viewport *viewport,
     initNavigation(&viewport->navigation, navigation_settings);
 }
 
-void panViewportWithMouse(Viewport *viewport, Mouse *mouse) {
+void panViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.pan * delta_time;
     panCamera(viewport->camera, &viewport->navigation,
-              -(f32)mouse->pos_raw_diff.x * viewport->navigation.settings.speeds.pan,
-               +(f32)mouse->pos_raw_diff.y * viewport->navigation.settings.speeds.pan);
+              -(f32)mouse->pos_raw_diff.x * speed,
+               +(f32)mouse->pos_raw_diff.y * speed);
 
-    mouse->pos_raw_diff.x = 0;
-    mouse->pos_raw_diff.y = 0;
+    mouse->raw_movement_handled = true;
     mouse->moved = false;
 }
 
-void zoomViewportWithMouse(Viewport *viewport, Mouse *mouse) {
+void zoomViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.zoom * delta_time;
     zoomCamera(viewport->camera, &viewport->navigation,
-               mouse->wheel_scroll_amount * viewport->navigation.settings.speeds.zoom);
+               mouse->wheel_scroll_amount * speed);
 
-    mouse->wheel_scrolled = false;
-    mouse->wheel_scroll_amount = 0;
+    mouse->wheel_scroll_handled = true;
 }
 
-void dollyViewportWithMouse(Viewport *viewport, Mouse *mouse) {
+void dollyViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.dolly * delta_time;
     dollyCamera(viewport->camera, &viewport->navigation,
-                viewport->navigation.settings.speeds.dolly * mouse->wheel_scroll_amount,
+                 mouse->wheel_scroll_amount * speed,
                      viewport->navigation.settings.target_distance);
 
-    mouse->wheel_scroll_amount = 0;
-    mouse->wheel_scrolled = false;
+    mouse->wheel_scroll_handled = true;
 }
 
-void orientViewportWithMouse(Viewport *viewport, Mouse *mouse) {
+void orientViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.orient * delta_time;
     turnCamera(viewport->camera, &viewport->navigation,
-               -(f32)mouse->pos_raw_diff.x * viewport->navigation.settings.speeds.orient,
-               -(f32)mouse->pos_raw_diff.y * viewport->navigation.settings.speeds.orient);
+               -(f32)mouse->pos_raw_diff.x * speed,
+               -(f32)mouse->pos_raw_diff.y * speed);
 
-    mouse->pos_raw_diff.x = 0;
-    mouse->pos_raw_diff.y = 0;
+    mouse->raw_movement_handled = true;
     mouse->moved = false;
 }
 
-void orbitViewportWithMouse(Viewport *viewport, Mouse *mouse) {
+void orbitViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.orbit * delta_time;
     orbitCamera(viewport->camera, &viewport->navigation,
-                -(f32)mouse->pos_raw_diff.x * viewport->navigation.settings.speeds.orbit,
-                -(f32)mouse->pos_raw_diff.y * viewport->navigation.settings.speeds.orbit);
+                -(f32)mouse->pos_raw_diff.x * speed,
+                -(f32)mouse->pos_raw_diff.y * speed);
 
-    mouse->pos_raw_diff.x = 0;
-    mouse->pos_raw_diff.y = 0;
+    mouse->raw_movement_handled = true;
     mouse->moved = false;
 }
 
-void navigateViewportWithKeyboard(Viewport *viewport, f32 delta_time) {
+void navigateViewport(Viewport *viewport, f32 delta_time) {
     navigateCamera(viewport->camera, &viewport->navigation, delta_time);
 }

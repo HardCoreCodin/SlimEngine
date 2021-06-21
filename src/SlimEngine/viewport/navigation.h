@@ -3,15 +3,15 @@
 #include "../core/base.h"
 #include "../scene/camera.h"
 
-#define NAVIGATION_DEFAULT__MAX_VELOCITY 8.0f
-#define NAVIGATION_DEFAULT__ACCELERATION 30.0f
-#define NAVIGATION_DEFAULT__TARGET_DISTANCE 5.0f
-#define NAVIGATION_SPEED_DEFAULT__TURN 2.0f
-#define NAVIGATION_SPEED_DEFAULT__ORIENT 0.002f
-#define NAVIGATION_SPEED_DEFAULT__ORBIT 0.001f
-#define NAVIGATION_SPEED_DEFAULT__ZOOM 0.002f
-#define NAVIGATION_SPEED_DEFAULT__DOLLY_ 1.0f
-#define NAVIGATION_SPEED_DEFAULT__PAN 0.02f
+#define NAVIGATION_DEFAULT__MAX_VELOCITY 5
+#define NAVIGATION_DEFAULT__ACCELERATION 10
+#define NAVIGATION_DEFAULT__TARGET_DISTANCE 5
+#define NAVIGATION_SPEED_DEFAULT__TURN 2
+#define NAVIGATION_SPEED_DEFAULT__ORIENT 1
+#define NAVIGATION_SPEED_DEFAULT__ORBIT 1
+#define NAVIGATION_SPEED_DEFAULT__ZOOM 2
+#define NAVIGATION_SPEED_DEFAULT__DOLLY 100
+#define NAVIGATION_SPEED_DEFAULT__PAN 10
 
 typedef struct NavigationSpeedSettings {
     f32 turn, zoom, dolly, pan, orbit, orient;
@@ -33,7 +33,7 @@ NavigationSettings getDefaultNavigationSettings() {
     navigation_settings.speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
     navigation_settings.speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
     navigation_settings.speeds.zoom   = NAVIGATION_SPEED_DEFAULT__ZOOM;
-    navigation_settings.speeds.dolly  = NAVIGATION_SPEED_DEFAULT__DOLLY_;
+    navigation_settings.speeds.dolly  = NAVIGATION_SPEED_DEFAULT__DOLLY;
     navigation_settings.speeds.pan    = NAVIGATION_SPEED_DEFAULT__PAN;
 
     return navigation_settings;

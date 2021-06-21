@@ -1,38 +1,42 @@
 #include "../SlimEngine/app.h"
-#include "../SlimEngine/scene/box.h"
-#include "../SlimEngine/scene/grid.h"
-#include "../SlimEngine/shapes/coil.h"
-#include "../SlimEngine/shapes/helix.h"
 // Or using the single-header file:
 // #include "../SlimEngine.h"
 
-#define CURVE_STEPS 3600
-static float elapsed;
+#include "./_common.h"
 
-Box box;
-Grid grid;
-Coil coil;
-Helix helix;
-f32 height, radius, thickness;
-
-void updateShapes(f32 delta_time) {
-    elapsed += delta_time;
-
-    helix.height = height + sinf(elapsed * 1.7f) * 0.2f;
-    helix.radius = radius - sinf(elapsed * 1.6f + 1) * 0.3f;
-    coil.radius  = radius + sinf(elapsed * 1.5f + 2) * 0.2f;
-    coil.thickness = thickness - sinf(elapsed * 1.4f + 3) * 0.1f;
-
-    f32 rot_speed = delta_time * 0.5f;
-    box.transform.scale = getVec3Of(1 + sinf(elapsed * 2) * 0.2f);
-    rotateXform3(&box.transform, rot_speed, rot_speed, rot_speed);
-}
-
-void resetRawMouseInput() {
+void onMouseButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff.x = 0;
     app->controls.mouse.pos_raw_diff.y = 0;
 }
-
+void onMouseButtonDoubleClicked(MouseButton *mouse_button) {
+    if (mouse_button == &app->controls.mouse.left_button) {
+        app->controls.mouse.is_captured = !app->controls.mouse.is_captured;
+        app->platform.setCursorVisibility(!app->controls.mouse.is_captured);
+        app->platform.setWindowCapture(    app->controls.mouse.is_captured);
+        onMouseButtonDown(mouse_button);
+    }
+}
+void updateViewport(Viewport *vp, Mouse *mouse, f32 dt) {
+    if (app->controls.mouse.is_captured) {
+        navigateViewport(vp, dt);
+        if (mouse->moved)         orientViewport(vp, mouse, dt);
+        if (mouse->wheel_scrolled)  zoomViewport(vp, mouse, dt);
+    } else {
+        if (mouse->wheel_scrolled) dollyViewport(vp, mouse, dt);
+        if (mouse->moved) {
+            if (mouse->middle_button.is_pressed)  panViewport(vp, mouse, dt);
+            if (mouse->right_button.is_pressed) orbitViewport(vp, mouse, dt);
+        }
+    }
+}
+void updateAndRender() {
+    Timer *timer = &app->time.timers.update;
+    startFrameTimer(timer);
+    updateViewport(&app->viewport, &app->controls.mouse, timer->delta_time);
+    drawSceneToViewport(&app->scene, &app->viewport);
+    drawMouseAndKeyboard(&app->viewport, &app->controls.mouse);
+    endFrameTimer(timer);
+}
 void onKeyChanged(u8 key, bool is_pressed) {
     NavigationMove *move = &app->viewport.navigation.move;
     NavigationTurn *turn = &app->viewport.navigation.turn;
@@ -44,69 +48,17 @@ void onKeyChanged(u8 key, bool is_pressed) {
     if (key == 'A') move->left     = is_pressed;
     if (key == 'S') move->backward = is_pressed;
     if (key == 'D') move->right    = is_pressed;
-    if (key == app->controls.key_map.ctrl) resetRawMouseInput();
 }
-void onMouseDown(MouseButton *mb) { resetRawMouseInput(); }
-void updateViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    if (app->controls.is_pressed.ctrl) {
-        navigateViewportWithKeyboard(viewport, delta_time);
-        if (mouse->moved)        orientViewportWithMouse(viewport, mouse);
-        if (mouse->wheel_scrolled) zoomViewportWithMouse(viewport, mouse);
-    } else {
-        if (mouse->wheel_scrolled) dollyViewportWithMouse(viewport, mouse);
-        if (mouse->moved) {
-            if (mouse->middle_button.is_pressed)  panViewportWithMouse(viewport, mouse);
-            if (mouse->right_button.is_pressed) orbitViewportWithMouse(viewport, mouse);
-        }
-    }
+void setupScene(Scene *scene) {
+    scene->primitives->type = PrimitiveType_Grid;
+    initGrid(scene->grids,-5,-5, +5,+5, 11, 11);
 }
-
-void drawShapes() {
-    startFrameTimer(&app->time.timers.update);
-    f32 delta_time = app->time.timers.update.delta_time;
-    updateShapes(delta_time);
-    updateViewport(&app->viewport, &app->controls.mouse, delta_time);
-
-    Viewport *viewport = &app->viewport;
-    fillPixelGrid(viewport->frame_buffer, Color(Black));
-
-    drawBox(  viewport, Color(Yellow),  &box, BOX__ALL_SIDES);
-    drawCoil( viewport, Color(Magenta), &coil,  CURVE_STEPS);
-    drawHelix(viewport, Color(Cyan),    &helix, CURVE_STEPS);
-    drawGrid( viewport, Color(Green),   &grid);
-
-    endFrameTimer(&app->time.timers.update);
-}
-
 void initApp(Defaults *defaults) {
-    app->on.windowRedraw = drawShapes;
-    app->on.mouseButtonDown = onMouseDown;
+    defaults->settings.scene.grids      = 1;
+    defaults->settings.scene.primitives = 1;
+    app->on.windowRedraw = updateAndRender;
+    app->on.sceneReady = setupScene;
     app->on.keyChanged = onKeyChanged;
-
-    initCoil(&coil);
-    initHelix(&helix);
-    coil.transform.position.x = -1;
-    helix.transform.position.x = 2;
-    helix.transform.position.y = coil.transform.position.y = -1.5f;
-    helix.transform.position.z = coil.transform.position.z = 8;
-
-    height = helix.height;
-    radius = helix.radius;
-    thickness = coil.thickness;
-
-    vec3 box_min = getVec3Of(-1);
-    vec3 box_max = getVec3Of(+1);
-    initBox(&box, box_min, box_max);
-    initGrid(&grid,
-             -5, +5,
-             -5, +5,
-             11,
-             11);
-
-    box.transform.position.x = -2;
-    box.transform.position.y = 1;
-    box.transform.position.z = 10;
-    grid.transform.position.x = 0;
-    grid.transform.position.y = -5;
-    grid.transform.position.z = 20;
+    app->on.mouseButtonDown          = onMouseButtonDown;
+    app->on.mouseButtonDoubleClicked = onMouseButtonDoubleClicked;
 }

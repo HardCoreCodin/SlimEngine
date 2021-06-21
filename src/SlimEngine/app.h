@@ -19,6 +19,7 @@ typedef struct AppCallbacks {
     void (*keyChanged)(  u8 key, bool pressed);
     void (*mouseButtonUp)(  MouseButton *mouse_button);
     void (*mouseButtonDown)(MouseButton *mouse_button);
+    void (*mouseButtonDoubleClicked)(MouseButton *mouse_button);
     void (*mouseWheelScrolled)(f32 amount);
     void (*mousePositionSet)(i32 x, i32 y);
     void (*mouseMovementSet)(i32 x, i32 y);
@@ -122,6 +123,13 @@ void _mouseButtonUp(MouseButton *mouse_button, i32 x, i32 y) {
     if (app->on.mouseButtonUp) app->on.mouseButtonUp(mouse_button);
 }
 
+void _mouseButtonDoubleClicked(MouseButton *mouse_button, i32 x, i32 y) {
+    app->controls.mouse.double_clicked = true;
+    mouse_button->double_click_pos.x = x;
+    mouse_button->double_click_pos.y = y;
+    if (app->on.mouseButtonDoubleClicked) app->on.mouseButtonDoubleClicked(mouse_button);
+}
+
 void _mouseWheelScrolled(f32 amount) {
     app->controls.mouse.wheel_scroll_amount += amount * 100;
     app->controls.mouse.wheel_scrolled = true;
@@ -206,6 +214,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     app->on.keyChanged = null;
     app->on.mouseButtonUp = null;
     app->on.mouseButtonDown = null;
+    app->on.mouseButtonDoubleClicked = null;
     app->on.mouseWheelScrolled = null;
     app->on.mousePositionSet = null;
     app->on.mouseMovementSet = null;

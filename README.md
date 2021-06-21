@@ -37,3 +37,6 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/1_scene_initialization_and_viewport_drawing_c.png" alt="1_scene_initialization_and_viewport_drawing_code" width="350">
     <img src="src/examples/1_scene_and_camera_setup_c.png" alt="1_scene_and_camera_setup_code" height="300">
   </p>
+  SlimEngine comes with a default scene and viewport with a single camera attached.<br> 
+  It allocates and initializes the scene based on overridable default settings.<br>
+  Drawing the scene to the viewport is done manually when the window redraws.<br>

@@ -16,6 +16,9 @@ SceneCounts getDefaultSceneCounts() {
 
     default_scene_counts.cameras = 1;
     default_scene_counts.primitives = 0;
+    default_scene_counts.curves = 0;
+    default_scene_counts.boxes = 0;
+    default_scene_counts.grids = 0;
 
     return default_scene_counts;
 }
