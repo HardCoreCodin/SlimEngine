@@ -30,50 +30,12 @@ Additional features include facilities for interactive 3D application developmen
 
 Well documented example applications cover the features:<br>
 
-* 3D Shapes: Box, Helix and Coil<br>
+* Scene/camera setup and viewport drawing:<br>
   <p float="left">
-    <img src="src/examples/1_shapes3D.gif" alt="1_app" height="300">
-    <img src="src/examples/1_shapes3D_c.png" alt="1_app_code" width="400">
+    <img src="src/examples/1_scene.gif" alt="1_scene" height="300">
+    <img src="src/examples/1_scene_and_camera_setup_c.png" alt="1_scene_and_camera_setup_code" height="300">
   </p>
-* Overridable window defaults: Initial dimensions and title.<br>
   <p float="left">
-    <img src="src/examples/2_defaults.gif" alt="2_defaults" height="300">
-    <img src="src/examples/2_defaults_c.png" alt="2_defaults_code" width="400">
+    <img src="src/examples/1_scene_initialization_and_viewport_drawing_c.png" alt="1_scene_initialization_and_viewport_drawing_code" width="400">
+    <img src="src/examples/1_scene_setup_c.png" alt="1_scene_setup_code" width="400">
   </p>
-* Timers and window-title control:<br>
-  <p float="left">
-    <img src="src/examples/3_time.gif" alt="3_time" height="300">
-    <img src="src/examples/3_time_c.png" alt="3_time_code" width="400">
-  </p>
-* Drawable window content: Basic shape drawing (Lines, rectangles, triangles and circles)<br>
-  <p float="left">
-    <img src="src/examples/4_shapes.gif" alt="4_shapes" height="300">
-    <img src="src/examples/4_shapes_c.png" alt="4_shapes_code" width="400">
-  </p>
-* Text: String and number drawing:<br>
-  <p float="left">
-    <img src="src/examples/5_text.gif" alt="5_text" height="300">
-    <img src="src/examples/5_text_c.png" alt="5_text_code" width="400">
-  </p>
-* Mouse: Buttons (+wheel), cursor position/movement and 'raw' mouse input (captured outside the window).<br>
-  <p float="left">
-    <img src="src/examples/6_mouse.gif" alt="6_mouse" height="300">
-    <img src="src/examples/6_mouse_c.png" alt="6_mouse_code" width="400">
-  </p>
-* Keyboard: General key tracking + built-in tracking of control keys status (Ctrl, Alt, Shift, Space)<br>
-  <p float="left">
-    <img src="src/examples/7_keyboard.gif" alt="7_keyboard" height="300">
-    <img src="src/examples/7_keyboard_c.png" alt="7_keyboard_code" width="400">
-  </p>
-* Memory: Arena allocator can be used for heap memory, then bound to the global app instance.<br>
-  <p float="left">
-    <img src="src/examples/8_memory.gif" alt="8_memory" height="300">
-    <img src="src/examples/8_memory_c.png" alt="8_memory_code" width="400">
-  </p>
-* File: Opening/closing and reading/writing files in a platform-agnostic way (using os-specific API).<br>
-  <p float="left">
-    <img src="src/examples/9_files_io.gif" alt="9_files" height="300">
-    <img src="src/examples/9_files_c.png" alt="9_files_code" width="400">
-  </p>
-
-<i>*All input capturing for mouse and keyboard is extendable through callbacks</i><br>

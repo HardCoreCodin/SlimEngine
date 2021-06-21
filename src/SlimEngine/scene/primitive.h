@@ -9,6 +9,7 @@
 #define IS_ROTATED ((u8)4)
 #define IS_SCALED ((u8)8)
 #define IS_SCALED_NON_UNIFORMLY ((u8)16)
+#define ALL_FLAGS (IS_VISIBLE | IS_TRANSLATED | IS_ROTATED | IS_SCALED | IS_SCALED_NON_UNIFORMLY)
 
 enum PrimitiveType {
     PrimitiveType_None = 0,
@@ -33,7 +34,7 @@ void initPrimitive(Primitive *primitive) {
     primitive->id = 0;
     primitive->type = PrimitiveType_None;
     primitive->color = White;
-    primitive->flags = IS_VISIBLE;
+    primitive->flags = ALL_FLAGS;
 
     primitive->scale    = getVec3Of(1);
     primitive->position = getVec3Of(0);
