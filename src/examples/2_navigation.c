@@ -56,9 +56,7 @@ void onKeyChanged(u8 key, bool is_pressed) {
 }
 void setupScene(Scene *scene) {
     scene->primitives->type = PrimitiveType_Grid;
-    initGrid(scene->grids
-            ,-5,-5
-            ,+5,+5,
+    initGrid(scene->grids,-5,-5,+5,+5,
              11, 11);
 }
 void initApp(Defaults *defaults) {
