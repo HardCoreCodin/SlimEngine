@@ -13,6 +13,7 @@
 enum PrimitiveType {
     PrimitiveType_None = 0,
     PrimitiveType_Quad,
+    PrimitiveType_Grid,
     PrimitiveType_Box,
     PrimitiveType_Helix,
     PrimitiveType_Coil,
@@ -22,15 +23,17 @@ enum PrimitiveType {
 typedef struct Primitive {
     quat rotation;
     vec3 position, scale;
-    u32 id;
     enum PrimitiveType type;
+    enum ColorID color;
+    u32 id;
     u8 flags;
 } Primitive;
 
 void initPrimitive(Primitive *primitive) {
-    primitive->type = PrimitiveType_None;
-    primitive->flags = IS_VISIBLE;
     primitive->id = 0;
+    primitive->type = PrimitiveType_None;
+    primitive->color = White;
+    primitive->flags = IS_VISIBLE;
 
     primitive->scale    = getVec3Of(1);
     primitive->position = getVec3Of(0);
@@ -89,6 +92,42 @@ AABB getPrimitiveAABB(Primitive *primitive) {
     aabb.min = invertedVec3(aabb.max);
 
     return aabb;
+}
+
+void transformPrimitive(Primitive *primitive, f32 yaw, f32 pitch, f32 roll) {
+    quat rotation;
+    if (roll) {
+        rotation.amount = roll;
+        rotation.axis.x = 0;
+        rotation.axis.y = 0;
+        rotation.axis.z = 1;
+    } else
+        rotation = getIdentityQuaternion();
+
+    if (pitch) {
+        quat pitch_rotation;
+        pitch_rotation.amount = pitch;
+        pitch_rotation.axis.x = 1;
+        pitch_rotation.axis.y = 0;
+        pitch_rotation.axis.z = 0;
+        pitch_rotation = normQuat(pitch_rotation);
+        rotation = mulQuat(rotation, pitch_rotation);
+        rotation = normQuat(rotation);
+    }
+
+    if (yaw) {
+        quat yaw_rotation;
+        yaw_rotation.amount = yaw;
+        yaw_rotation.axis.x = 0;
+        yaw_rotation.axis.y = 1;
+        yaw_rotation.axis.z = 0;
+        yaw_rotation = normQuat(yaw_rotation);
+        rotation = mulQuat(rotation, yaw_rotation);
+        rotation = normQuat(rotation);
+    }
+
+    primitive->rotation = mulQuat(primitive->rotation, rotation);
+    primitive->rotation = normQuat(primitive->rotation);
 }
 
 void transformAABB(AABB *aabb, Primitive *primitive) {

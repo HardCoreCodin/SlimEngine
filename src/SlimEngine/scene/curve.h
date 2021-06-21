@@ -2,9 +2,11 @@
 
 #include "../core/pixels.h"
 #include "../math/math3D.h"
-#include "../scene/primitive.h"
-#include "./edge.h"
+#include "../shapes/edge.h"
+#include "../viewport/viewport.h"
+#include "./primitive.h"
 
+#define CURVE_STEPS 3600
 
 void drawCurve(Viewport *viewport, RGBA color, Curve *curve, Primitive *primitive, u32 step_count) {
     f32 one_over_step_count = 1.0f / (f32)step_count;

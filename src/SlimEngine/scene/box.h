@@ -2,9 +2,9 @@
 
 #include "../core/base.h"
 #include "../math/math3D.h"
-#include "../scene/xform.h"
+#include "../shapes/edge.h"
 #include "../viewport/viewport.h"
-#include "./edge.h"
+#include "./primitive.h"
 
 typedef enum BoxSide {
     NoSide = 0,
@@ -22,13 +22,13 @@ typedef enum BoxSide {
 
 typedef struct BoxCorners {
     vec3 front_top_left,
-            front_top_right,
-            front_bottom_left,
-            front_bottom_right,
-            back_top_left,
-            back_top_right,
-            back_bottom_left,
-            back_bottom_right;
+         front_top_right,
+         front_bottom_left,
+         front_bottom_right,
+         back_top_left,
+         back_top_right,
+         back_bottom_left,
+         back_bottom_right;
 } BoxCorners;
 
 typedef union BoxVertices {
@@ -38,17 +38,17 @@ typedef union BoxVertices {
 
 typedef struct BoxEdgeSides {
     Edge front_top,
-            front_bottom,
-            front_left,
-            front_right,
-            back_top,
-            back_bottom,
-            back_left,
-            back_right,
-            left_bottom,
-            left_top,
-            right_bottom,
-            right_top;
+         front_bottom,
+         front_left,
+         front_right,
+         back_top,
+         back_bottom,
+         back_left,
+         back_right,
+         left_bottom,
+         left_top,
+         right_bottom,
+         right_top;
 } BoxEdgeSides;
 
 typedef union BoxEdges {
@@ -59,7 +59,6 @@ typedef union BoxEdges {
 typedef struct Box {
     BoxVertices vertices;
     BoxEdges edges;
-    xform3 transform;
 } Box;
 
 void setBoxEdgesFromVertices(BoxEdges *edges, BoxVertices *vertices) {
@@ -92,8 +91,6 @@ void setBoxEdgesFromVertices(BoxEdges *edges, BoxVertices *vertices) {
 }
 
 void initBox(Box *box, vec3 min, vec3 max) {
-    initXform3(&box->transform);
-
     box->vertices.corners.front_top_left.x = min.x;
     box->vertices.corners.back_top_left.x = min.x;
     box->vertices.corners.front_bottom_left.x = min.x;
@@ -129,15 +126,13 @@ void initBox(Box *box, vec3 min, vec3 max) {
     setBoxEdgesFromVertices(&box->edges, &box->vertices);
 }
 
-void drawBox(Viewport *viewport, RGBA color, Box *box, u8 sides) {
+void drawBox(Viewport *viewport, RGBA color, Box *box, Primitive *primitive, u8 sides) {
     // Transform vertices positions from local-space to world-space and then to view-space:
     BoxVertices vertices;
     vec3 position;
     for (u8 i = 0; i < BOX__VERTEX_COUNT; i++) {
         position = box->vertices.buffer[i];
-        position = mulVec3(    position, box->transform.scale);
-        position = mulVec3Quat(position, box->transform.rotation);
-        position = addVec3(    position, box->transform.position);
+        position = convertPositionToWorldSpace(position, primitive);
         position = subVec3(    position, viewport->camera->transform.position);
         position = mulVec3Quat(position, viewport->camera->transform.rotation_inverted);
         vertices.buffer[i] = position;

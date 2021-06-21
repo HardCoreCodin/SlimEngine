@@ -1,10 +1,10 @@
 #pragma once
 
 #include "../core/base.h"
-#include "../core/pixels.h"
 #include "../math/math2D.h"
-#include "./line.h"
-#include "./edge.h"
+#include "../shapes/line.h"
+#include "../shapes/edge.h"
+#include "../viewport/viewport.h"
 
 #define GRID__MAX_SEGMENTS 11
 
@@ -35,7 +35,6 @@ typedef union GridVertices {
 typedef struct Grid {
     GridEdges edges;
     GridVertices vertices;
-    xform3 transform;
     u8 u_segments,
        v_segments;
 } Grid;
@@ -47,7 +46,7 @@ void setGridEdgesFromVertices(Edge *edges, u8 edge_count, vec3 *from, vec3 *to) 
     }
 }
 
-bool initGrid(Grid *grid, f32 min_u, f32 max_u, f32 min_v, f32 max_v, u8 u_segments, u8 v_segments) {
+bool initGrid(Grid *grid, f32 min_u, f32 min_v, f32 max_u, f32 max_v, u8 u_segments, u8 v_segments) {
     if (!u_segments || u_segments > GRID__MAX_SEGMENTS ||
         !v_segments || v_segments > GRID__MAX_SEGMENTS)
         return false;
@@ -74,12 +73,10 @@ bool initGrid(Grid *grid, f32 min_u, f32 max_u, f32 min_v, f32 max_v, u8 u_segme
     setGridEdgesFromVertices(grid->edges.uv.u, grid->u_segments, grid->vertices.uv.u.from, grid->vertices.uv.u.to);
     setGridEdgesFromVertices(grid->edges.uv.v, grid->v_segments, grid->vertices.uv.v.from, grid->vertices.uv.v.to);
 
-    initXform3(&grid->transform);
-
     return true;
 }
 
-void drawGrid(Viewport *viewport, RGBA color, Grid *grid) {
+void drawGrid(Viewport *viewport, RGBA color, Grid *grid, Primitive *primitive) {
     // Transform vertices positions from local-space to world-space and then to view-space:
     GridVertices vertices;
     vec3 position;
@@ -88,9 +85,7 @@ void drawGrid(Viewport *viewport, RGBA color, Grid *grid) {
             u8 segment_count = axis ? grid->v_segments : grid->u_segments;
             for (u8 segment = 0; segment < segment_count; segment++) {
                 position = grid->vertices.buffer[axis][side][segment];
-                position = mulVec3(    position, grid->transform.scale);
-                position = mulVec3Quat(position, grid->transform.rotation);
-                position = addVec3(    position, grid->transform.position);
+                position = convertPositionToWorldSpace(position, primitive);
                 position = subVec3(    position, viewport->camera->transform.position);
                 position = mulVec3Quat(position, viewport->camera->transform.rotation_inverted);
                 vertices.buffer[axis][side][segment] = position;

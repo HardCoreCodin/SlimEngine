@@ -6,11 +6,14 @@
 #include "./core/memory.h"
 #include "./core/controls.h"
 #include "./scene/scene.h"
+#include "./scene/box.h"
+#include "./scene/grid.h"
+#include "./scene/curve.h"
 #include "./viewport/viewport.h"
 
 typedef struct AppCallbacks {
-    void (*sceneReady)();
-    void (*viewportReady)();
+    void (*sceneReady)(Scene *scene);
+    void (*viewportReady)(Viewport *viewport);
     void (*windowRedraw)();
     void (*windowResize)(u16 width, u16 height);
     void (*keyChanged)(  u8 key, bool pressed);
@@ -170,6 +173,28 @@ void* allocateAppMemory(u64 size) {
     return null;
 }
 
+void drawSceneToViewport(Scene *scene, Viewport *viewport) {
+    fillPixelGrid(viewport->frame_buffer, Color(Black));
+
+    Primitive *primitive = scene->primitives;
+    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++) {
+        switch (primitive->type) {
+            case PrimitiveType_Coil:
+            case PrimitiveType_Helix:
+                drawCurve(viewport, Color(primitive->color), scene->curves + primitive->id, primitive, CURVE_STEPS);
+                break;
+            case PrimitiveType_Box:
+                drawBox(viewport, Color(primitive->color), scene->boxes + primitive->id, primitive, BOX__ALL_SIDES);
+                break;
+            case PrimitiveType_Grid:
+                drawGrid(viewport, Color(primitive->color), scene->grids + primitive->id, primitive);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
 void _initApp(Defaults *defaults, void* window_content_memory) {
     app->is_running = true;
     app->user_data = null;
@@ -199,11 +224,13 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     initAppMemory(defaults->additional_memory_size +
             defaults->settings.scene.primitives * sizeof(Primitive) +
             defaults->settings.scene.curves * sizeof(Curve) +
+            defaults->settings.scene.boxes * sizeof(Box) +
+            defaults->settings.scene.grids * sizeof(Grid) +
             defaults->settings.scene.cameras * sizeof(Camera));
     initScene(&app->scene, defaults->settings.scene, &app->memory);
-    if (app->on.sceneReady) app->on.sceneReady();
+    if (app->on.sceneReady) app->on.sceneReady(&app->scene);
     initViewport(&app->viewport, defaults->settings.viewport, defaults->settings.navigation, app->scene.cameras, &app->window_content);
-    if (app->on.viewportReady) app->on.viewportReady();
+    if (app->on.viewportReady) app->on.viewportReady(&app->viewport);
 }
 
 #include "./platforms/win32.h"

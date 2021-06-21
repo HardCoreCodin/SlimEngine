@@ -1,6 +1,6 @@
 #include "../SlimEngine/app.h"
-#include "../SlimEngine/shapes/box.h"
-#include "../SlimEngine/shapes/grid.h"
+#include "../SlimEngine/scene/box.h"
+#include "../SlimEngine/scene/grid.h"
 #include "../SlimEngine/shapes/coil.h"
 #include "../SlimEngine/shapes/helix.h"
 // Or using the single-header file:
