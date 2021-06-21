@@ -50,3 +50,16 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+/cmake-build-debug/
+/cmake-build-release/
+/bin/
+/x64/
+/out/
+/build/
+/.idea/
+/.vs/
+/.vscode/
+/SlimApp.sln
+/SlimApp.vcxproj
+/SlimApp.vcxproj.user
