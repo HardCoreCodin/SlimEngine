@@ -1,45 +1,8 @@
 #pragma once
 
-#include "../core/base.h"
+#include "../core/types.h"
 #include "../math/math3D.h"
 #include "../math/quat.h"
-
-#define IS_VISIBLE ((u8)1)
-#define IS_TRANSLATED ((u8)2)
-#define IS_ROTATED ((u8)4)
-#define IS_SCALED ((u8)8)
-#define IS_SCALED_NON_UNIFORMLY ((u8)16)
-#define ALL_FLAGS (IS_VISIBLE | IS_TRANSLATED | IS_ROTATED | IS_SCALED | IS_SCALED_NON_UNIFORMLY)
-
-enum PrimitiveType {
-    PrimitiveType_None = 0,
-    PrimitiveType_Quad,
-    PrimitiveType_Grid,
-    PrimitiveType_Box,
-    PrimitiveType_Helix,
-    PrimitiveType_Coil,
-    PrimitiveType_Tetrahedron
-};
-
-typedef struct Primitive {
-    quat rotation;
-    vec3 position, scale;
-    enum PrimitiveType type;
-    enum ColorID color;
-    u32 id;
-    u8 flags;
-} Primitive;
-
-void initPrimitive(Primitive *primitive) {
-    primitive->id = 0;
-    primitive->type = PrimitiveType_None;
-    primitive->color = White;
-    primitive->flags = ALL_FLAGS;
-
-    primitive->scale    = getVec3Of(1);
-    primitive->position = getVec3Of(0);
-    primitive->rotation = getIdentityQuaternion();
-}
 
 INLINE void convertPositionAndDirectionToObjectSpace(
     vec3 position, 

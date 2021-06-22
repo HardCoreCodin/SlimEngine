@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../core/base.h"
-#include "../core/pixels.h"
 #include "./line.h"
 
 void drawRect(PixelGrid *canvas, RGBA color, Rect *rect) {

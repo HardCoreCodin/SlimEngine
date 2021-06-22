@@ -72,12 +72,43 @@ typedef void* (*CallbackWithInt)(u64 size);
 typedef void (*CallbackWithBool)(bool on);
 typedef void (*CallbackWithCharPtr)(char* str);
 
-#define MAX_COLOR_VALUE 0xFF
 #define TAU 6.28f
-#define EPS 0.0001f
-#define HALF_SQRT2 0.70710678118f
-#define SQRT2 1.41421356237f
 #define SQRT3 1.73205080757f
+
+#define MAX_COLOR_VALUE 0xFF
+
+#define MAX_WIDTH 3840
+#define MAX_HEIGHT 2160
+
+#define PIXEL_SIZE 4
+#define RENDER_SIZE Megabytes(8 * PIXEL_SIZE)
+
+#define BOX__ALL_SIDES (Top | Bottom | Left | Right | Front | Back)
+#define BOX__VERTEX_COUNT 8
+#define BOX__EDGE_COUNT 12
+#define GRID__MAX_SEGMENTS 11
+
+#define IS_VISIBLE ((u8)1)
+#define IS_TRANSLATED ((u8)2)
+#define IS_ROTATED ((u8)4)
+#define IS_SCALED ((u8)8)
+#define IS_SCALED_NON_UNIFORMLY ((u8)16)
+#define ALL_FLAGS (IS_VISIBLE | IS_TRANSLATED | IS_ROTATED | IS_SCALED | IS_SCALED_NON_UNIFORMLY)
+
+#define CAMERA_DEFAULT__FOCAL_LENGTH 2.0f
+
+#define NAVIGATION_DEFAULT__MAX_VELOCITY 5
+#define NAVIGATION_DEFAULT__ACCELERATION 10
+#define NAVIGATION_DEFAULT__TARGET_DISTANCE 15
+#define NAVIGATION_SPEED_DEFAULT__TURN 2
+#define NAVIGATION_SPEED_DEFAULT__ORIENT 1
+#define NAVIGATION_SPEED_DEFAULT__ORBIT 1
+#define NAVIGATION_SPEED_DEFAULT__ZOOM 2
+#define NAVIGATION_SPEED_DEFAULT__DOLLY 300
+#define NAVIGATION_SPEED_DEFAULT__PAN 10
+
+#define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.1f
+#define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
 
 typedef struct vec2  { f32 x, y; } vec2;
 typedef struct vec2i { i32 x, y; } vec2i;
@@ -92,6 +123,100 @@ typedef struct Edge { vec3 from, to;  } Edge;
 typedef struct Rect { vec2i min, max; } Rect;
 typedef struct RGBA { u8 B, G, R, A; } RGBA;
 typedef union  Pixel { RGBA color; u32 value; } Pixel;
+
+#define Kilobytes(value) ((value)*1024LL)
+#define Megabytes(value) (Kilobytes(value)*1024LL)
+#define Gigabytes(value) (Megabytes(value)*1024LL)
+#define Terabytes(value) (Gigabytes(value)*1024LL)
+
+#define MEMORY_SIZE Gigabytes(1)
+#define MEMORY_BASE Terabytes(2)
+
+typedef struct Memory {
+    u8* address;
+    u64 occupied, capacity;
+} Memory;
+
+void initMemory(Memory *memory, u8* address, u64 capacity) {
+    memory->address = (u8*)address;
+    memory->capacity = capacity;
+    memory->occupied = 0;
+}
+
+void* allocateMemory(Memory *memory, u64 size) {
+    if (!memory->address) return null;
+    memory->occupied += size;
+    if (memory->occupied > memory->capacity) return null;
+
+    void* address = memory->address;
+    memory->address += size;
+    return address;
+}
+
+typedef struct MouseButton {
+    vec2i down_pos, up_pos, double_click_pos;
+    bool is_pressed, is_handled;
+} MouseButton;
+
+typedef struct Mouse {
+    MouseButton middle_button, right_button, left_button;
+    vec2i pos, pos_raw_diff, movement;
+    f32 wheel_scroll_amount;
+    bool moved, is_captured,
+         move_handled,
+         double_clicked,
+         double_clicked_handled,
+         wheel_scrolled,
+         wheel_scroll_handled,
+         raw_movement_handled;
+} Mouse;
+
+void resetMouseChanges(Mouse *mouse) {
+    if (mouse->move_handled) {
+        mouse->move_handled = false;
+        mouse->moved = false;
+    }
+    if (mouse->double_clicked_handled) {
+        mouse->double_clicked_handled = false;
+        mouse->double_clicked = false;
+    }
+    if (mouse->raw_movement_handled) {
+        mouse->raw_movement_handled = false;
+        mouse->pos_raw_diff.x = 0;
+        mouse->pos_raw_diff.y = 0;
+    }
+    if (mouse->wheel_scroll_handled) {
+        mouse->wheel_scroll_handled = false;
+        mouse->wheel_scrolled = false;
+        mouse->wheel_scroll_amount = 0;
+    }
+}
+
+typedef struct Dimensions {
+    u16 width, height;
+    u32 width_times_height;
+    f32 height_over_width,
+        width_over_height,
+        f_height, f_width,
+        h_height, h_width;
+} Dimensions;
+
+void updateDimensions(Dimensions *dimensions, u16 width, u16 height) {
+    dimensions->width = width;
+    dimensions->height = height;
+    dimensions->width_times_height = dimensions->width * dimensions->height;
+    dimensions->f_width  =      (f32)dimensions->width;
+    dimensions->f_height =      (f32)dimensions->height;
+    dimensions->h_width  =           dimensions->f_width  / 2;
+    dimensions->h_height =           dimensions->f_height / 2;
+    dimensions->width_over_height  = dimensions->f_width  / dimensions->f_height;
+    dimensions->height_over_width  = dimensions->f_height / dimensions->f_width;
+}
+
+typedef struct PixelGrid {
+    Dimensions dimensions;
+    Pixel* pixels;
+} PixelGrid;
 
 void swap(i32 *a, i32 *b) {
     i32 t = *a;
@@ -132,16 +257,6 @@ INLINE vec2 getPointOnUnitCircle(f32 t) {
     vec2 xy = {factor - factor * t_squared, factor * 2 * t};
 
     return xy;
-}
-
-typedef struct Curve {
-    f32 thickness;
-    u32 revolution_count;
-} Curve;
-
-void initCurve(Curve *curve) {
-    curve->thickness = 1;
-    curve->revolution_count = 1;
 }
 
 enum ColorID {
@@ -239,7 +354,6 @@ void printNumberIntoString(i32 number, NumberStringBuffer *number_string) {
         for (u8 i = 0; i < 11; i++) {
             temp = number;
             number /= 10;
-            number_string->string--;
             number_string->digit_count++;
             *buffer-- = (char)('0' + temp - number * 10);
             if (!number) {
@@ -251,22 +365,14 @@ void printNumberIntoString(i32 number, NumberStringBuffer *number_string) {
 
                 break;
             }
+            number_string->string--;
         }
     } else {
         buffer[11] = '0';
         number_string->digit_count = 1;
-        number_string->string = buffer + 10;
+        number_string->string = buffer + 11;
     }
 }
-
-static char *HUD_fps    = "Fps    :";
-static char *HUD_msf    = "mic-s/f:";
-
-static char *HUD_width  = "Width  :";
-static char *HUD_height = "Height :";
-
-static char *HUD_mouseX = "Mouse X:";
-static char *HUD_mouseY = "Mouse Y:";
 
 typedef struct HUD {
     NumberStringBuffer fps, msf, width, height, mouseX, mouseY;

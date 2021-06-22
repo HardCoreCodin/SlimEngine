@@ -1,82 +1,8 @@
 #pragma once
 
-#include "../core/base.h"
-#include "../scene/camera.h"
-
-#define NAVIGATION_DEFAULT__MAX_VELOCITY 5
-#define NAVIGATION_DEFAULT__ACCELERATION 10
-#define NAVIGATION_DEFAULT__TARGET_DISTANCE 15
-#define NAVIGATION_SPEED_DEFAULT__TURN 2
-#define NAVIGATION_SPEED_DEFAULT__ORIENT 1
-#define NAVIGATION_SPEED_DEFAULT__ORBIT 1
-#define NAVIGATION_SPEED_DEFAULT__ZOOM 2
-#define NAVIGATION_SPEED_DEFAULT__DOLLY 300
-#define NAVIGATION_SPEED_DEFAULT__PAN 10
-
-typedef struct NavigationSpeedSettings {
-    f32 turn, zoom, dolly, pan, orbit, orient;
-} NavigationSpeedSettings;
-
-typedef struct NavigationSettings {
-    NavigationSpeedSettings speeds;
-    f32 max_velocity, acceleration, target_distance;
-} NavigationSettings;
-
-NavigationSettings getDefaultNavigationSettings() {
-    NavigationSettings navigation_settings;
-
-    navigation_settings.target_distance = NAVIGATION_DEFAULT__TARGET_DISTANCE;
-    navigation_settings.max_velocity    = NAVIGATION_DEFAULT__MAX_VELOCITY;
-    navigation_settings.acceleration    = NAVIGATION_DEFAULT__ACCELERATION;
-
-    navigation_settings.speeds.turn   = NAVIGATION_SPEED_DEFAULT__TURN;
-    navigation_settings.speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
-    navigation_settings.speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
-    navigation_settings.speeds.zoom   = NAVIGATION_SPEED_DEFAULT__ZOOM;
-    navigation_settings.speeds.dolly  = NAVIGATION_SPEED_DEFAULT__DOLLY;
-    navigation_settings.speeds.pan    = NAVIGATION_SPEED_DEFAULT__PAN;
-
-    return navigation_settings;
-}
-
-typedef struct NavigationTurn {
-    bool right, left;
-} NavigationTurn;
-
-typedef struct NavigationMove {
-    bool right, left, up, down, forward, backward;
-} NavigationMove;
-
-typedef struct Navigation {
-    NavigationSettings settings;
-    NavigationMove move;
-    NavigationTurn turn;
-    vec3 current_velocity;
-    f32 zoom, dolly, target_distance;
-    bool zoomed, moved, turned;
-} Navigation;
-
-void initNavigation(Navigation *navigation, NavigationSettings navigation_settings) {
-    navigation->settings = navigation_settings;
-
-    navigation->target_distance = navigation_settings.target_distance;
-    navigation->zoom = CAMERA_DEFAULT__FOCAL_LENGTH;
-    navigation->dolly = 0;
-    navigation->turned = false;
-    navigation->moved = false;
-    navigation->zoomed = false;
-    navigation->current_velocity = getVec3Of(0);
-
-    navigation->move.right = false;
-    navigation->move.left = false;
-    navigation->move.up = false;
-    navigation->move.down = false;
-    navigation->move.forward = false;
-    navigation->move.backward = false;
-
-    navigation->turn.right = false;
-    navigation->turn.left = false;
-}
+#include "../core/types.h"
+#include "../math/math3D.h"
+#include "../scene/xform.h"
 
 void zoomCamera(Camera *camera, Navigation *navigation, f32 zoom) {
     f32 new_zoom = navigation->zoom + zoom;
@@ -152,4 +78,55 @@ void navigateCamera(Camera *camera, Navigation *navigation, f32 delta_time) {
         movement = mulVec3Mat3(movement, camera->transform.rotation_matrix);
         camera->transform.position = addVec3(camera->transform.position, movement);
     }
+}
+
+void panViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.pan * delta_time;
+    panCamera(viewport->camera, &viewport->navigation,
+              -(f32)mouse->pos_raw_diff.x * speed,
+              +(f32)mouse->pos_raw_diff.y * speed);
+
+    mouse->raw_movement_handled = true;
+    mouse->moved = false;
+}
+
+void zoomViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.zoom * delta_time;
+    zoomCamera(viewport->camera, &viewport->navigation,
+               mouse->wheel_scroll_amount * speed);
+
+    mouse->wheel_scroll_handled = true;
+}
+
+void dollyViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.dolly * delta_time;
+    dollyCamera(viewport->camera, &viewport->navigation,
+                mouse->wheel_scroll_amount * speed,
+                viewport->navigation.settings.target_distance);
+
+    mouse->wheel_scroll_handled = true;
+}
+
+void orientViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.orient * delta_time;
+    turnCamera(viewport->camera, &viewport->navigation,
+               -(f32)mouse->pos_raw_diff.x * speed,
+               -(f32)mouse->pos_raw_diff.y * speed);
+
+    mouse->raw_movement_handled = true;
+    mouse->moved = false;
+}
+
+void orbitViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
+    f32 speed = viewport->navigation.settings.speeds.orbit * delta_time;
+    orbitCamera(viewport->camera, &viewport->navigation,
+                -(f32)mouse->pos_raw_diff.x * speed,
+                -(f32)mouse->pos_raw_diff.y * speed);
+
+    mouse->raw_movement_handled = true;
+    mouse->moved = false;
+}
+
+void navigateViewport(Viewport *viewport, f32 delta_time) {
+    navigateCamera(viewport->camera, &viewport->navigation, delta_time);
 }

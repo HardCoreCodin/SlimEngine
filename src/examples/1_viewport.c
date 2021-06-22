@@ -1,7 +1,15 @@
 #include "../SlimEngine/app.h"
-#include "../SlimEngine/core/text.h"
+#include "../SlimEngine/core/time.h"
+#include "../SlimEngine/scene/grid.h"
+#include "../SlimEngine/scene/xform.h"
+#include "../SlimEngine/viewport/hud.h"
 // Or using the single-header file:
 // #include "../SlimEngine.h"
+
+void drawSceneToViewport(Scene *scene, Viewport *viewport) {
+    fillPixelGrid(viewport->frame_buffer, Color(Black));
+    drawGrid(viewport, Color(scene->primitives->color), scene->grids, scene->primitives);
+}
 
 void updateAndRender() {
     Timer *timer = &app->time.timers.update;
@@ -37,7 +45,7 @@ void setupScene(Scene *scene) {
     Primitive *grid = scene->primitives;
     grid->type = PrimitiveType_Grid;
     grid->position.z = 5;
-    rotatePrimitive(grid,0.5f,0,0);
+    grid->rotation.axis.y = 0.5f;
     initGrid(scene->grids,
              -5,-5,
              +5,+5,

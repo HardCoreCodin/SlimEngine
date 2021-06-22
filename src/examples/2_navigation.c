@@ -1,8 +1,16 @@
 #include "../SlimEngine/app.h"
+#include "../SlimEngine/core/time.h"
+#include "../SlimEngine/scene/grid.h"
+#include "../SlimEngine/viewport/navigation.h"
 // Or using the single-header file:
 // #include "../SlimEngine.h"
 
 #include "./_common.h"
+
+void drawSceneToViewport(Scene *scene, Viewport *viewport) {
+    fillPixelGrid(viewport->frame_buffer, Color(Black));
+    drawGrid(viewport, Color(scene->primitives->color), scene->grids, scene->primitives);
+}
 
 void onMouseButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff.x = 0;
@@ -58,11 +66,21 @@ void onKeyChanged(u8 key, bool is_pressed) {
 }
 void setupScene(Scene *scene) {
     scene->primitives->type = PrimitiveType_Grid;
+    scene->primitives->position.z = 5;
+    scene->primitives->rotation.axis.y = 0.5f;
     initGrid(scene->grids,-5,-5,+5,+5,
              11, 11);
 }
+void setupCamera(Viewport *viewport) {
+    xform3 *xf = &viewport->camera->transform;
+    xf->position.y = 7;
+    xf->position.z = -11;
+    rotateXform3(xf, 0, -0.2f, 0);
+}
 void initApp(Defaults *defaults) {
-    app->on.windowRedraw = updateAndRender;
+    app->on.windowRedraw  = updateAndRender;
+    app->on.sceneReady    = setupScene;
+    app->on.viewportReady = setupCamera;
     app->on.sceneReady = setupScene;
     app->on.keyChanged = onKeyChanged;
     app->on.mouseButtonDown          = onMouseButtonDown;

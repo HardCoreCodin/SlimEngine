@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../core/base.h"
-#include "../core/pixels.h"
 
 void fillTriangle(PixelGrid *canvas, RGBA color, f32 *X, f32 *Y) {
     u16 W = canvas->dimensions.width;

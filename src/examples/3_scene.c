@@ -1,6 +1,38 @@
 #include "../SlimEngine/app.h"
+#include "../SlimEngine/core/time.h"
+#include "../SlimEngine/scene/xform.h"
+#include "../SlimEngine/scene/box.h"
+#include "../SlimEngine/scene/grid.h"
+#include "../SlimEngine/scene/curve.h"
 // Or using the single-header file:
 // #include "../SlimEngine.h"
+
+void drawSceneToViewport(Scene *scene, Viewport *viewport) {
+    fillPixelGrid(viewport->frame_buffer, Color(Black));
+
+    Primitive *primitive = scene->primitives;
+    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++) {
+        switch (primitive->type) {
+            case PrimitiveType_Coil:
+            case PrimitiveType_Helix:
+                drawCurve(viewport, Color(primitive->color),
+                          scene->curves + primitive->id, primitive,
+                          CURVE_STEPS);
+                break;
+            case PrimitiveType_Box:
+                drawBox(viewport, Color(primitive->color),
+                        scene->boxes + primitive->id, primitive,
+                        BOX__ALL_SIDES);
+                break;
+            case PrimitiveType_Grid:
+                drawGrid(viewport, Color(primitive->color),
+                         scene->grids + primitive->id, primitive);
+                break;
+            default:
+                break;
+        }
+    }
+}
 
 void updateScene(Scene *scene, f32 delta_time) {
     static float elapsed = 0;
@@ -22,7 +54,6 @@ void updateScene(Scene *scene, f32 delta_time) {
 
     f32 rot_speed = delta_time * 0.5f;
     box_prim->scale = getVec3Of(1 + sinf(elapsed * 2) * 0.2f);
-    grid_prim->rotation.axis.y = 0.5f;
     rotatePrimitive(box_prim, rot_speed, -rot_speed, rot_speed);
     rotatePrimitive(coil_prim, -rot_speed, rot_speed, -rot_speed);
     rotatePrimitive(helix_prim, -rot_speed, -rot_speed, rot_speed);
@@ -57,6 +88,7 @@ void setupScene(Scene *scene) {
     coil_prim->id  = 1;
     scene->curves[0].revolution_count = 10;
     scene->curves[1].revolution_count = 15;
+    grid_prim->rotation.axis.y = 0.5f;
     initGrid(scene->grids,
              -5,-5,
              +5,+5,

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../core/base.h"
-#include "../core/pixels.h"
 
 void drawHLine2D(PixelGrid *canvas, RGBA color, i32 from, i32 to, i32 at) {
 	if (!inRange(at, canvas->dimensions.height, 0)) return;

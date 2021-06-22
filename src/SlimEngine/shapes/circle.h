@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../core/base.h"
-#include "../core/pixels.h"
 
 void drawCircle(PixelGrid *canvas, RGBA color, i32 center_x, i32 center_y, i32 radius) {
     if (radius <= 1) {

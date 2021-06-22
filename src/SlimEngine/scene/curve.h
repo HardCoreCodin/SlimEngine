@@ -1,9 +1,8 @@
 #pragma once
 
-#include "../core/pixels.h"
+#include "../core/types.h"
 #include "../math/math3D.h"
 #include "../shapes/edge.h"
-#include "../viewport/viewport.h"
 #include "./primitive.h"
 
 #define CURVE_STEPS 3600

@@ -2,7 +2,6 @@
 
 #include "../SlimEngine/core/base.h"
 #include "../SlimEngine/core/text.h"
-#include "../SlimEngine/core/pixels.h"
 #include "../SlimEngine/shapes/rect.h"
 
 #define MOUSE_WHEEL__MAX 2000

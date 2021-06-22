@@ -1,15 +1,6 @@
 #pragma once
 
-#include "./core/base.h"
-#include "./core/time.h"
-#include "./core/pixels.h"
-#include "./core/memory.h"
-#include "./core/controls.h"
-#include "./scene/scene.h"
-#include "./scene/box.h"
-#include "./scene/grid.h"
-#include "./scene/curve.h"
-#include "./viewport/viewport.h"
+#include "./core/init.h"
 
 typedef struct AppCallbacks {
     void (*sceneReady)(Scene *scene);
@@ -181,33 +172,6 @@ void* allocateAppMemory(u64 size) {
     return null;
 }
 
-void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer, Color(Black));
-
-    Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++) {
-        switch (primitive->type) {
-            case PrimitiveType_Coil:
-            case PrimitiveType_Helix:
-                drawCurve(viewport, Color(primitive->color),
-                          scene->curves + primitive->id, primitive,
-                          CURVE_STEPS);
-                break;
-            case PrimitiveType_Box:
-                drawBox(viewport, Color(primitive->color),
-                        scene->boxes + primitive->id, primitive,
-                        BOX__ALL_SIDES);
-                break;
-            case PrimitiveType_Grid:
-                drawGrid(viewport, Color(primitive->color),
-                         scene->grids + primitive->id, primitive);
-                break;
-            default:
-                break;
-        }
-    }
-}
-
 void _initApp(Defaults *defaults, void* window_content_memory) {
     app->is_running = true;
     app->user_data = null;
@@ -226,7 +190,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     app->on.mouseRawMovementSet = null;
 
     initTime(&app->time, app->platform.getTicks, app->platform.ticks_per_second);
-    initControls(&app->controls);
+    initMouse(&app->controls.mouse);
     initPixelGrid(&app->window_content, (Pixel*)window_content_memory);
 
     defaults->title = "";

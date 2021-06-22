@@ -1,8 +1,7 @@
 #pragma once
 
-#include "../core/base.h"
+#include "../core/types.h"
 #include "../math/math3D.h"
-#include "../viewport/viewport.h"
 #include "./line.h"
 
 void projectEdge(Edge *edge, Viewport *viewport) {
