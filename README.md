@@ -6,6 +6,8 @@ Can be complied in either C or C++.<br>
 
 This project uses [SlimApp](https://github.com/HardCoreCodin/SlimApp) as it's base platform/application layer(s).
 
+<i>(*A bare-bone application executable on Windows measures at around 17 KB(!))<br></i>
+
 Architecture:
 -
 The platform layer only uses operating-system headers (no standard library used).<br>

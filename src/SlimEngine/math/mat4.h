@@ -25,7 +25,7 @@ INLINE mat4 transposeMat4(mat4 m) {
 }
 
 INLINE mat4 addMat4(mat4 a, mat4 b) {
-    mat3 out;
+    mat4 out;
 
     out.X.x = a.X.x + b.X.x;
     out.X.y = a.X.y + b.X.y;
@@ -51,7 +51,7 @@ INLINE mat4 addMat4(mat4 a, mat4 b) {
 }
 
 INLINE mat4 subMat4(mat4 a, mat4 b) {
-    mat3 out;
+    mat4 out;
 
     out.X.x = a.X.x - b.X.x;
     out.X.y = a.X.y - b.X.y;
@@ -79,25 +79,25 @@ INLINE mat4 subMat4(mat4 a, mat4 b) {
 INLINE mat4 scaleMat4(mat4 m, f32 factor) {
     mat4 out;
 
-    out.X.x *= factor;
-    out.X.y *= factor;
-    out.X.z *= factor;
-    out.X.w *= factor;
+    out.X.x = m.X.x * factor;
+    out.X.y = m.X.y * factor;
+    out.X.z = m.X.z * factor;
+    out.X.w = m.X.w * factor;
 
-    out.Y.x *= factor;
-    out.Y.y *= factor;
-    out.Y.z *= factor;
-    out.Y.w *= factor;
+    out.Y.x = m.Y.x * factor;
+    out.Y.y = m.Y.y * factor;
+    out.Y.z = m.Y.z * factor;
+    out.Y.w = m.Y.w * factor;
 
-    out.Z.x *= factor;
-    out.Z.y *= factor;
-    out.Z.z *= factor;
-    out.Z.w *= factor;
+    out.Z.x = m.Z.x * factor;
+    out.Z.y = m.Z.y * factor;
+    out.Z.z = m.Z.z * factor;
+    out.Z.w = m.Z.w * factor;
 
-    out.W.x *= factor;
-    out.W.y *= factor;
-    out.W.z *= factor;
-    out.W.w *= factor;
+    out.W.x = m.W.x * factor;
+    out.W.y = m.W.y * factor;
+    out.W.z = m.W.z * factor;
+    out.W.w = m.W.w * factor;
 
     return out;
 }

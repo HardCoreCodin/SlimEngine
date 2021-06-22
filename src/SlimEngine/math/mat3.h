@@ -51,17 +51,17 @@ INLINE mat3 subMat3(mat3 a, mat3 b) {
 INLINE mat3 scaleMat3(mat3 m, f32 factor) {
     mat3 out;
 
-    out.X.x *= factor;
-    out.X.y *= factor;
-    out.X.z *= factor;
+    out.X.x = m.X.x * factor;
+    out.X.y = m.X.y * factor;
+    out.X.z = m.X.z * factor;
 
-    out.Y.x *= factor;
-    out.Y.y *= factor;
-    out.Y.z *= factor;
+    out.Y.x = m.Y.x * factor;
+    out.Y.y = m.Y.y * factor;
+    out.Y.z = m.Y.z * factor;
 
-    out.Z.x *= factor;
-    out.Z.y *= factor;
-    out.Z.z *= factor;
+    out.Z.x = m.Z.x * factor;
+    out.Z.y = m.Z.y * factor;
+    out.Z.z = m.Z.z * factor;
 
     return out;
 }
@@ -211,12 +211,6 @@ INLINE void rollMat3(f32 amount, mat3* out) {
     out->X.y = xy.x * X.y - xy.y * X.x;
     out->Y.y = xy.x * Y.y - xy.y * Y.x;
     out->Z.y = xy.x * Z.y - xy.y * Z.x;
-}
-
-INLINE void reciprocateVec3(vec3 *orig, vec3 *rcp) {
-    rcp->x = 1.0f / orig->x;
-    rcp->y = 1.0f / orig->y;
-    rcp->z = 1.0f / orig->z;
 }
 
 INLINE void setYawMat3(f32 yaw, mat3* yaw_matrix) {

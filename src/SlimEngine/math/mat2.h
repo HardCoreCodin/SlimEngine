@@ -38,11 +38,11 @@ INLINE mat2 subMat2(mat2 a, mat2 b) {
 INLINE mat2 scaleMat2(mat2 m, f32 factor) {
     mat2 out;
 
-    out.X.x *= factor;
-    out.X.y *= factor;
+    out.X.x = m.X.x * factor;
+    out.X.y = m.X.y * factor;
 
-    out.Y.x *= factor;
-    out.Y.y *= factor;
+    out.Y.x = m.Y.x * factor;
+    out.Y.y = m.Y.y * factor;
 
     return out;
 }
@@ -112,11 +112,6 @@ INLINE void rotateMat2(f32 amount, mat2* out) {
 
     out->X.y = xy.x * X.y - xy.y * X.x;
     out->Y.y = xy.x * Y.y - xy.y * Y.x;
-}
-
-INLINE void reciprocateVec2(vec2 *orig, vec2 *rcp) {
-    rcp->x = 1.0f / orig->x;
-    rcp->y = 1.0f / orig->y;
 }
 
 INLINE void setRotationMat2(f32 roll, mat2* roll_matrix) {
