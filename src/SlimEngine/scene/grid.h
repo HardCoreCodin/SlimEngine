@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../core/types.h"
-#include "../math/math3D.h"
+#include "../math/vec3.h"
 #include "../shapes/edge.h"
 #include "./primitive.h"
 

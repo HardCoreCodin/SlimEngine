@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../core/base.h"
-#include "./math3D.h"
 
 INLINE mat4 getMat4Identity() {
     mat4 out;
@@ -12,124 +11,6 @@ INLINE mat4 getMat4Identity() {
     out.W.x = 0; out.W.y = 0; out.W.z = 0; out.W.w = 1;
 
     return out;
-}
-
-INLINE vec4 getVec4Of(f32 value) {
-    vec4 out;
-
-    out.x = out.y = out.z = out.w = value;
-
-    return out;
-}
-
-INLINE vec4 invertedVec4(vec4 in) {
-    vec4 out;
-
-    out.x = -in.x;
-    out.y = -in.y;
-    out.z = -in.z;
-    out.w = -in.w;
-
-    return out;
-}
-
-INLINE vec4 approachVec4(vec4 src, vec4 trg, f32 diff) {
-    vec4 out;
-
-    out.x = approach(src.x, trg.x, diff);
-    out.y = approach(src.y, trg.y, diff);
-    out.z = approach(src.z, trg.z, diff);
-    out.w = approach(src.w, trg.w, diff);
-
-    return out;
-}
-
-INLINE bool nonZeroVec4(vec4 v) {
-    return v.x != 0 ||
-           v.y != 0 ||
-           v.z != 0 ||
-           v.w != 0;
-}
-
-INLINE vec4 subVec4(vec4 a, vec4 b) {
-    vec4 out;
-
-    out.x = a.x - b.x;
-    out.y = a.y - b.y;
-    out.z = a.z - b.z;
-    out.w = a.w - b.w;
-
-    return out;
-}
-
-INLINE vec4 addVec4(vec4 a, vec4 b) {
-    vec4 out;
-
-    out.x = a.x + b.x;
-    out.y = a.y + b.y;
-    out.z = a.z + b.z;
-    out.w = a.w + b.w;
-
-    return out;
-}
-
-INLINE vec4 mulVec4(vec4 a, vec4 b) {
-    vec4 out;
-
-    out.x = a.x * b.x;
-    out.y = a.y * b.y;
-    out.z = a.z * b.z;
-    out.w = a.w * b.w;
-
-    return out;
-}
-
-INLINE vec4 scaleVec4(vec4 a, f32 factor) {
-    vec4 out;
-
-    out.x = a.x * factor;
-    out.y = a.y * factor;
-    out.z = a.z * factor;
-    out.w = a.w * factor;
-
-    return out;
-}
-
-INLINE vec4 mulVec4Mat4(vec4 in, mat4 m) {
-    vec4 out;
-
-    out.x = in.x * m.X.x + in.y * m.Y.x + in.z * m.Z.x + in.w * m.W.x;
-    out.y = in.x * m.X.y + in.y * m.Y.y + in.z * m.Z.y + in.w * m.W.y;
-    out.z = in.x * m.X.z + in.y * m.Y.z + in.z * m.Z.z + in.w * m.W.z;
-    out.w = in.x * m.X.w + in.y * m.Y.w + in.z * m.Z.w + in.w * m.W.w;
-
-    return out;
-}
-
-INLINE f32 dotVec4(vec4 a, vec4 b) {
-    return (
-            (a.x * b.x) +
-            (a.y * b.y) +
-            (a.z * b.z) +
-            (a.w * b.w)
-    );
-}
-
-INLINE f32 squaredLengthVec4(vec4 v) {
-    return (
-            (v.x * v.x) +
-            (v.y * v.y) +
-            (v.z * v.z) +
-            (v.w * v.w)
-    );
-}
-
-INLINE f32 lengthVec4(vec4 v) {
-    return sqrtf(squaredLengthVec4(v));
-}
-
-INLINE vec4 norm4(vec4 v) {
-    return scaleVec4(v, 1.0f / lengthVec4(v));
 }
 
 INLINE mat4 transposeMat4(mat4 m) {
@@ -143,13 +24,80 @@ INLINE mat4 transposeMat4(mat4 m) {
     return out;
 }
 
+INLINE mat4 addMat4(mat4 a, mat4 b) {
+    mat3 out;
+
+    out.X.x = a.X.x + b.X.x;
+    out.X.y = a.X.y + b.X.y;
+    out.X.z = a.X.z + b.X.z;
+    out.X.w = a.X.w + b.X.w;
+
+    out.Y.x = a.Y.x + b.Y.x;
+    out.Y.y = a.Y.y + b.Y.y;
+    out.Y.z = a.Y.z + b.Y.z;
+    out.Y.w = a.Y.w + b.Y.w;
+
+    out.Z.x = a.Z.x + b.Z.x;
+    out.Z.y = a.Z.y + b.Z.y;
+    out.Z.z = a.Z.x + b.Z.x;
+    out.Z.w = a.Z.w + b.Z.w;
+
+    out.W.x = a.W.x + b.W.x;
+    out.W.y = a.W.y + b.W.y;
+    out.W.z = a.W.x + b.W.x;
+    out.W.w = a.W.w + b.W.w;
+
+    return out;
+}
+
+INLINE mat4 subMat4(mat4 a, mat4 b) {
+    mat3 out;
+
+    out.X.x = a.X.x - b.X.x;
+    out.X.y = a.X.y - b.X.y;
+    out.X.z = a.X.z - b.X.z;
+    out.X.w = a.X.w - b.X.w;
+
+    out.Y.x = a.Y.x - b.Y.x;
+    out.Y.y = a.Y.y - b.Y.y;
+    out.Y.z = a.Y.z - b.Y.z;
+    out.Y.w = a.Y.w - b.Y.w;
+
+    out.Z.x = a.Z.x - b.Z.x;
+    out.Z.y = a.Z.y - b.Z.y;
+    out.Z.z = a.Z.x - b.Z.x;
+    out.Z.w = a.Z.w - b.Z.w;
+
+    out.W.x = a.W.x - b.W.x;
+    out.W.y = a.W.y - b.W.y;
+    out.W.z = a.W.x - b.W.x;
+    out.W.w = a.W.w - b.W.w;
+
+    return out;
+}
+
 INLINE mat4 scaleMat4(mat4 m, f32 factor) {
     mat4 out;
 
-    out.X = scaleVec4(m.X, factor);
-    out.Y = scaleVec4(m.Y, factor);
-    out.Z = scaleVec4(m.Z, factor);
-    out.W = scaleVec4(m.W, factor);
+    out.X.x *= factor;
+    out.X.y *= factor;
+    out.X.z *= factor;
+    out.X.w *= factor;
+
+    out.Y.x *= factor;
+    out.Y.y *= factor;
+    out.Y.z *= factor;
+    out.Y.w *= factor;
+
+    out.Z.x *= factor;
+    out.Z.y *= factor;
+    out.Z.z *= factor;
+    out.Z.w *= factor;
+
+    out.W.x *= factor;
+    out.W.y *= factor;
+    out.W.z *= factor;
+    out.W.w *= factor;
 
     return out;
 }

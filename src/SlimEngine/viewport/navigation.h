@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../core/types.h"
-#include "../math/math3D.h"
+#include "../math/vec3.h"
 #include "../scene/xform.h"
 
 void zoomCamera(Camera *camera, Navigation *navigation, f32 zoom) {

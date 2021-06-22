@@ -1,7 +1,8 @@
 #pragma once
 
 #include "../core/base.h"
-#include "../math/math3D.h"
+#include "../math/vec3.h"
+#include "../math/mat3.h"
 #include "../math/quat.h"
 
 INLINE void rotateXform3(xform3 *xform, f32 yaw, f32 pitch, f32 roll) {

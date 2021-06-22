@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../core/base.h"
-#include "./math3D.h"
+#include "./vec3.h"
 
 INLINE quat getIdentityQuaternion() {
     quat out;
