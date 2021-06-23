@@ -69,5 +69,5 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/4_manipulation_along_axis_shapes.gif" alt="4_manipulation_along_axis_shapes" height="300">
   </p>
   Scene objects can be dragged around the screen, moving them parallel to the viewing plane.<br>
-  Selecting an object displays it's bouding box, allowin for per-axis translation, rotation and scaling.<br>
+  Selecting an object displays it's bouding box, enabling for per-axis translation, rotation and scaling.<br><br>
   <img src="src/examples/4_manipulation_update_c.png" alt="4_manipulation_update_code" width="350">
