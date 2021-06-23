@@ -142,6 +142,7 @@ typedef struct Grid {
 
 enum PrimitiveType {
     PrimitiveType_None = 0,
+    PrimitiveType_Mesh,
     PrimitiveType_Grid,
     PrimitiveType_Box,
     PrimitiveType_Helix,
@@ -152,10 +153,10 @@ enum PrimitiveType {
 typedef struct Primitive {
     quat rotation;
     vec3 position, scale;
+    u32 id;
     enum PrimitiveType type;
     enum ColorID color;
-    u32 id;
-    u8 flags;
+    u8 flags, material_id;
 } Primitive;
 
 typedef struct xform3 {
@@ -204,6 +205,10 @@ typedef struct Navigation {
     bool zoomed, moved, turned;
 } Navigation;
 
+typedef struct ProjectionPlane {
+    vec3 start, right, down;
+} ProjectionPlane;
+
 typedef struct ViewportSettings {
     f32 near_clipping_plane_distance,
         far_clipping_plane_distance;
@@ -213,18 +218,70 @@ typedef struct ViewportSettings {
 typedef struct Viewport {
     ViewportSettings settings;
     Navigation navigation;
+    ProjectionPlane projection_plane;
     HUD hud;
     Camera *camera;
     PixelGrid *frame_buffer;
 } Viewport;
 
+typedef struct Ray {
+    vec3 origin, scaled_origin, direction, direction_reciprocal;
+    u8_3 octant;
+} Ray;
+
+typedef struct RayHit {
+    vec3 position, normal;
+    vec2 uv;
+    f32 distance, distance_squared;
+    u32 material_id, object_id, object_type;
+    bool from_behind;
+} RayHit;
+
+typedef struct Triangle {
+    mat3 world_to_tangent;
+    vec3 position, normal;
+} Triangle;
+
+typedef struct TriangleVertexIndices {
+    u32 ids[3];
+} TriangleVertexIndices;
+
+typedef struct Mesh {
+    AABB aabb;
+    u32 triangle_count, vertex_count;
+    vec3 *vertex_positions;
+    TriangleVertexIndices *triangle_vertex_indices;
+    Triangle *triangles;
+    Edge *edges;
+} Mesh;
+
+typedef struct Selection {
+    quat object_rotation;
+    vec3 transformation_plane_origin,
+         transformation_plane_normal,
+         transformation_plane_center,
+         object_scale,
+         world_offset,
+         *world_position;
+    Box box;
+    Ray ray, local_ray;
+    RayHit hit, local_hit;
+    Primitive *primitive;
+    enum BoxSide box_side;
+    f32 object_distance;
+    u32 object_type, object_id;
+    bool changed;
+} Selection;
+
 typedef struct SceneCounts {
-    u32 cameras, primitives, curves, boxes, grids;
+    u32 cameras, primitives, meshes, curves, boxes, grids;
 } SceneCounts;
 
 typedef struct Scene {
     SceneCounts counts;
+    Selection selection;
     Camera *cameras;
+    Mesh *meshes;
     Primitive *primitives;
     Curve *curves;
     Grid *grids;

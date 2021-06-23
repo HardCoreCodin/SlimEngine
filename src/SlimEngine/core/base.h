@@ -110,6 +110,7 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.1f
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
 
+typedef struct u8_3 { u8 x, y, z; } u8_3;
 typedef struct vec2  { f32 x, y; } vec2;
 typedef struct vec2i { i32 x, y; } vec2i;
 typedef struct vec3 { f32 x, y, z;     } vec3;

@@ -11,27 +11,26 @@ void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     fillPixelGrid(viewport->frame_buffer, Color(Black));
 
     Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++) {
+    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++)
         switch (primitive->type) {
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:
                 drawCurve(viewport, Color(primitive->color),
-                          scene->curves + primitive->id, primitive,
+                          &scene->curves[primitive->id], primitive,
                           CURVE_STEPS);
                 break;
             case PrimitiveType_Box:
                 drawBox(viewport, Color(primitive->color),
-                        scene->boxes + primitive->id, primitive,
+                        &scene->boxes[primitive->id], primitive,
                         BOX__ALL_SIDES);
                 break;
             case PrimitiveType_Grid:
                 drawGrid(viewport, Color(primitive->color),
-                         scene->grids + primitive->id, primitive);
+                         &scene->grids[primitive->id], primitive);
                 break;
             default:
                 break;
         }
-    }
 }
 
 void updateScene(Scene *scene, f32 delta_time) {
@@ -41,7 +40,6 @@ void updateScene(Scene *scene, f32 delta_time) {
     Primitive *helix_prim = &scene->primitives[0];
     Primitive *coil_prim  = &scene->primitives[1];
     Primitive *box_prim   = &scene->primitives[2];
-    Primitive *grid_prim  = &scene->primitives[3];
 
     helix_prim->scale.y = 3 + sinf(elapsed * 1.7f);
     helix_prim->scale.x = 1 - sinf(elapsed * 1.6f + 1) * 0.3f;
@@ -66,34 +64,32 @@ void updateAndRender() {
     endFrameTimer(timer);
 }
 void setupScene(Scene *scene) {
-    Primitive *helix_prim = &scene->primitives[0];
-    Primitive *coil_prim  = &scene->primitives[1];
-    Primitive *box_prim   = &scene->primitives[2];
-    Primitive *grid_prim  = &scene->primitives[3];
-    helix_prim->type = PrimitiveType_Helix;
-    coil_prim->type  = PrimitiveType_Coil;
-    grid_prim->type  = PrimitiveType_Grid;
-    box_prim->type   = PrimitiveType_Box;
-    box_prim->color   = Yellow;
-    grid_prim->color  = Green;
-    coil_prim->color  = Magenta;
-    helix_prim->color = Cyan;
-    helix_prim->position.x = -3;
-    helix_prim->position.y = 4;
-    helix_prim->position.z = 2;
-    coil_prim->position.x = 4;
-    coil_prim->position.y = 4;
-    coil_prim->position.z = 2;
-    box_prim->id = grid_prim->id = helix_prim->id = 0;
-    coil_prim->id  = 1;
+    Primitive *helix_primitive = &scene->primitives[0];
+    Primitive *coil_primitive  = &scene->primitives[1];
+    Primitive *box_primitive   = &scene->primitives[2];
+    Primitive *grid_primitive  = &scene->primitives[3];
+    helix_primitive->type = PrimitiveType_Helix;
+    coil_primitive->type  = PrimitiveType_Coil;
+    grid_primitive->type  = PrimitiveType_Grid;
+    box_primitive->type   = PrimitiveType_Box;
+    box_primitive->color   = Yellow;
+    grid_primitive->color  = Green;
+    coil_primitive->color  = Magenta;
+    helix_primitive->color = Cyan;
+    helix_primitive->position.x = -3;
+    helix_primitive->position.y = 4;
+    helix_primitive->position.z = 2;
+    coil_primitive->position.x = 4;
+    coil_primitive->position.y = 4;
+    coil_primitive->position.z = 2;
+    box_primitive->id = grid_primitive->id = helix_primitive->id = 0;
+    coil_primitive->id  = 1;
+    grid_primitive->scale.x = 5;
+    grid_primitive->scale.z = 5;
     scene->curves[0].revolution_count = 10;
-    scene->curves[1].revolution_count = 15;
-    grid_prim->rotation.axis.y = 0.5f;
-    initGrid(scene->grids,
-             -5,-5,
-             +5,+5,
-             11,
-             11);
+    scene->curves[1].revolution_count = 30;
+    rotatePrimitive(grid_primitive, 0.5f, 0, 0);
+    initGrid(scene->grids, 11, 11);
 }
 void setupCamera(Viewport *viewport) {
     xform3 *xf = &viewport->camera->transform;
@@ -105,7 +101,6 @@ void initApp(Defaults *defaults) {
     app->on.windowRedraw  = updateAndRender;
     app->on.sceneReady    = setupScene;
     app->on.viewportReady = setupCamera;
-
     defaults->settings.scene.boxes      = 1;
     defaults->settings.scene.grids      = 1;
     defaults->settings.scene.curves     = 2;

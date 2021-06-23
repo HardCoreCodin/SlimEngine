@@ -3,6 +3,8 @@
 #include "../SlimEngine/core/base.h"
 #include "../SlimEngine/core/text.h"
 #include "../SlimEngine/shapes/rect.h"
+// Or using the single-header file:
+//#include "../SlimEngine.h"
 
 #define MOUSE_WHEEL__MAX 2000
 
@@ -182,8 +184,6 @@ void drawMouse(PixelGrid *canvas, Mouse *mouse) {
     rect.min.y += (i32)mouse_wheel_delta_y;
     rect.max.y += (i32)mouse_wheel_delta_y;
     fillRect(canvas, Color(White), &rect);
-
-    resetMouseChanges(&app->controls.mouse);
 }
 
 void drawMouseAndKeyboard(Viewport *viewport, Mouse *mouse) {

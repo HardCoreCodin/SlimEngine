@@ -205,7 +205,7 @@ SceneCounts getDefaultSceneCounts() {
 }
 
 void initCurve(Curve *curve) {
-    curve->thickness = 1;
+    curve->thickness = 0.1f;
     curve->revolution_count = 1;
 }
 
@@ -226,7 +226,7 @@ void initPrimitive(Primitive *primitive) {
     primitive->rotation.amount = 1;
 }
 
-bool initGrid(Grid *grid, f32 min_u, f32 min_v, f32 max_u, f32 max_v, u8 u_segments, u8 v_segments) {
+bool initGrid(Grid *grid, u8 u_segments, u8 v_segments) {
     if (!u_segments || u_segments > GRID__MAX_SEGMENTS ||
         !v_segments || v_segments > GRID__MAX_SEGMENTS)
         return false;
@@ -234,20 +234,20 @@ bool initGrid(Grid *grid, f32 min_u, f32 min_v, f32 max_u, f32 max_v, u8 u_segme
     grid->u_segments = u_segments;
     grid->v_segments = v_segments;
 
-    f32 u_step = u_segments > 1 ? ((max_u - min_u) / (u_segments - 1)) : 0;
-    f32 v_step = v_segments > 1 ? ((max_v - min_v) / (v_segments - 1)) : 0;
+    f32 u_step = u_segments > 1 ? (2.0f / (u_segments - 1)) : 0;
+    f32 v_step = v_segments > 1 ? (2.0f / (v_segments - 1)) : 0;
 
     for (u8 u = 0; u < grid->u_segments; u++) {
         grid->vertices.uv.u.from[u].y = grid->vertices.uv.u.to[u].y = 0;
-        grid->vertices.uv.u.from[u].x = grid->vertices.uv.u.to[u].x = min_u + u * u_step;
-        grid->vertices.uv.u.from[u].z = min_v;
-        grid->vertices.uv.u.to[  u].z = max_v;
+        grid->vertices.uv.u.from[u].x = grid->vertices.uv.u.to[u].x = -1 + u * u_step;
+        grid->vertices.uv.u.from[u].z = -1;
+        grid->vertices.uv.u.to[  u].z = +1;
     }
     for (u8 v = 0; v < grid->v_segments; v++) {
         grid->vertices.uv.v.from[v].y = grid->vertices.uv.v.to[v].y = 0;
-        grid->vertices.uv.v.from[v].z = grid->vertices.uv.v.to[v].z = min_v + v * v_step;
-        grid->vertices.uv.v.from[v].x = min_u;
-        grid->vertices.uv.v.to[  v].x = max_u;
+        grid->vertices.uv.v.from[v].z = grid->vertices.uv.v.to[v].z = -1 + v * v_step;
+        grid->vertices.uv.v.from[v].x = -1;
+        grid->vertices.uv.v.to[  v].x = +1;
     }
 
     setGridEdgesFromVertices(grid->edges.uv.u, grid->u_segments, grid->vertices.uv.u.from, grid->vertices.uv.u.to);
@@ -256,40 +256,45 @@ bool initGrid(Grid *grid, f32 min_u, f32 min_v, f32 max_u, f32 max_v, u8 u_segme
     return true;
 }
 
-void initBox(Box *box, vec3 min, vec3 max) {
-    box->vertices.corners.front_top_left.x = min.x;
-    box->vertices.corners.back_top_left.x = min.x;
-    box->vertices.corners.front_bottom_left.x = min.x;
-    box->vertices.corners.back_bottom_left.x = min.x;
+void initBox(Box *box) {
+    box->vertices.corners.front_top_left.x    = -1;
+    box->vertices.corners.back_top_left.x     = -1;
+    box->vertices.corners.front_bottom_left.x = -1;
+    box->vertices.corners.back_bottom_left.x  = -1;
 
-    box->vertices.corners.front_top_right.x = max.x;
-    box->vertices.corners.back_top_right.x = max.x;
-    box->vertices.corners.front_bottom_right.x = max.x;
-    box->vertices.corners.back_bottom_right.x = max.x;
-
-
-    box->vertices.corners.front_bottom_left.y = min.y;
-    box->vertices.corners.front_bottom_right.y = min.y;
-    box->vertices.corners.back_bottom_left.y = min.y;
-    box->vertices.corners.back_bottom_right.y = min.y;
-
-    box->vertices.corners.front_top_left.y = max.y;
-    box->vertices.corners.front_top_right.y = max.y;
-    box->vertices.corners.back_top_left.y = max.y;
-    box->vertices.corners.back_top_right.y = max.y;
+    box->vertices.corners.front_top_right.x    = 1;
+    box->vertices.corners.back_top_right.x     = 1;
+    box->vertices.corners.front_bottom_right.x = 1;
+    box->vertices.corners.back_bottom_right.x  = 1;
 
 
-    box->vertices.corners.front_top_left.z = max.z;
-    box->vertices.corners.front_top_right.z = max.z;
-    box->vertices.corners.front_bottom_left.z = max.z;
-    box->vertices.corners.front_bottom_right.z = max.z;
+    box->vertices.corners.front_bottom_left.y  = -1;
+    box->vertices.corners.front_bottom_right.y = -1;
+    box->vertices.corners.back_bottom_left.y   = -1;
+    box->vertices.corners.back_bottom_right.y  = -1;
 
-    box->vertices.corners.back_top_left.z = min.z;
-    box->vertices.corners.back_top_right.z = min.z;
-    box->vertices.corners.back_bottom_left.z = min.z;
-    box->vertices.corners.back_bottom_right.z = min.z;
+    box->vertices.corners.front_top_left.y  = 1;
+    box->vertices.corners.front_top_right.y = 1;
+    box->vertices.corners.back_top_left.y   = 1;
+    box->vertices.corners.back_top_right.y  = 1;
+
+
+    box->vertices.corners.front_top_left.z     = 1;
+    box->vertices.corners.front_top_right.z    = 1;
+    box->vertices.corners.front_bottom_left.z  = 1;
+    box->vertices.corners.front_bottom_right.z = 1;
+
+    box->vertices.corners.back_top_left.z     = -1;
+    box->vertices.corners.back_top_right.z    = -1;
+    box->vertices.corners.back_bottom_left.z  = -1;
+    box->vertices.corners.back_bottom_right.z = -1;
 
     setBoxEdgesFromVertices(&box->edges, &box->vertices);
+}
+
+void initSelection(Selection *selection) {
+    selection->object_type = selection->object_id = 0;
+    selection->changed = false;
 }
 
 void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
@@ -299,6 +304,8 @@ void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
     scene->curves     = null;
     scene->boxes      = null;
     scene->grids      = null;
+
+    initSelection(&scene->selection);
 
     if (scene_counts.cameras) {
         scene->cameras = allocateMemory(memory, sizeof(Camera) * scene->counts.cameras);
@@ -323,20 +330,15 @@ void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
 
     if (scene_counts.boxes) {
         scene->boxes = allocateMemory(memory, sizeof(Box) * scene->counts.boxes);
-        if (scene->boxes) {
-            vec3 mn, mx;
-            mn.x = mn.y = mn.z = -1;
-            mx.x = mx.y = mx.z = +1;
-
+        if (scene->boxes)
             for (u32 i = 0; i < scene_counts.boxes; i++)
-                initBox(scene->boxes + i, mn, mx);
-        }
+                initBox(scene->boxes + i);
     }
 
     if (scene_counts.grids) {
         scene->grids = allocateMemory(memory, sizeof(Grid) * scene->counts.grids);
         if (scene->grids)
             for (u32 i = 0; i < scene_counts.grids; i++)
-                initGrid(scene->grids + i, -1, -1, 1, 1, 3, 3);
+                initGrid(scene->grids + i, 3, 3);
     }
 }

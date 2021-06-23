@@ -12,20 +12,18 @@ void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     drawGrid(viewport, Color(scene->primitives->color), scene->grids, scene->primitives);
 }
 
-void onMouseButtonDown(MouseButton *mouse_button) {
+void onButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff.x = 0;
     app->controls.mouse.pos_raw_diff.y = 0;
 }
-
-void onMouseButtonDoubleClicked(MouseButton *mouse_button) {
+void onDoubleClick(MouseButton *mouse_button) {
     if (mouse_button == &app->controls.mouse.left_button) {
         app->controls.mouse.is_captured = !app->controls.mouse.is_captured;
         app->platform.setCursorVisibility(!app->controls.mouse.is_captured);
         app->platform.setWindowCapture(    app->controls.mouse.is_captured);
-        onMouseButtonDown(mouse_button);
+        onButtonDown(mouse_button);
     }
 }
-
 void updateViewport(Viewport *vp, Mouse *mouse, f32 dt) {
     if (mouse->is_captured) {
         if (mouse->moved)         orientViewport(vp, mouse, dt);
@@ -38,18 +36,32 @@ void updateViewport(Viewport *vp, Mouse *mouse, f32 dt) {
         }
     }
 }
+void setupScene(Scene *scene) {
+    Primitive *grid_primitive = &scene->primitives[0];
+    grid_primitive->type = PrimitiveType_Grid;
+    grid_primitive->scale.x = 5;
+    grid_primitive->scale.z = 5;
+    grid_primitive->position.z = 5;
+    rotatePrimitive(grid_primitive, 0.5f, 0, 0);
+    initGrid(scene->grids,11, 11);
+}
+void setupCamera(Viewport *viewport) {
+    xform3 *xf = &viewport->camera->transform;
+    xf->position.y = 7;
+    xf->position.z = -11;
+    rotateXform3(xf, 0, -0.2f, 0);
+}
 void updateAndRender() {
     startFrameTimer(&app->time.timers.update);
-
     float delta_time = app->time.timers.update.delta_time;
-    Mouse *mouse = &app->controls.mouse;
 
-    updateViewport(&app->viewport, mouse, delta_time);
+    updateViewport(&app->viewport, &app->controls.mouse, delta_time);
     navigateViewport(&app->viewport, delta_time);
 
     drawSceneToViewport(&app->scene, &app->viewport);
-    drawMouseAndKeyboard(&app->viewport, mouse);
+    drawMouseAndKeyboard(&app->viewport, &app->controls.mouse);
 
+    resetMouseChanges(&app->controls.mouse);
     endFrameTimer(&app->time.timers.update);
 }
 void onKeyChanged(u8 key, bool is_pressed) {
@@ -64,27 +76,13 @@ void onKeyChanged(u8 key, bool is_pressed) {
     if (key == 'Q') turn->left     = is_pressed;
     if (key == 'E') turn->right    = is_pressed;
 }
-void setupScene(Scene *scene) {
-    scene->primitives->type = PrimitiveType_Grid;
-    scene->primitives->position.z = 5;
-    scene->primitives->rotation.axis.y = 0.5f;
-    initGrid(scene->grids,-5,-5,+5,+5,
-             11, 11);
-}
-void setupCamera(Viewport *viewport) {
-    xform3 *xf = &viewport->camera->transform;
-    xf->position.y = 7;
-    xf->position.z = -11;
-    rotateXform3(xf, 0, -0.2f, 0);
-}
 void initApp(Defaults *defaults) {
+    app->on.keyChanged               = onKeyChanged;
+    app->on.mouseButtonDown          = onButtonDown;
+    app->on.mouseButtonDoubleClicked = onDoubleClick;
     app->on.windowRedraw  = updateAndRender;
     app->on.sceneReady    = setupScene;
     app->on.viewportReady = setupCamera;
-    app->on.sceneReady = setupScene;
-    app->on.keyChanged = onKeyChanged;
-    app->on.mouseButtonDown          = onMouseButtonDown;
-    app->on.mouseButtonDoubleClicked = onMouseButtonDoubleClicked;
     defaults->settings.scene.grids      = 1;
     defaults->settings.scene.primitives = 1;
 }

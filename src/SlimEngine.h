@@ -110,6 +110,7 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.1f
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
 
+typedef struct u8_3 { u8 x, y, z; } u8_3;
 typedef struct vec2  { f32 x, y; } vec2;
 typedef struct vec2i { i32 x, y; } vec2i;
 typedef struct vec3 { f32 x, y, z;     } vec3;
@@ -519,6 +520,7 @@ typedef struct Grid {
 
 enum PrimitiveType {
     PrimitiveType_None = 0,
+    PrimitiveType_Mesh,
     PrimitiveType_Grid,
     PrimitiveType_Box,
     PrimitiveType_Helix,
@@ -529,10 +531,10 @@ enum PrimitiveType {
 typedef struct Primitive {
     quat rotation;
     vec3 position, scale;
+    u32 id;
     enum PrimitiveType type;
     enum ColorID color;
-    u32 id;
-    u8 flags;
+    u8 flags, material_id;
 } Primitive;
 
 typedef struct xform3 {
@@ -581,6 +583,10 @@ typedef struct Navigation {
     bool zoomed, moved, turned;
 } Navigation;
 
+typedef struct ProjectionPlane {
+    vec3 start, right, down;
+} ProjectionPlane;
+
 typedef struct ViewportSettings {
     f32 near_clipping_plane_distance,
             far_clipping_plane_distance;
@@ -590,18 +596,70 @@ typedef struct ViewportSettings {
 typedef struct Viewport {
     ViewportSettings settings;
     Navigation navigation;
+    ProjectionPlane projection_plane;
     HUD hud;
     Camera *camera;
     PixelGrid *frame_buffer;
 } Viewport;
 
+typedef struct Ray {
+    vec3 origin, scaled_origin, direction, direction_reciprocal;
+    u8_3 octant;
+} Ray;
+
+typedef struct RayHit {
+    vec3 position, normal;
+    vec2 uv;
+    f32 distance, distance_squared;
+    u32 material_id, object_id, object_type;
+    bool from_behind;
+} RayHit;
+
+typedef struct Triangle {
+    mat3 world_to_tangent;
+    vec3 position, normal;
+} Triangle;
+
+typedef struct TriangleVertexIndices {
+    u32 ids[3];
+} TriangleVertexIndices;
+
+typedef struct Mesh {
+    AABB aabb;
+    u32 triangle_count, vertex_count;
+    vec3 *vertex_positions;
+    TriangleVertexIndices *triangle_vertex_indices;
+    Triangle *triangles;
+    Edge *edges;
+} Mesh;
+
+typedef struct Selection {
+    quat object_rotation;
+    vec3 transformation_plane_origin,
+            transformation_plane_normal,
+            transformation_plane_center,
+            object_scale,
+            world_offset,
+            *world_position;
+    Box box;
+    Ray ray, local_ray;
+    RayHit hit, local_hit;
+    Primitive *primitive;
+    enum BoxSide box_side;
+    f32 object_distance;
+    u32 object_type, object_id;
+    bool changed;
+} Selection;
+
 typedef struct SceneCounts {
-    u32 cameras, primitives, curves, boxes, grids;
+    u32 cameras, primitives, meshes, curves, boxes, grids;
 } SceneCounts;
 
 typedef struct Scene {
     SceneCounts counts;
+    Selection selection;
     Camera *cameras;
+    Mesh *meshes;
     Primitive *primitives;
     Curve *curves;
     Grid *grids;
@@ -847,7 +905,7 @@ SceneCounts getDefaultSceneCounts() {
 }
 
 void initCurve(Curve *curve) {
-    curve->thickness = 1;
+    curve->thickness = 0.1f;
     curve->revolution_count = 1;
 }
 
@@ -868,7 +926,7 @@ void initPrimitive(Primitive *primitive) {
     primitive->rotation.amount = 1;
 }
 
-bool initGrid(Grid *grid, f32 min_u, f32 min_v, f32 max_u, f32 max_v, u8 u_segments, u8 v_segments) {
+bool initGrid(Grid *grid, u8 u_segments, u8 v_segments) {
     if (!u_segments || u_segments > GRID__MAX_SEGMENTS ||
         !v_segments || v_segments > GRID__MAX_SEGMENTS)
         return false;
@@ -876,20 +934,20 @@ bool initGrid(Grid *grid, f32 min_u, f32 min_v, f32 max_u, f32 max_v, u8 u_segme
     grid->u_segments = u_segments;
     grid->v_segments = v_segments;
 
-    f32 u_step = u_segments > 1 ? ((max_u - min_u) / (u_segments - 1)) : 0;
-    f32 v_step = v_segments > 1 ? ((max_v - min_v) / (v_segments - 1)) : 0;
+    f32 u_step = u_segments > 1 ? (2.0f / (u_segments - 1)) : 0;
+    f32 v_step = v_segments > 1 ? (2.0f / (v_segments - 1)) : 0;
 
     for (u8 u = 0; u < grid->u_segments; u++) {
         grid->vertices.uv.u.from[u].y = grid->vertices.uv.u.to[u].y = 0;
-        grid->vertices.uv.u.from[u].x = grid->vertices.uv.u.to[u].x = min_u + u * u_step;
-        grid->vertices.uv.u.from[u].z = min_v;
-        grid->vertices.uv.u.to[  u].z = max_v;
+        grid->vertices.uv.u.from[u].x = grid->vertices.uv.u.to[u].x = -1 + u * u_step;
+        grid->vertices.uv.u.from[u].z = -1;
+        grid->vertices.uv.u.to[  u].z = +1;
     }
     for (u8 v = 0; v < grid->v_segments; v++) {
         grid->vertices.uv.v.from[v].y = grid->vertices.uv.v.to[v].y = 0;
-        grid->vertices.uv.v.from[v].z = grid->vertices.uv.v.to[v].z = min_v + v * v_step;
-        grid->vertices.uv.v.from[v].x = min_u;
-        grid->vertices.uv.v.to[  v].x = max_u;
+        grid->vertices.uv.v.from[v].z = grid->vertices.uv.v.to[v].z = -1 + v * v_step;
+        grid->vertices.uv.v.from[v].x = -1;
+        grid->vertices.uv.v.to[  v].x = +1;
     }
 
     setGridEdgesFromVertices(grid->edges.uv.u, grid->u_segments, grid->vertices.uv.u.from, grid->vertices.uv.u.to);
@@ -898,40 +956,45 @@ bool initGrid(Grid *grid, f32 min_u, f32 min_v, f32 max_u, f32 max_v, u8 u_segme
     return true;
 }
 
-void initBox(Box *box, vec3 min, vec3 max) {
-    box->vertices.corners.front_top_left.x = min.x;
-    box->vertices.corners.back_top_left.x = min.x;
-    box->vertices.corners.front_bottom_left.x = min.x;
-    box->vertices.corners.back_bottom_left.x = min.x;
+void initBox(Box *box) {
+    box->vertices.corners.front_top_left.x    = -1;
+    box->vertices.corners.back_top_left.x     = -1;
+    box->vertices.corners.front_bottom_left.x = -1;
+    box->vertices.corners.back_bottom_left.x  = -1;
 
-    box->vertices.corners.front_top_right.x = max.x;
-    box->vertices.corners.back_top_right.x = max.x;
-    box->vertices.corners.front_bottom_right.x = max.x;
-    box->vertices.corners.back_bottom_right.x = max.x;
-
-
-    box->vertices.corners.front_bottom_left.y = min.y;
-    box->vertices.corners.front_bottom_right.y = min.y;
-    box->vertices.corners.back_bottom_left.y = min.y;
-    box->vertices.corners.back_bottom_right.y = min.y;
-
-    box->vertices.corners.front_top_left.y = max.y;
-    box->vertices.corners.front_top_right.y = max.y;
-    box->vertices.corners.back_top_left.y = max.y;
-    box->vertices.corners.back_top_right.y = max.y;
+    box->vertices.corners.front_top_right.x    = 1;
+    box->vertices.corners.back_top_right.x     = 1;
+    box->vertices.corners.front_bottom_right.x = 1;
+    box->vertices.corners.back_bottom_right.x  = 1;
 
 
-    box->vertices.corners.front_top_left.z = max.z;
-    box->vertices.corners.front_top_right.z = max.z;
-    box->vertices.corners.front_bottom_left.z = max.z;
-    box->vertices.corners.front_bottom_right.z = max.z;
+    box->vertices.corners.front_bottom_left.y  = -1;
+    box->vertices.corners.front_bottom_right.y = -1;
+    box->vertices.corners.back_bottom_left.y   = -1;
+    box->vertices.corners.back_bottom_right.y  = -1;
 
-    box->vertices.corners.back_top_left.z = min.z;
-    box->vertices.corners.back_top_right.z = min.z;
-    box->vertices.corners.back_bottom_left.z = min.z;
-    box->vertices.corners.back_bottom_right.z = min.z;
+    box->vertices.corners.front_top_left.y  = 1;
+    box->vertices.corners.front_top_right.y = 1;
+    box->vertices.corners.back_top_left.y   = 1;
+    box->vertices.corners.back_top_right.y  = 1;
+
+
+    box->vertices.corners.front_top_left.z     = 1;
+    box->vertices.corners.front_top_right.z    = 1;
+    box->vertices.corners.front_bottom_left.z  = 1;
+    box->vertices.corners.front_bottom_right.z = 1;
+
+    box->vertices.corners.back_top_left.z     = -1;
+    box->vertices.corners.back_top_right.z    = -1;
+    box->vertices.corners.back_bottom_left.z  = -1;
+    box->vertices.corners.back_bottom_right.z = -1;
 
     setBoxEdgesFromVertices(&box->edges, &box->vertices);
+}
+
+void initSelection(Selection *selection) {
+    selection->object_type = selection->object_id = 0;
+    selection->changed = false;
 }
 
 void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
@@ -941,6 +1004,8 @@ void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
     scene->curves     = null;
     scene->boxes      = null;
     scene->grids      = null;
+
+    initSelection(&scene->selection);
 
     if (scene_counts.cameras) {
         scene->cameras = allocateMemory(memory, sizeof(Camera) * scene->counts.cameras);
@@ -965,21 +1030,16 @@ void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
 
     if (scene_counts.boxes) {
         scene->boxes = allocateMemory(memory, sizeof(Box) * scene->counts.boxes);
-        if (scene->boxes) {
-            vec3 mn, mx;
-            mn.x = mn.y = mn.z = -1;
-            mx.x = mx.y = mx.z = +1;
-
+        if (scene->boxes)
             for (u32 i = 0; i < scene_counts.boxes; i++)
-                initBox(scene->boxes + i, mn, mx);
-        }
+                initBox(scene->boxes + i);
     }
 
     if (scene_counts.grids) {
         scene->grids = allocateMemory(memory, sizeof(Grid) * scene->counts.grids);
         if (scene->grids)
             for (u32 i = 0; i < scene_counts.grids; i++)
-                initGrid(scene->grids + i, -1, -1, 1, 1, 3, 3);
+                initGrid(scene->grids + i, 3, 3);
     }
 }
 
@@ -2983,7 +3043,7 @@ void drawCurve(Viewport *viewport, RGBA color, Curve *curve, Primitive *primitiv
         switch (primitive->type) {
             case PrimitiveType_Helix:
                 current_position = center_to_orbit;
-                current_position.y -= 0.5f;
+                current_position.y -= 1;
                 break;
             case PrimitiveType_Coil:
                 orbit_to_curve  = mulVec3Mat3(orbit_to_curve, orbit_to_curve_rotation);
@@ -3006,7 +3066,7 @@ void drawCurve(Viewport *viewport, RGBA color, Curve *curve, Primitive *primitiv
 
         switch (primitive->type) {
             case PrimitiveType_Helix:
-                center_to_orbit.y += one_over_step_count;
+                center_to_orbit.y += 2 * one_over_step_count;
                 break;
             case PrimitiveType_Coil:
                 accumulated_orbit_rotation = mulMat3(accumulated_orbit_rotation, rotation);
@@ -3043,6 +3103,356 @@ void drawGrid(Viewport *viewport, RGBA color, Grid *grid, Primitive *primitive) 
 
     for (u8 u = 0; u < grid->u_segments; u++) drawEdge(viewport, color, edges.uv.u + u);
     for (u8 v = 0; v < grid->v_segments; v++) drawEdge(viewport, color, edges.uv.v + v);
+}
+
+void setViewportProjectionPlane(Viewport *viewport) {
+    Camera *camera = viewport->camera;
+    ProjectionPlane *projection_plane = &viewport->projection_plane;
+    Dimensions *dimensions = &viewport->frame_buffer->dimensions;
+
+    projection_plane->start = scaleVec3(*camera->transform.forward_direction, (f32)dimensions->width * camera->focal_length);
+    projection_plane->right = scaleVec3(*camera->transform.right_direction, 1.0f - (f32)dimensions->width);
+    projection_plane->down  = scaleVec3(*camera->transform.up_direction, (f32)dimensions->height - 2);
+    projection_plane->start = addVec3(projection_plane->start, projection_plane->right);
+    projection_plane->start = addVec3(projection_plane->start, projection_plane->down);
+
+    projection_plane->right = scaleVec3(*camera->transform.right_direction, 2);
+    projection_plane->down  = scaleVec3(*camera->transform.up_direction, -2);
+}
+
+INLINE void setRayFromCoords(Ray *ray, vec2i coords, Viewport *viewport) {
+    ray->origin = viewport->camera->transform.position;
+    ray->direction = scaleAddVec3(viewport->projection_plane.right, (f32)coords.x, viewport->projection_plane.start);
+    ray->direction = scaleAddVec3(viewport->projection_plane.down,  (f32)coords.y, ray->direction);
+    ray->direction = normVec3(ray->direction);
+}
+
+INLINE bool hitPlane(vec3 plane_origin, vec3 plane_normal, vec3 *ray_origin, vec3 *ray_direction, RayHit *hit) {
+    f32 Rd_dot_n = dotVec3(*ray_direction, plane_normal);
+    if (Rd_dot_n == 0) // The ray is parallel to the plane
+        return false;
+
+    bool ray_is_facing_the_plane = Rd_dot_n < 0;
+
+    vec3 RtoP = subVec3(*ray_origin, plane_origin);
+    f32 Po_to_Ro_dot_n = dotVec3(RtoP, plane_normal);
+    hit->from_behind = Po_to_Ro_dot_n < 0;
+    if (hit->from_behind == ray_is_facing_the_plane) // The ray can't hit the plane
+        return false;
+
+    hit->distance = fabsf(Po_to_Ro_dot_n / Rd_dot_n);
+    hit->position = scaleVec3(*ray_direction, hit->distance);
+    hit->position = addVec3(*ray_origin,      hit->position);
+    hit->normal   = plane_normal;
+
+    return true;
+}
+
+INLINE BoxSide getBoxSide(vec3 octant, u8 axis) {
+    switch (axis) {
+        case 0 : return octant.x > 0 ? Right : Left;
+        case 3 : return octant.x > 0 ? Left : Right;
+        case 1 : return octant.y > 0 ? Top : Bottom;
+        case 4 : return octant.y > 0 ? Bottom : Top;
+        case 2 : return octant.z > 0 ? Front : Back;
+        default: return octant.z > 0 ? Back : Front;
+    }
+}
+
+INLINE vec2 getUVonUnitCube(vec3 pos, BoxSide side) {
+    vec2 uv;
+
+    switch (side) {
+        case Top: {
+            uv.x = pos.x;
+            uv.y = pos.z;
+        } break;
+        case Bottom: {
+            uv.x = -pos.x;
+            uv.y = -pos.z;
+        } break;
+        case Left: {
+            uv.x = -pos.z;
+            uv.y = pos.y;
+        } break;
+        case Right:  {
+            uv.x = pos.z;
+            uv.y = pos.y;
+        } break;
+        case Front: {
+            uv.x = pos.x;
+            uv.y = pos.y;
+        } break;
+        default: {
+            uv.x = -pos.x;
+            uv.y =  pos.y;
+        } break;
+    }
+
+    uv.x += 1;
+    uv.y += 1;
+    uv.x *= 0.5f;
+    uv.y *= 0.5f;
+
+    return uv;
+}
+
+INLINE BoxSide hitCube(RayHit *hit, vec3 *Ro, vec3 *Rd) {
+    vec3 octant, RD_rcp = oneOverVec3(*Rd);
+    octant.x = signbit(Rd->x) ? 1.0f : -1.0f;
+    octant.y = signbit(Rd->y) ? 1.0f : -1.0f;
+    octant.z = signbit(Rd->z) ? 1.0f : -1.0f;
+
+    f32 t[6];
+    t[0] = ( octant.x - Ro->x) * RD_rcp.x;
+    t[1] = ( octant.y - Ro->y) * RD_rcp.y;
+    t[2] = ( octant.z - Ro->z) * RD_rcp.z;
+    t[3] = (-octant.x - Ro->x) * RD_rcp.x;
+    t[4] = (-octant.y - Ro->y) * RD_rcp.y;
+    t[5] = (-octant.z - Ro->z) * RD_rcp.z;
+
+    u8 max_axis = t[3] < t[4] ? 3 : 4; if (t[5] < t[max_axis]) max_axis = 5;
+    f32 maxt = t[max_axis];
+    if (maxt < 0) // Further-away hit is behind the ray - intersection can not occur.
+        return NoSide;
+
+    u8 min_axis = t[0] > t[1] ? 0 : 1; if (t[2] > t[min_axis]) min_axis = 2;
+    f32 mint = t[min_axis];
+    if (maxt < (mint > 0 ? mint : 0))
+        return NoSide;
+
+    hit->from_behind = mint < 0; // Further-away hit is in front of the ray, closer one is behind it.
+    if (hit->from_behind) {
+        mint = maxt;
+        min_axis = max_axis;
+    }
+
+    BoxSide side = getBoxSide(octant, min_axis);
+    hit->position = scaleAddVec3(*Rd, mint, *Ro);
+    hit->uv = getUVonUnitCube(hit->position, side);
+    hit->normal = getVec3Of(0);
+    switch (side) {
+        case Left:   hit->normal.x = hit->from_behind ? +1.0f : -1.0f; break;
+        case Right:  hit->normal.x = hit->from_behind ? -1.0f : +1.0f; break;
+        case Bottom: hit->normal.y = hit->from_behind ? +1.0f : -1.0f; break;
+        case Top:    hit->normal.y = hit->from_behind ? -1.0f : +1.0f; break;
+        case Back:   hit->normal.z = hit->from_behind ? +1.0f : -1.0f; break;
+        case Front:  hit->normal.z = hit->from_behind ? -1.0f : +1.0f; break;
+        default: return NoSide;
+    }
+
+    return side;
+}
+
+INLINE bool rayHitScene(Ray *ray, RayHit *local_hit, RayHit *hit, Scene *scene) {
+    bool current_found, found = false;
+    vec3 Ro, Rd;
+    Primitive *hit_primitive, *primitive = scene->primitives;
+    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++) {
+        convertPositionAndDirectionToObjectSpace(ray->origin, ray->direction, primitive, &Ro, &Rd);
+
+        current_found = hitCube(local_hit, &Ro, &Rd);
+        if (current_found) {
+            local_hit->position       = convertPositionToWorldSpace(local_hit->position, primitive);
+            local_hit->distance_squared = squaredLengthVec3(subVec3(local_hit->position, ray->origin));
+            if (local_hit->distance_squared < hit->distance_squared) {
+                *hit = *local_hit;
+                hit->object_type = primitive->type;
+                hit->material_id = primitive->material_id;
+                hit->object_id = i;
+
+                hit_primitive = primitive;
+                found = true;
+            }
+        }
+    }
+
+    if (found) {
+        hit->distance = sqrtf(hit->distance_squared);
+        hit->normal = normVec3(convertDirectionToWorldSpace(hit->normal, hit_primitive));
+    }
+
+    return found;
+}
+
+void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
+    Mouse *mouse = &controls->mouse;
+    Camera *camera = viewport->camera;
+    Dimensions *dimensions = &viewport->frame_buffer->dimensions;
+    Selection *selection = &scene->selection;
+
+    setViewportProjectionPlane(viewport);
+
+    vec3 position;
+    vec3 *cam_pos = &camera->transform.position;
+    mat3 *rot     = &camera->transform.rotation_matrix;
+    mat3 *inv_rot = &camera->transform.rotation_matrix_inverted;
+    RayHit *hit = &selection->hit;
+    Ray ray, *local_ray = &selection->local_ray;
+
+    if (mouse->left_button.is_pressed) {
+        if (!mouse->left_button.is_handled) { // This is the first frame after the left mouse button went down:
+            mouse->left_button.is_handled = true;
+
+            // Cast a ray onto the scene to find the closest object behind the hovered pixel:
+            setRayFromCoords(&ray, mouse->pos, viewport);
+
+            hit->distance_squared = INFINITY;
+            if (rayHitScene(&ray, &selection->local_hit, hit, scene)) {
+                // Detect if object scene->selection has changed:
+                selection->changed = (
+                        selection->object_type != hit->object_type ||
+                        selection->object_id   != hit->object_id
+                );
+
+                // Track the object that is now selected:
+                selection->object_type = hit->object_type;
+                selection->object_id   = hit->object_id;
+                selection->primitive   = null;
+
+                // Capture a pointer to the selected object's position for later use in transformations:
+                selection->primitive = scene->primitives + selection->object_id;
+                selection->world_position = &selection->primitive->position;
+                selection->transformation_plane_origin = hit->position;
+
+                selection->world_offset = subVec3(hit->position, *selection->world_position);
+
+                // Track how far away the hit position is from the camera along the z axis:
+                position = mulVec3Mat3(subVec3(hit->position, ray.origin), *inv_rot);
+                selection->object_distance = position.z;
+            } else {
+                if (selection->object_type)
+                    selection->changed = true;
+                selection->object_type = 0;
+            }
+        }
+    }
+
+    if (selection->object_type) {
+        if (controls->is_pressed.alt) {
+            bool any_mouse_button_is_pressed = (
+                    mouse->left_button.is_pressed ||
+                    mouse->middle_button.is_pressed ||
+                    mouse->right_button.is_pressed);
+            if (selection->primitive && !any_mouse_button_is_pressed) {
+                // Cast a ray onto the bounding box of the currently selected object:
+                setRayFromCoords(&ray, mouse->pos, viewport);
+                convertPositionAndDirectionToObjectSpace(ray.origin, ray.direction, selection->primitive, &local_ray->origin, &local_ray->direction);
+
+                if (selection->primitive->type == PrimitiveType_Mesh) {
+                    vec3 inv_scale = oneOverVec3(scene->meshes[selection->primitive->id].aabb.max);
+                    position = addVec3(local_ray->origin, local_ray->direction);
+                    position = mulVec3(position, inv_scale);
+
+                    local_ray->origin    = mulVec3(local_ray->origin, inv_scale);
+                    local_ray->direction = normVec3(subVec3(position, local_ray->origin));
+                }
+
+                selection->box_side = hitCube(hit, &local_ray->origin, &local_ray->direction);
+                if (selection->box_side) {
+                    if (selection->primitive->type == PrimitiveType_Mesh)
+                        hit->position = mulVec3(hit->position, scene->meshes[selection->primitive->id].aabb.max);
+
+                    selection->transformation_plane_center = convertPositionToWorldSpace(hit->normal,   selection->primitive);
+                    selection->transformation_plane_origin = convertPositionToWorldSpace(hit->position, selection->primitive);
+                    selection->transformation_plane_normal = convertDirectionToWorldSpace(hit->normal,  selection->primitive);
+                    selection->transformation_plane_normal = normVec3(selection->transformation_plane_normal);
+                    selection->world_offset = subVec3(selection->transformation_plane_origin, *selection->world_position);
+                    selection->object_scale    = selection->primitive->scale;
+                    selection->object_rotation = selection->primitive->rotation;
+                }
+            }
+
+            if (selection->box_side) {
+                if (selection->primitive) {
+                    if (any_mouse_button_is_pressed) {
+                        setRayFromCoords(&ray, mouse->pos, viewport);
+                        if (hitPlane(selection->transformation_plane_origin,
+                                     selection->transformation_plane_normal,
+                                     &ray.origin,
+                                     &ray.direction,
+                                     hit)) {
+                            if (mouse->left_button.is_pressed) {
+                                position = subVec3(hit->position, selection->world_offset);
+                                *selection->world_position = position;
+                                if (selection->primitive)
+                                    selection->primitive->flags |= IS_TRANSLATED;
+                            } else if (mouse->middle_button.is_pressed) {
+                                position      = selection->transformation_plane_origin;
+                                position      = convertPositionToObjectSpace(     position, selection->primitive);
+                                hit->position = convertPositionToObjectSpace(hit->position, selection->primitive);
+
+                                selection->primitive->scale = mulVec3(selection->object_scale,
+                                                                      mulVec3(hit->position, oneOverVec3(position)));
+                                selection->primitive->flags |= IS_SCALED | IS_SCALED_NON_UNIFORMLY;
+                            } else if (mouse->right_button.is_pressed) {
+                                vec3 v1 = subVec3(hit->position,
+                                                  selection->transformation_plane_center);
+                                vec3 v2 = subVec3(selection->transformation_plane_origin,
+                                                  selection->transformation_plane_center);
+                                quat q;
+                                q.axis = crossVec3(v2, v1);
+                                q.amount = sqrtf(squaredLengthVec3(v1) * squaredLengthVec3(v2)) + dotVec3(v1, v2);
+                                q = normQuat(q);
+                                selection->primitive->rotation = mulQuat(q, selection->object_rotation);
+                                selection->primitive->rotation = normQuat(selection->primitive->rotation);
+                                selection->primitive->flags |= IS_ROTATED;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            selection->box_side = NoSide;
+            if (mouse->left_button.is_pressed && mouse->moved) {
+                // Back-project the new mouse position onto a quad at a distance of the selected-object away from the camera
+                position.z = selection->object_distance;
+
+                // Screen -> NDC:
+                position.x = (f32) mouse->pos.x / dimensions->h_width - 1;
+                position.y = (f32) mouse->pos.y / dimensions->h_height - 1;
+                position.y = -position.y;
+
+                // NDC -> View:
+                position.x *= position.z / camera->focal_length;
+                position.y *= position.z / (camera->focal_length * dimensions->width_over_height);
+
+                // View -> World:
+                position = addVec3(mulVec3Mat3(position, *rot), *cam_pos);
+
+                // Back-track by the world offset (from the hit position back to the selected-object's center):
+                position = subVec3(position, selection->world_offset);
+                *selection->world_position = position;
+                if (selection->primitive)
+                    selection->primitive->flags |= IS_TRANSLATED;
+            }
+        }
+    }
+}
+
+void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
+    Mouse *mouse = &controls->mouse;
+    Selection *selection = &scene->selection;
+    Primitive *primitive = selection->primitive;
+    Box *box = &selection->box;
+
+    if (controls->is_pressed.alt &&
+        !mouse->is_captured &&
+        selection->object_type &&
+        primitive) {
+        initBox(box);
+        drawBox(viewport, Color(Yellow), box, primitive, BOX__ALL_SIDES);
+        if (selection->box_side) {
+            RGBA color = Color(White);
+            switch (selection->box_side) {
+                case Left:  case Right:  color = Color(Red);   break;
+                case Top:   case Bottom: color = Color(Green); break;
+                case Front: case Back:   color = Color(Blue);  break;
+                case NoSide: break;
+            }
+            drawBox(viewport, color, box, primitive, selection->box_side);
+        }
+    }
 }
 
 typedef struct AppCallbacks {

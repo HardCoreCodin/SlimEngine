@@ -52,7 +52,7 @@ void drawCurve(Viewport *viewport, RGBA color, Curve *curve, Primitive *primitiv
         switch (primitive->type) {
             case PrimitiveType_Helix:
                 current_position = center_to_orbit;
-                current_position.y -= 0.5f;
+                current_position.y -= 1;
                 break;
             case PrimitiveType_Coil:
                 orbit_to_curve  = mulVec3Mat3(orbit_to_curve, orbit_to_curve_rotation);
@@ -75,7 +75,7 @@ void drawCurve(Viewport *viewport, RGBA color, Curve *curve, Primitive *primitiv
 
         switch (primitive->type) {
             case PrimitiveType_Helix:
-                center_to_orbit.y += one_over_step_count;
+                center_to_orbit.y += 2 * one_over_step_count;
                 break;
             case PrimitiveType_Coil:
                 accumulated_orbit_rotation = mulMat3(accumulated_orbit_rotation, rotation);
