@@ -27,17 +27,18 @@ void updateAndRender() {
     PixelGrid *canvas = viewport->frame_buffer;
     HUD *hud = &viewport->hud;
     Grid *grid = &app->scene.grids[0];
-    Primitive *grid_primitive = &app->scene.primitives[0];
-    startFrameTimer(&app->time.timers.update);
+    Primitive *prim = &app->scene.primitives[0];
+    Timer *timer = &app->time.timers.update;
+    startFrameTimer(timer);
 
     fillPixelGrid(canvas, Color(Black));
-    drawGrid(viewport, Color(grid_primitive->color),
-             grid, grid_primitive);
+    drawGrid(viewport, Color(prim->color), grid, prim);
     if (viewport->settings.show_hud) {
-        setCountersInHUD(hud, &app->time.timers.update);
+        setCountersInHUD(hud, timer);
         drawHUD(canvas, Color(Green), hud);
     }
-    endFrameTimer(&app->time.timers.update);
+
+    endFrameTimer(timer);
 }
 void updateMouseCoordsInHUD(i32 x, i32 y) {
     setMouseCoordinatesInHUD(&app->viewport.hud,
