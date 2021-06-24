@@ -63,7 +63,7 @@ Well documented example applications cover the features:<br>
   The camera can be drawn as part of the drawing of the scene<br>
   <p float="left">
     <img src="src/examples/3_cameras_update_c.png" alt="3_cameras_update_code" height="260">
-    <img src="src/examples/3_cameras_setup_c.png" alt="3_cameras_setup_code" width="260">
+    <img src="src/examples/3_cameras_setup_c.png" alt="3_cameras_setup_code" height="260">
   </p>
 
 * Scene: Setup and drawing parametric primitives (Grid, Box, Curves, etc.)<br>
