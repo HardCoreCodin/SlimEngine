@@ -56,24 +56,33 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/2_navigation_setup_c.png" alt="2_navigation_setup_code" width="350">
     <img src="src/examples/2_navigation_mouse_c.png" alt="2_navigation_mouse_code" height="300">
   </p>
-  
+
+* Cameras: Viewport binding<br>
+  <img src="src/examples/3_cameras.gif" alt="1_scene" height="360"><br>
+  The scene can have any number of cameras which can be bound to any viewport dynamically.<br>
+  The camera can be drawn as part of the drawing of the scene<br>
+  <p float="left">
+    <img src="src/examples/3_cameras_update_c.png" alt="3_cameras_update_code" height="300">
+    <img src="src/examples/3_cameras_setup_c.png" alt="3_cameras_setup_code" height="300">
+  </p>
+
 * Scene: Setup and drawing parametric primitives (Grid, Box, Curves, etc.)<br>
   <img src="src/examples/3_scene.gif" alt="1_scene" height="360"><br>
   SlimEngine allocates and initializes the scene based on quantities set at app-initialization time.<br>
   Wireframe drawing of the scene to the viewport can be invoked manually on window-redraw.<br>  
   <p float="left">
-    <img src="src/examples/3_scene_initialization_c.png" alt="3_scene_initialization_and_viewport_drawing_code" width="350">
-    <img src="src/examples/3_scene_viewport_drawing_c.png" alt="3_scene_viewport_drawing_code" height="300">
+    <img src="src/examples/4_scene_initialization_c.png" alt="3_scene_initialization_and_viewport_drawing_code" width="350">
+    <img src="src/examples/4_scene_viewport_drawing_c.png" alt="3_scene_viewport_drawing_code" height="300">
   </p>
 
 * Scene: Object selection and manipulation (Translation, Rotation and Scale)<br>
   <p float="left">
-    <img src="src/examples/4_manipulation_along_screen.gif" alt="4_manipulation_along_screen" height="300">
-    <img src="src/examples/4_manipulation_along_axis_shapes.gif" alt="4_manipulation_along_axis_shapes" height="300">
+    <img src="src/examples/5_manipulation_along_screen.gif" alt="4_manipulation_along_screen" height="300">
+    <img src="src/examples/5_manipulation_along_axis_shapes.gif" alt="4_manipulation_along_axis_shapes" height="300">
   </p>
   Scene objects can be dragged around the screen, moving them parallel to the viewing plane.<br>
   Selecting an object displays it's bouding box, enabling for per-axis translation, rotation and scaling.<br><br>
   <p float="left">
-    <img src="src/examples/4_manipulation_update_c.png" alt="4_manipulation_update_code" width="350">
-    <img src="src/examples/4_manipulation_scene_setup_c.png" alt="4_manipulation_scene_setup_code" width="350">
+    <img src="src/examples/5_manipulation_update_c.png" alt="4_manipulation_update_code" width="350">
+    <img src="src/examples/5_manipulation_scene_setup_c.png" alt="4_manipulation_scene_setup_code" width="350">
   </p>

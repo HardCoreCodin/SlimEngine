@@ -96,10 +96,10 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define ALL_FLAGS (IS_VISIBLE | IS_TRANSLATED | IS_ROTATED | IS_SCALED | IS_SCALED_NON_UNIFORMLY)
 
 #define CAMERA_DEFAULT__FOCAL_LENGTH 2.0f
+#define CAMERA_DEFAULT__TARGET_DISTANCE 15
 
 #define NAVIGATION_DEFAULT__MAX_VELOCITY 5
 #define NAVIGATION_DEFAULT__ACCELERATION 10
-#define NAVIGATION_DEFAULT__TARGET_DISTANCE 15
 #define NAVIGATION_SPEED_DEFAULT__TURN 1
 #define NAVIGATION_SPEED_DEFAULT__ORIENT 1
 #define NAVIGATION_SPEED_DEFAULT__ORBIT 1
@@ -582,6 +582,8 @@ typedef struct xform3 {
 typedef struct Camera {
     f32 focal_length;
     xform3 transform;
+    vec3 current_velocity;
+    f32 zoom, dolly, target_distance;
 } Camera;
 
 typedef struct NavigationSpeedSettings {
@@ -590,7 +592,7 @@ typedef struct NavigationSpeedSettings {
 
 typedef struct NavigationSettings {
     NavigationSpeedSettings speeds;
-    f32 max_velocity, acceleration, target_distance;
+    f32 max_velocity, acceleration;
 } NavigationSettings;
 
 typedef struct NavigationTurn {
@@ -605,8 +607,6 @@ typedef struct Navigation {
     NavigationSettings settings;
     NavigationMove move;
     NavigationTurn turn;
-    vec3 current_velocity;
-    f32 zoom, dolly, target_distance;
     bool zoomed, moved, turned;
 } Navigation;
 
@@ -841,7 +841,12 @@ void initXform3(xform3 *xform) {
 }
 
 void initCamera(Camera* camera) {
-    camera->focal_length = CAMERA_DEFAULT__FOCAL_LENGTH;
+    camera->focal_length = camera->zoom = CAMERA_DEFAULT__FOCAL_LENGTH;
+    camera->target_distance = CAMERA_DEFAULT__TARGET_DISTANCE;
+    camera->dolly = 0;
+    camera->current_velocity.x = 0;
+    camera->current_velocity.y = 0;
+    camera->current_velocity.z = 0;
     initXform3(&camera->transform);
 }
 
@@ -860,10 +865,8 @@ void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, i32 posi
 NavigationSettings getDefaultNavigationSettings() {
     NavigationSettings navigation_settings;
 
-    navigation_settings.target_distance = NAVIGATION_DEFAULT__TARGET_DISTANCE;
-    navigation_settings.max_velocity    = NAVIGATION_DEFAULT__MAX_VELOCITY;
-    navigation_settings.acceleration    = NAVIGATION_DEFAULT__ACCELERATION;
-
+    navigation_settings.max_velocity  = NAVIGATION_DEFAULT__MAX_VELOCITY;
+    navigation_settings.acceleration  = NAVIGATION_DEFAULT__ACCELERATION;
     navigation_settings.speeds.turn   = NAVIGATION_SPEED_DEFAULT__TURN;
     navigation_settings.speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
     navigation_settings.speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
@@ -877,15 +880,9 @@ NavigationSettings getDefaultNavigationSettings() {
 void initNavigation(Navigation *navigation, NavigationSettings navigation_settings) {
     navigation->settings = navigation_settings;
 
-    navigation->target_distance = navigation_settings.target_distance;
-    navigation->zoom = CAMERA_DEFAULT__FOCAL_LENGTH;
-    navigation->dolly = 0;
     navigation->turned = false;
     navigation->moved = false;
     navigation->zoomed = false;
-    navigation->current_velocity.x = 0;
-    navigation->current_velocity.y = 0;
-    navigation->current_velocity.z = 0;
 
     navigation->move.right = false;
     navigation->move.left = false;
@@ -2818,46 +2815,38 @@ void drawHUD(PixelGrid *canvas, HUD *hud) {
 }
 
 
-void zoomCamera(Camera *camera, Navigation *navigation, f32 zoom) {
-    f32 new_zoom = navigation->zoom + zoom;
+void zoomCamera(Camera *camera, f32 zoom) {
+    f32 new_zoom = camera->zoom + zoom;
     camera->focal_length = new_zoom > 1 ? new_zoom : (new_zoom < -1 ? (-1 / new_zoom) : 1);
-    navigation->zoom = new_zoom;
-    navigation->zoomed = true;
+    camera->zoom = new_zoom;
 }
 
-void dollyCamera(Camera *camera, Navigation *navigation, f32 dolly, f32 max_distance) {
-    vec3 target_position = scaleVec3(*camera->transform.forward_direction, navigation->target_distance);
+void dollyCamera(Camera *camera, f32 dolly) {
+    vec3 target_position = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
     target_position = addVec3(camera->transform.position, target_position);
 
     // Compute new target distance:
-    navigation->dolly += dolly;
-    navigation->target_distance = powf(2, navigation->dolly / -200) * max_distance;
+    camera->dolly += dolly;
+    camera->target_distance = powf(2, camera->dolly / -200) * CAMERA_DEFAULT__TARGET_DISTANCE;
 
     // Back-track from target position to new current position:
-    camera->transform.position = scaleVec3(*camera->transform.forward_direction, navigation->target_distance);
+    camera->transform.position = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
     camera->transform.position = subVec3(target_position,camera->transform.position);
-
-    navigation->moved = true;
-}
-
-void turnCamera(Camera *camera, Navigation *navigation, f32 yaw, f32 pitch) {
-    rotateXform3(&camera->transform, yaw, pitch, 0);
-
-    navigation->turned = true;
 }
 
 void orbitCamera(Camera *camera, Navigation *navigation, f32 azimuth, f32 altitude) {
     // Move the camera forward to the position of it's target:
-    vec3 movement = scaleVec3(*camera->transform.forward_direction, navigation->target_distance);
+    vec3 movement = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
     camera->transform.position = addVec3(camera->transform.position, movement);
 
     // Reorient the camera while it is at the position of it's target:
-    turnCamera(camera, navigation, azimuth, altitude);
+    rotateXform3(&camera->transform, azimuth, altitude, 0);
 
     // Back the camera away from it's target position using the updated forward direction:
-    movement = scaleVec3(*camera->transform.forward_direction, navigation->target_distance);
+    movement = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
     camera->transform.position = subVec3(camera->transform.position, movement);
 
+    navigation->turned = true;
     navigation->moved = true;
 }
 
@@ -2868,30 +2857,6 @@ void panCamera(Camera *camera, Navigation *navigation, f32 right, f32 up) {
     camera->transform.position = addVec3(camera->transform.position, right_movement);
 
     navigation->moved = true;
-}
-
-void navigateCamera(Camera *camera, Navigation *navigation, f32 delta_time) {
-    vec3 target_velocity = getVec3Of(0);
-
-    if (navigation->move.right)    target_velocity.x += navigation->settings.max_velocity;
-    if (navigation->move.left)     target_velocity.x -= navigation->settings.max_velocity;
-    if (navigation->move.up)       target_velocity.y += navigation->settings.max_velocity;
-    if (navigation->move.down)     target_velocity.y -= navigation->settings.max_velocity;
-    if (navigation->move.forward)  target_velocity.z += navigation->settings.max_velocity;
-    if (navigation->move.backward) target_velocity.z -= navigation->settings.max_velocity;
-    if (navigation->turn.left)  turnCamera(camera, navigation, delta_time * +navigation->settings.speeds.turn, 0);
-    if (navigation->turn.right) turnCamera(camera, navigation, delta_time * -navigation->settings.speeds.turn, 0);
-
-    // Update the current velocity:
-    f32 velocity_difference = navigation->settings.acceleration * delta_time;
-    navigation->current_velocity = approachVec3(navigation->current_velocity, target_velocity, velocity_difference);
-
-    navigation->moved = nonZeroVec3(navigation->current_velocity);
-    if (navigation->moved) { // Update the current position:
-        vec3 movement = scaleVec3(navigation->current_velocity, delta_time);
-        movement = mulVec3Mat3(movement, camera->transform.rotation_matrix);
-        camera->transform.position = addVec3(camera->transform.position, movement);
-    }
 }
 
 void panViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
@@ -2906,29 +2871,28 @@ void panViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
 
 void zoomViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
     f32 speed = viewport->navigation.settings.speeds.zoom * delta_time;
-    zoomCamera(viewport->camera, &viewport->navigation,
-               mouse->wheel_scroll_amount * speed);
+    zoomCamera(viewport->camera, mouse->wheel_scroll_amount * speed);
 
+    viewport->navigation.zoomed = true;
     mouse->wheel_scroll_handled = true;
 }
 
 void dollyViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
     f32 speed = viewport->navigation.settings.speeds.dolly * delta_time;
-    dollyCamera(viewport->camera, &viewport->navigation,
-                mouse->wheel_scroll_amount * speed,
-                viewport->navigation.settings.target_distance);
-
+    dollyCamera(viewport->camera, mouse->wheel_scroll_amount * speed);
+    viewport->navigation.moved = true;
     mouse->wheel_scroll_handled = true;
 }
 
 void orientViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
     f32 speed = viewport->navigation.settings.speeds.orient * delta_time;
-    turnCamera(viewport->camera, &viewport->navigation,
-               -(f32)mouse->pos_raw_diff.x * speed,
-               -(f32)mouse->pos_raw_diff.y * speed);
+    rotateXform3(&viewport->camera->transform,
+                 -(f32)mouse->pos_raw_diff.x * speed,
+                 -(f32)mouse->pos_raw_diff.y * speed, 0);
 
-    mouse->raw_movement_handled = true;
     mouse->moved = false;
+    mouse->raw_movement_handled = true;
+    viewport->navigation.turned = true;
 }
 
 void orbitViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
@@ -2942,12 +2906,40 @@ void orbitViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
 }
 
 void navigateViewport(Viewport *viewport, f32 delta_time) {
-    navigateCamera(viewport->camera, &viewport->navigation, delta_time);
+    vec3 target_velocity = getVec3Of(0);
+    Navigation *navigation = &viewport->navigation;
+    Camera *camera = viewport->camera;
+
+    if (navigation->move.right) target_velocity.x += navigation->settings.max_velocity;
+    if (navigation->move.left) target_velocity.x -= navigation->settings.max_velocity;
+    if (navigation->move.up) target_velocity.y += navigation->settings.max_velocity;
+    if (navigation->move.down) target_velocity.y -= navigation->settings.max_velocity;
+    if (navigation->move.forward) target_velocity.z += navigation->settings.max_velocity;
+    if (navigation->move.backward) target_velocity.z -= navigation->settings.max_velocity;
+    if (navigation->turn.left) {
+        rotateXform3(&camera->transform, delta_time * +navigation->settings.speeds.turn, 0, 0);
+        navigation->turned = true;
+    }
+    if (navigation->turn.right) {
+        rotateXform3(&camera->transform, delta_time * -navigation->settings.speeds.turn, 0, 0);
+        navigation->turned = true;
+    }
+
+    // Update the current velocity:
+    f32 velocity_difference = navigation->settings.acceleration * delta_time;
+    camera->current_velocity = approachVec3(camera->current_velocity, target_velocity, velocity_difference);
+
+    navigation->moved = nonZeroVec3(camera->current_velocity);
+    if (navigation->moved) { // Update the current position:
+        vec3 movement = scaleVec3(camera->current_velocity, delta_time);
+        movement = mulVec3Mat3(movement, camera->transform.rotation_matrix);
+        camera->transform.position = addVec3(camera->transform.position, movement);
+    }
 }
 
 void drawBox(Viewport *viewport, RGBA color, Box *box, Primitive *primitive, u8 sides) {
     // Transform vertices positions from local-space to world-space and then to view-space:
-    BoxVertices vertices;
+    static BoxVertices vertices;
     vec3 position;
     for (u8 i = 0; i < BOX__VERTEX_COUNT; i++) {
         position = box->vertices.buffer[i];
@@ -2958,7 +2950,7 @@ void drawBox(Viewport *viewport, RGBA color, Box *box, Primitive *primitive, u8 
     }
 
     // Distribute transformed vertices positions to edges:
-    BoxEdges edges;
+    static BoxEdges edges;
     setBoxEdgesFromVertices(&edges, &vertices);
 
     if (sides == BOX__ALL_SIDES) {
@@ -2980,6 +2972,27 @@ void drawBox(Viewport *viewport, RGBA color, Box *box, Primitive *primitive, u8 
     }
 }
 
+void drawCamera(Viewport *viewport, RGBA color, Camera *camera) {
+    static Box box;
+    static Primitive primitive;
+    initBox(&box);
+    primitive.flags = ALL_FLAGS;
+    primitive.rotation = camera->transform.rotation;
+    primitive.position = camera->transform.position;
+    primitive.scale.x  = primitive.scale.y = primitive.scale.z = 1;
+    drawBox(viewport, color, &box, &primitive, BOX__ALL_SIDES);
+    box.vertices.corners.back_bottom_left   = scaleVec3(box.vertices.corners.back_bottom_left,  0.5f);
+    box.vertices.corners.back_bottom_right  = scaleVec3(box.vertices.corners.back_bottom_right, 0.5f);
+    box.vertices.corners.back_top_left      = scaleVec3(box.vertices.corners.back_top_left,     0.5f);
+    box.vertices.corners.back_top_right     = scaleVec3(box.vertices.corners.back_top_right,    0.5f);
+    box.vertices.corners.front_bottom_left  = scaleVec3(box.vertices.corners.front_bottom_left,  2);
+    box.vertices.corners.front_bottom_right = scaleVec3(box.vertices.corners.front_bottom_right, 2);
+    box.vertices.corners.front_top_left     = scaleVec3(box.vertices.corners.front_top_left,     2);
+    box.vertices.corners.front_top_right    = scaleVec3(box.vertices.corners.front_top_right,    2);
+    for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
+        box.vertices.buffer[i].z += 1.5f;
+    drawBox(viewport, color, &box, &primitive, BOX__ALL_SIDES);
+}
 
 #define CURVE_STEPS 3600
 

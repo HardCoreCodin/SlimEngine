@@ -177,6 +177,8 @@ typedef struct xform3 {
 typedef struct Camera {
     f32 focal_length;
     xform3 transform;
+    vec3 current_velocity;
+    f32 zoom, dolly, target_distance;
 } Camera;
 
 typedef struct NavigationSpeedSettings {
@@ -185,7 +187,7 @@ typedef struct NavigationSpeedSettings {
 
 typedef struct NavigationSettings {
     NavigationSpeedSettings speeds;
-    f32 max_velocity, acceleration, target_distance;
+    f32 max_velocity, acceleration;
 } NavigationSettings;
 
 typedef struct NavigationTurn {
@@ -200,8 +202,6 @@ typedef struct Navigation {
     NavigationSettings settings;
     NavigationMove move;
     NavigationTurn turn;
-    vec3 current_velocity;
-    f32 zoom, dolly, target_distance;
     bool zoomed, moved, turned;
 } Navigation;
 

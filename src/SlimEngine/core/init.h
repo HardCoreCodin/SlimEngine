@@ -113,7 +113,12 @@ void initXform3(xform3 *xform) {
 }
 
 void initCamera(Camera* camera) {
-    camera->focal_length = CAMERA_DEFAULT__FOCAL_LENGTH;
+    camera->focal_length = camera->zoom = CAMERA_DEFAULT__FOCAL_LENGTH;
+    camera->target_distance = CAMERA_DEFAULT__TARGET_DISTANCE;
+    camera->dolly = 0;
+    camera->current_velocity.x = 0;
+    camera->current_velocity.y = 0;
+    camera->current_velocity.z = 0;
     initXform3(&camera->transform);
 }
 
@@ -132,10 +137,8 @@ void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, i32 posi
 NavigationSettings getDefaultNavigationSettings() {
     NavigationSettings navigation_settings;
 
-    navigation_settings.target_distance = NAVIGATION_DEFAULT__TARGET_DISTANCE;
-    navigation_settings.max_velocity    = NAVIGATION_DEFAULT__MAX_VELOCITY;
-    navigation_settings.acceleration    = NAVIGATION_DEFAULT__ACCELERATION;
-
+    navigation_settings.max_velocity  = NAVIGATION_DEFAULT__MAX_VELOCITY;
+    navigation_settings.acceleration  = NAVIGATION_DEFAULT__ACCELERATION;
     navigation_settings.speeds.turn   = NAVIGATION_SPEED_DEFAULT__TURN;
     navigation_settings.speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
     navigation_settings.speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
@@ -149,15 +152,9 @@ NavigationSettings getDefaultNavigationSettings() {
 void initNavigation(Navigation *navigation, NavigationSettings navigation_settings) {
     navigation->settings = navigation_settings;
 
-    navigation->target_distance = navigation_settings.target_distance;
-    navigation->zoom = CAMERA_DEFAULT__FOCAL_LENGTH;
-    navigation->dolly = 0;
     navigation->turned = false;
     navigation->moved = false;
     navigation->zoomed = false;
-    navigation->current_velocity.x = 0;
-    navigation->current_velocity.y = 0;
-    navigation->current_velocity.z = 0;
 
     navigation->move.right = false;
     navigation->move.left = false;
