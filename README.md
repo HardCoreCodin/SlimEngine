@@ -32,15 +32,15 @@ Additional features include facilities for interactive 3D application developmen
 
 Well documented example applications cover the features:<br>
 * Viewport: HUD (Head-UP Display)<br>
-  <img src="src/examples/1_viewport.gif" alt="1_scene" height="360"><br>
+  <img src="src/examples/1_viewport_HUD.gif" alt="1_viewport_HUD" height="360"><br>
   Viewports come with a HUD that can be toggled on/off<br>
   SlimEngine comes with an empty scene, apart from a default camera bound to a default viewport.<br>
   The window content is bound to the default viewport so they resize together.<br>
   <p float="left">
     <img src="src/examples/1_viewport_updateAndRender_c.png" alt="1_viewport_updateAndRender_code" width="360">
-    <img src="src/examples/1_viewport_initialization_c.png" alt="1_viewport_HUD_setup_code" height="300">
-    <img src="src/examples/1_viewport_HUD_update_c.png" alt="1_viewport_updateAndRender_code" width="360">
-    <img src="src/examples/1_viewport_setup_c.png" alt="1_viewport_HUD_setup_code" height="300">  
+    <img src="src/examples/1_viewport_initialization_c.png" alt="1_viewport_initialization_code" height="300">
+    <img src="src/examples/1_viewport_HUD_update_c.png" alt="1_viewport_HUD_update_code" width="360">
+    <img src="src/examples/1_viewport_setup_c.png" alt="1_viewport_setup_code" height="300">  
   </p>
   
 * Viewport: Navigation<br>
