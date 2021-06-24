@@ -68,9 +68,12 @@ Well documented example applications cover the features:<br>
 
 * Scene: Object selection and manipulation (Translation, Rotation and Scale)<br>
   <p float="left">
-    <img src="src/examples/4_manipulation_along_screen.gif" alt="4_manipulation_along_screen" height="340">
-    <img src="src/examples/4_manipulation_along_axis_shapes.gif" alt="4_manipulation_along_axis_shapes" height="340">
+    <img src="src/examples/4_manipulation_along_screen.gif" alt="4_manipulation_along_screen" height="300">
+    <img src="src/examples/4_manipulation_along_axis_shapes.gif" alt="4_manipulation_along_axis_shapes" height="300">
   </p>
   Scene objects can be dragged around the screen, moving them parallel to the viewing plane.<br>
   Selecting an object displays it's bouding box, enabling for per-axis translation, rotation and scaling.<br><br>
-  <img src="src/examples/4_manipulation_update_c.png" alt="4_manipulation_update_code" width="350">
+  <p float="left">
+    <img src="src/examples/4_manipulation_update_c.png" alt="4_manipulation_update_code" width="350">
+    <img src="src/examples/4_manipulation_scene_setup_c.png" alt="4_manipulation_scene_setup_code" width="350">
+  </p>

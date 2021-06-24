@@ -72,16 +72,21 @@ void updateAndRender() {
     Viewport *viewport = &app->viewport;
     Mouse *mouse = &controls->mouse;
     Scene *scene = &app->scene;
+
     startFrameTimer(timer);
+
     if (mouse->is_captured)
         navigateViewport(viewport, timer->delta_time);
     else
         manipulateSelection(scene, viewport, controls);
+
     if (!controls->is_pressed.alt)
         updateViewport(viewport, mouse, timer->delta_time);
+
     drawSceneToViewport(scene, viewport);
     drawSelection(scene, viewport, controls);
     drawMouseAndKeyboard(viewport, mouse);
+
     resetMouseChanges(mouse);
     endFrameTimer(timer);
 }
@@ -116,7 +121,9 @@ void setupScene(Scene *scene) {
     coil_primitive->position.x = 4;
     coil_primitive->position.y = 4;
     coil_primitive->position.z = 2;
-    box_primitive->id = grid_primitive->id = helix_primitive->id = 0;
+    box_primitive->id   = 0;
+    grid_primitive->id  = 0;
+    helix_primitive->id = 0;
     coil_primitive->id  = 1;
     grid_primitive->scale.x = 5;
     grid_primitive->scale.z = 5;
