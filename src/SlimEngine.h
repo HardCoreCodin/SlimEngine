@@ -332,16 +332,35 @@ RGBA Color(enum ColorID color_id) {
     return color;
 }
 
-typedef struct NumberStringBuffer {
-    char _buffer[12];
-    char *string;
-    u8 digit_count;
-} NumberStringBuffer;
+typedef struct String {
+    u32 length;
+    char *char_ptr;
+} String;
 
-void printNumberIntoString(i32 number, NumberStringBuffer *number_string) {
+void setString(String *string, char *char_ptr) {
+    string->char_ptr = char_ptr;
+    string->length = 0;
+    if (char_ptr)
+        while (char_ptr[string->length])
+            string->length++;
+}
+
+typedef struct NumberString {
+    char _buffer[12];
+    String string;
+} NumberString;
+
+void initNumberString(NumberString *number_string) {
+    number_string->string.char_ptr = number_string->_buffer;
+    number_string->string.length = 1;
+    number_string->_buffer[11] = 0;
+    for (u8 i = 0; i < 11; i++)
+        number_string->_buffer[i] = ' ';
+}
+
+void printNumberIntoString(i32 number, NumberString *number_string) {
+    initNumberString(number_string);
     char *buffer = number_string->_buffer;
-    buffer[11] = 0;
-    for (u8 i = 0; i < 11; i++) buffer[i] = ' ';
 
     bool is_negative = number < 0;
     if (is_negative) number = -number;
@@ -349,35 +368,43 @@ void printNumberIntoString(i32 number, NumberStringBuffer *number_string) {
     if (number) {
         u32 temp;
         buffer += 11;
-        number_string->string = buffer;
-        number_string->digit_count = 0;
+        number_string->string.char_ptr = buffer;
+        number_string->string.length = 0;
 
         for (u8 i = 0; i < 11; i++) {
             temp = number;
             number /= 10;
-            number_string->digit_count++;
+            number_string->string.length++;
             *buffer-- = (char)('0' + temp - number * 10);
             if (!number) {
                 if (is_negative) {
                     *buffer = '-';
-                    number_string->string--;
-                    number_string->digit_count++;
+                    number_string->string.char_ptr--;
+                    number_string->string.length++;
                 }
 
                 break;
             }
-            number_string->string--;
+            number_string->string.char_ptr--;
         }
     } else {
         buffer[11] = '0';
-        number_string->digit_count = 1;
-        number_string->string = buffer + 11;
+        number_string->string.length = 1;
+        number_string->string.char_ptr = buffer + 11;
     }
 }
 
+typedef struct HUDLine {
+    String title;
+    NumberString value;
+    enum ColorID title_color, value_color;
+} HUDLine;
+
 typedef struct HUD {
-    NumberStringBuffer fps, msf, width, height, mouseX, mouseY;
     vec2i position;
+    u32 line_count;
+    f32 line_height;
+    HUDLine *lines;
 } HUD;
 
 typedef struct KeyMap      { u8 ctrl, alt, shift, space, tab; } KeyMap;
@@ -589,7 +616,8 @@ typedef struct ProjectionPlane {
 
 typedef struct ViewportSettings {
     f32 near_clipping_plane_distance,
-            far_clipping_plane_distance;
+        far_clipping_plane_distance;
+    u32 hud_line_count;
     bool show_hud;
 } ViewportSettings;
 
@@ -817,14 +845,16 @@ void initCamera(Camera* camera) {
     initXform3(&camera->transform);
 }
 
-void initHUD(HUD *hud, u16 width, u16 height) {
-    hud->position.x = hud->position.y = 10;
-    printNumberIntoString(width, &hud->width);
-    printNumberIntoString(height, &hud->height);
-    printNumberIntoString(0, &hud->mouseX);
-    printNumberIntoString(0, &hud->mouseY);
-    printNumberIntoString(0, &hud->fps);
-    printNumberIntoString(0, &hud->msf);
+void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, i32 position_x, i32 position_y) {
+    hud->lines = lines;
+    hud->line_count = line_count;
+    hud->line_height = line_height;
+    hud->position.x = position_x;
+    hud->position.y = position_y;
+
+    if (lines)
+        for (u32 i = 0; i < line_count; i++)
+            lines[i].value_color = lines[i].title_color = White;
 }
 
 NavigationSettings getDefaultNavigationSettings() {
@@ -873,6 +903,7 @@ ViewportSettings getDefaultViewportSettings() {
 
     default_viewport_settings.near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
     default_viewport_settings.far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
+    default_viewport_settings.hud_line_count = 0;
     default_viewport_settings.show_hud = false;
 
     return default_viewport_settings;
@@ -882,13 +913,13 @@ void initViewport(Viewport *viewport,
                   ViewportSettings viewport_settings,
                   NavigationSettings navigation_settings,
                   Camera *camera,
-                  PixelGrid *frame_buffer) {
+                  PixelGrid *frame_buffer,
+                  HUDLine *hud_lines,
+                  u32 hud_line_count) {
     viewport->camera = camera;
     viewport->settings = viewport_settings;
     viewport->frame_buffer = frame_buffer;
-    initHUD(&viewport->hud,
-            viewport->frame_buffer->dimensions.width,
-            viewport->frame_buffer->dimensions.height);
+    initHUD(&viewport->hud, hud_lines, hud_line_count, 1, 0, 0);
     initNavigation(&viewport->navigation, navigation_settings);
 }
 
@@ -1205,9 +1236,9 @@ void drawText(PixelGrid *canvas, RGBA color, char *str, i32 x, i32 y) {
 }
 
 void drawNumber(PixelGrid *canvas, RGBA color, i32 number, i32 x, i32 y) {
-    static NumberStringBuffer number_string;
+    static NumberString number_string;
     printNumberIntoString(number, &number_string);
-    drawText(canvas, color, number_string.string, x - number_string.digit_count * FONT_WIDTH, y);
+    drawText(canvas, color, number_string.string.char_ptr, x - number_string.string.length * FONT_WIDTH, y);
 }
 
 INLINE mat2 getMat2Identity() {
@@ -2774,64 +2805,16 @@ INLINE void rotateXform3(xform3 *xform, f32 yaw, f32 pitch, f32 roll) {
     xform->matrix = mulMat3(xform->matrix, xform->rotation_matrix);
 }
 
-static char *HUD_fps    = "Fps    :";
-static char *HUD_msf    = "mic-s/f:";
-
-static char *HUD_width  = "Width  :";
-static char *HUD_height = "Height :";
-
-static char *HUD_mouseX = "Mouse X:";
-static char *HUD_mouseY = "Mouse Y:";
-
-void setCountersInHUD(HUD *hud, Timer *timer) {
-    printNumberIntoString(timer->average_frames_per_second,      &hud->fps);
-    printNumberIntoString(timer->average_microseconds_per_frame, &hud->msf);
-}
-
-void setDimensionsInHUD(HUD *hud, u16 width, u16 height) {
-    printNumberIntoString(width, &hud->width);
-    printNumberIntoString(height, &hud->height);
-}
-
-void setMouseCoordinatesInHUD(HUD *hud, Mouse *mouse) {
-    printNumberIntoString(mouse->pos.x, &hud->mouseX);
-    printNumberIntoString(mouse->pos.y, &hud->mouseY);
-}
-
-void drawHUD(PixelGrid *canvas, RGBA color, HUD *hud) {
+void drawHUD(PixelGrid *canvas, HUD *hud) {
     i32 x = hud->position.x;
     i32 y = hud->position.y;
 
-    i32 small_gap = (i32)((f32)FONT_HEIGHT * 1.2f);
-    i32 large_gap = FONT_HEIGHT + FONT_HEIGHT;
-
-    drawText(canvas, color, HUD_fps, x, y);
-    drawText(canvas, color, hud->fps.string, x + FONT_WIDTH * 9, y);
-
-    y += small_gap;
-
-    drawText(canvas, color, HUD_msf, x, y);
-    drawText(canvas, color, hud->msf.string, x + FONT_WIDTH * 9, y);
-
-    y += large_gap;
-
-    drawText(canvas, color, HUD_width, x, y);
-    drawText(canvas, color, hud->width.string, x + FONT_WIDTH * 9, y);
-
-    y += small_gap;
-
-    drawText(canvas, color, HUD_height, x, y);
-    drawText(canvas, color, hud->height.string, x + FONT_WIDTH * 9, y);
-
-    y += large_gap;
-
-    drawText(canvas, color, HUD_mouseX, x, y);
-    drawText(canvas, color, hud->mouseX.string, x + FONT_WIDTH * 9, y);
-
-    y += small_gap;
-
-    drawText(canvas, color, HUD_mouseY, x, y);
-    drawText(canvas, color, hud->mouseY.string, x + FONT_WIDTH * 9, y);
+    HUDLine *line = hud->lines;
+    for (u32 i = 0; i < hud->line_count; i++, line++) {
+        drawText(canvas, Color(line->title_color), line->title.char_ptr, x, y);
+        drawText(canvas, Color(line->value_color), line->value.string.char_ptr, x + line->title.length * FONT_WIDTH, y);
+        y += hud->line_height * FONT_HEIGHT;
+    }
 }
 
 
@@ -3657,10 +3640,19 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
                   defaults->settings.scene.curves * sizeof(Curve) +
                   defaults->settings.scene.boxes * sizeof(Box) +
                   defaults->settings.scene.grids * sizeof(Grid) +
-                  defaults->settings.scene.cameras * sizeof(Camera));
+                  defaults->settings.scene.cameras * sizeof(Camera) +
+                  defaults->settings.viewport.hud_line_count * sizeof(HUDLine));
     initScene(&app->scene, defaults->settings.scene, &app->memory);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
-    initViewport(&app->viewport, defaults->settings.viewport, defaults->settings.navigation, app->scene.cameras, &app->window_content);
+    HUDLine *hud_lines = defaults->settings.viewport.hud_line_count ?
+                         allocateAppMemory(defaults->settings.viewport.hud_line_count * sizeof(HUDLine)) : null;
+    initViewport(&app->viewport,
+                 defaults->settings.viewport,
+                 defaults->settings.navigation,
+                 app->scene.cameras,
+                 &app->window_content,
+                 hud_lines,
+                 defaults->settings.viewport.hud_line_count);
     if (app->on.viewportReady) app->on.viewportReady(&app->viewport);
 }
 

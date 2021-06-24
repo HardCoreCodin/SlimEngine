@@ -204,10 +204,19 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
             defaults->settings.scene.curves * sizeof(Curve) +
             defaults->settings.scene.boxes * sizeof(Box) +
             defaults->settings.scene.grids * sizeof(Grid) +
-            defaults->settings.scene.cameras * sizeof(Camera));
+            defaults->settings.scene.cameras * sizeof(Camera) +
+            defaults->settings.viewport.hud_line_count * sizeof(HUDLine));
     initScene(&app->scene, defaults->settings.scene, &app->memory);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
-    initViewport(&app->viewport, defaults->settings.viewport, defaults->settings.navigation, app->scene.cameras, &app->window_content);
+    HUDLine *hud_lines = defaults->settings.viewport.hud_line_count ?
+                         allocateAppMemory(defaults->settings.viewport.hud_line_count * sizeof(HUDLine)) : null;
+    initViewport(&app->viewport,
+                 defaults->settings.viewport,
+                 defaults->settings.navigation,
+                 app->scene.cameras,
+                 &app->window_content,
+                 hud_lines,
+                 defaults->settings.viewport.hud_line_count);
     if (app->on.viewportReady) app->on.viewportReady(&app->viewport);
 }
 

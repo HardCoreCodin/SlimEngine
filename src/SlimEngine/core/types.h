@@ -212,6 +212,7 @@ typedef struct ProjectionPlane {
 typedef struct ViewportSettings {
     f32 near_clipping_plane_distance,
         far_clipping_plane_distance;
+    u32 hud_line_count;
     bool show_hud;
 } ViewportSettings;
 

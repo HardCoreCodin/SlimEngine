@@ -38,7 +38,9 @@ Well documented example applications cover the features:<br>
   The window content is bound to the default viewport so they resize together.<br>
   <p float="left">
     <img src="src/examples/1_viewport_updateAndRender_c.png" alt="1_viewport_updateAndRender_code" width="360">
-    <img src="src/examples/1_viewport_HUD_setup_c.png" alt="1_viewport_HUD_setup_code" height="300">
+    <img src="src/examples/1_viewport_initialization_c.png" alt="1_viewport_HUD_setup_code" height="300">
+    <img src="src/examples/1_viewport_HUD_update_c.png" alt="1_viewport_updateAndRender_code" width="360">
+    <img src="src/examples/1_viewport_setup_c.png" alt="1_viewport_HUD_setup_code" height="300">  
   </p>
   
 * Viewport: Navigation<br>

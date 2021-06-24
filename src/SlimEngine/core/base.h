@@ -332,16 +332,35 @@ RGBA Color(enum ColorID color_id) {
     return color;
 }
 
-typedef struct NumberStringBuffer {
-    char _buffer[12];
-    char *string;
-    u8 digit_count;
-} NumberStringBuffer;
+typedef struct String {
+    u32 length;
+    char *char_ptr;
+} String;
 
-void printNumberIntoString(i32 number, NumberStringBuffer *number_string) {
+void setString(String *string, char *char_ptr) {
+    string->char_ptr = char_ptr;
+    string->length = 0;
+    if (char_ptr)
+        while (char_ptr[string->length])
+            string->length++;
+}
+
+typedef struct NumberString {
+    char _buffer[12];
+    String string;
+} NumberString;
+
+void initNumberString(NumberString *number_string) {
+    number_string->string.char_ptr = number_string->_buffer;
+    number_string->string.length = 1;
+    number_string->_buffer[11] = 0;
+    for (u8 i = 0; i < 11; i++)
+        number_string->_buffer[i] = ' ';
+}
+
+void printNumberIntoString(i32 number, NumberString *number_string) {
+    initNumberString(number_string);
     char *buffer = number_string->_buffer;
-    buffer[11] = 0;
-    for (u8 i = 0; i < 11; i++) buffer[i] = ' ';
 
     bool is_negative = number < 0;
     if (is_negative) number = -number;
@@ -349,33 +368,41 @@ void printNumberIntoString(i32 number, NumberStringBuffer *number_string) {
     if (number) {
         u32 temp;
         buffer += 11;
-        number_string->string = buffer;
-        number_string->digit_count = 0;
+        number_string->string.char_ptr = buffer;
+        number_string->string.length = 0;
 
         for (u8 i = 0; i < 11; i++) {
             temp = number;
             number /= 10;
-            number_string->digit_count++;
+            number_string->string.length++;
             *buffer-- = (char)('0' + temp - number * 10);
             if (!number) {
                 if (is_negative) {
                     *buffer = '-';
-                    number_string->string--;
-                    number_string->digit_count++;
+                    number_string->string.char_ptr--;
+                    number_string->string.length++;
                 }
 
                 break;
             }
-            number_string->string--;
+            number_string->string.char_ptr--;
         }
     } else {
         buffer[11] = '0';
-        number_string->digit_count = 1;
-        number_string->string = buffer + 11;
+        number_string->string.length = 1;
+        number_string->string.char_ptr = buffer + 11;
     }
 }
 
+typedef struct HUDLine {
+    String title;
+    NumberString value;
+    enum ColorID title_color, value_color;
+} HUDLine;
+
 typedef struct HUD {
-    NumberStringBuffer fps, msf, width, height, mouseX, mouseY;
     vec2i position;
+    u32 line_count;
+    f32 line_height;
+    HUDLine *lines;
 } HUD;

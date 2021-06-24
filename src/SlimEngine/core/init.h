@@ -117,14 +117,16 @@ void initCamera(Camera* camera) {
     initXform3(&camera->transform);
 }
 
-void initHUD(HUD *hud, u16 width, u16 height) {
-    hud->position.x = hud->position.y = 10;
-    printNumberIntoString(width, &hud->width);
-    printNumberIntoString(height, &hud->height);
-    printNumberIntoString(0, &hud->mouseX);
-    printNumberIntoString(0, &hud->mouseY);
-    printNumberIntoString(0, &hud->fps);
-    printNumberIntoString(0, &hud->msf);
+void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, i32 position_x, i32 position_y) {
+    hud->lines = lines;
+    hud->line_count = line_count;
+    hud->line_height = line_height;
+    hud->position.x = position_x;
+    hud->position.y = position_y;
+
+    if (lines)
+        for (u32 i = 0; i < line_count; i++)
+            lines[i].value_color = lines[i].title_color = White;
 }
 
 NavigationSettings getDefaultNavigationSettings() {
@@ -173,6 +175,7 @@ ViewportSettings getDefaultViewportSettings() {
 
     default_viewport_settings.near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
     default_viewport_settings.far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
+    default_viewport_settings.hud_line_count = 0;
     default_viewport_settings.show_hud = false;
 
     return default_viewport_settings;
@@ -182,13 +185,13 @@ void initViewport(Viewport *viewport,
                   ViewportSettings viewport_settings,
                   NavigationSettings navigation_settings,
                   Camera *camera,
-                  PixelGrid *frame_buffer) {
+                  PixelGrid *frame_buffer,
+                  HUDLine *hud_lines,
+                  u32 hud_line_count) {
     viewport->camera = camera;
     viewport->settings = viewport_settings;
     viewport->frame_buffer = frame_buffer;
-    initHUD(&viewport->hud,
-            viewport->frame_buffer->dimensions.width,
-            viewport->frame_buffer->dimensions.height);
+    initHUD(&viewport->hud, hud_lines, hud_line_count, 1, 0, 0);
     initNavigation(&viewport->navigation, navigation_settings);
 }
 

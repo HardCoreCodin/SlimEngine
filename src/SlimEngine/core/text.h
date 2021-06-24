@@ -129,7 +129,7 @@ void drawText(PixelGrid *canvas, RGBA color, char *str, i32 x, i32 y) {
 }
 
 void drawNumber(PixelGrid *canvas, RGBA color, i32 number, i32 x, i32 y) {
-    static NumberStringBuffer number_string;
+    static NumberString number_string;
     printNumberIntoString(number, &number_string);
-    drawText(canvas, color, number_string.string, x - number_string.digit_count * FONT_WIDTH, y);
+    drawText(canvas, color, number_string.string.char_ptr, x - number_string.string.length * FONT_WIDTH, y);
 }
