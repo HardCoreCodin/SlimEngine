@@ -52,21 +52,23 @@ void setupViewport(Viewport *viewport) {
         lines[i].title_color = lines[i].value_color = Green;
 }
 void updateAndRender() {
+    Timer *timer = &app->time.timers.update;
     Viewport *viewport = &app->viewport;
     PixelGrid *canvas = viewport->frame_buffer;
     HUD *hud = &viewport->hud;
     Grid *grid = &app->scene.grids[0];
     Primitive *prim = &app->scene.primitives[0];
-    startFrameTimer(&app->time.timers.update);
+
+    startFrameTimer(timer);
 
     fillPixelGrid(canvas, Color(Black));
     drawGrid(viewport, Color(prim->color), grid, prim);
     if (viewport->settings.show_hud) {
-        setCountersInHUD(hud, &app->time.timers.update);
+        setCountersInHUD(hud, timer);
         drawHUD(canvas, hud);
     }
 
-    endFrameTimer(&app->time.timers.update);
+    endFrameTimer(timer);
 }
 void updateHudVisibility(u8 key, bool is_pressed) {
     ViewportSettings *settings = &app->viewport.settings;

@@ -197,6 +197,7 @@ SceneCounts getDefaultSceneCounts() {
 
     default_scene_counts.cameras = 1;
     default_scene_counts.primitives = 0;
+    default_scene_counts.meshes = 0;
     default_scene_counts.curves = 0;
     default_scene_counts.boxes = 0;
     default_scene_counts.grids = 0;
@@ -304,9 +305,11 @@ void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
     scene->curves     = null;
     scene->boxes      = null;
     scene->grids      = null;
+    scene->meshes     = null;
 
     initSelection(&scene->selection);
 
+    if (scene_counts.meshes) scene->meshes = allocateMemory(memory, sizeof(Mesh) * scene->counts.meshes);
     if (scene_counts.cameras) {
         scene->cameras = allocateMemory(memory, sizeof(Camera) * scene->counts.cameras);
         if (scene->cameras)

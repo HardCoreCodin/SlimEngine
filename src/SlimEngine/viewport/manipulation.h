@@ -150,18 +150,22 @@ INLINE BoxSide hitCube(RayHit *hit, vec3 *Ro, vec3 *Rd) {
 INLINE bool rayHitScene(Ray *ray, RayHit *local_hit, RayHit *hit, Scene *scene) {
     bool current_found, found = false;
     vec3 Ro, Rd;
-    Primitive *hit_primitive, *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++) {
-        convertPositionAndDirectionToObjectSpace(ray->origin, ray->direction, primitive, &Ro, &Rd);
+    Primitive hit_primitive, primitive;
+    for (u32 i = 0; i < scene->counts.primitives; i++) {
+        primitive = scene->primitives[i];
+        if (primitive.type == PrimitiveType_Mesh)
+            primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
+
+        convertPositionAndDirectionToObjectSpace(ray->origin, ray->direction, &primitive, &Ro, &Rd);
 
         current_found = hitCube(local_hit, &Ro, &Rd);
         if (current_found) {
-            local_hit->position       = convertPositionToWorldSpace(local_hit->position, primitive);
+            local_hit->position       = convertPositionToWorldSpace(local_hit->position, &primitive);
             local_hit->distance_squared = squaredLengthVec3(subVec3(local_hit->position, ray->origin));
             if (local_hit->distance_squared < hit->distance_squared) {
                 *hit = *local_hit;
-                hit->object_type = primitive->type;
-                hit->material_id = primitive->material_id;
+                hit->object_type = primitive.type;
+                hit->material_id = primitive.material_id;
                 hit->object_id = i;
 
                 hit_primitive = primitive;
@@ -172,7 +176,7 @@ INLINE bool rayHitScene(Ray *ray, RayHit *local_hit, RayHit *hit, Scene *scene) 
 
     if (found) {
         hit->distance = sqrtf(hit->distance_squared);
-        hit->normal = normVec3(convertDirectionToWorldSpace(hit->normal, hit_primitive));
+        hit->normal = normVec3(convertDirectionToWorldSpace(hit->normal, &hit_primitive));
     }
 
     return found;
@@ -192,6 +196,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     mat3 *inv_rot = &camera->transform.rotation_matrix_inverted;
     RayHit *hit = &selection->hit;
     Ray ray, *local_ray = &selection->local_ray;
+    Primitive primitive;
 
     if (mouse->left_button.is_pressed) {
         if (!mouse->left_button.is_handled) { // This is the first frame after the left mouse button went down:
@@ -240,25 +245,17 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
             if (selection->primitive && !any_mouse_button_is_pressed) {
                 // Cast a ray onto the bounding box of the currently selected object:
                 setRayFromCoords(&ray, mouse->pos, viewport);
-                convertPositionAndDirectionToObjectSpace(ray.origin, ray.direction, selection->primitive, &local_ray->origin, &local_ray->direction);
+                primitive = *selection->primitive;
+                if (primitive.type == PrimitiveType_Mesh)
+                    primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
 
-                if (selection->primitive->type == PrimitiveType_Mesh) {
-                    vec3 inv_scale = oneOverVec3(scene->meshes[selection->primitive->id].aabb.max);
-                    position = addVec3(local_ray->origin, local_ray->direction);
-                    position = mulVec3(position, inv_scale);
-
-                    local_ray->origin    = mulVec3(local_ray->origin, inv_scale);
-                    local_ray->direction = normVec3(subVec3(position, local_ray->origin));
-                }
+                convertPositionAndDirectionToObjectSpace(ray.origin, ray.direction, &primitive, &local_ray->origin, &local_ray->direction);
 
                 selection->box_side = hitCube(hit, &local_ray->origin, &local_ray->direction);
                 if (selection->box_side) {
-                    if (selection->primitive->type == PrimitiveType_Mesh)
-                        hit->position = mulVec3(hit->position, scene->meshes[selection->primitive->id].aabb.max);
-
-                    selection->transformation_plane_center = convertPositionToWorldSpace(hit->normal,   selection->primitive);
-                    selection->transformation_plane_origin = convertPositionToWorldSpace(hit->position, selection->primitive);
-                    selection->transformation_plane_normal = convertDirectionToWorldSpace(hit->normal,  selection->primitive);
+                    selection->transformation_plane_center = convertPositionToWorldSpace(hit->normal,   &primitive);
+                    selection->transformation_plane_origin = convertPositionToWorldSpace(hit->position, &primitive);
+                    selection->transformation_plane_normal = convertDirectionToWorldSpace(hit->normal,  &primitive);
                     selection->transformation_plane_normal = normVec3(selection->transformation_plane_normal);
                     selection->world_offset = subVec3(selection->transformation_plane_origin, *selection->world_position);
                     selection->object_scale    = selection->primitive->scale;
@@ -275,6 +272,10 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                                      &ray.origin,
                                      &ray.direction,
                                      hit)) {
+
+                            primitive = *selection->primitive;
+                            if (primitive.type == PrimitiveType_Mesh)
+                                primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
                             if (mouse->left_button.is_pressed) {
                                 position = subVec3(hit->position, selection->world_offset);
                                 *selection->world_position = position;
@@ -282,8 +283,8 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                                     selection->primitive->flags |= IS_TRANSLATED;
                             } else if (mouse->middle_button.is_pressed) {
                                 position      = selection->transformation_plane_origin;
-                                position      = convertPositionToObjectSpace(     position, selection->primitive);
-                                hit->position = convertPositionToObjectSpace(hit->position, selection->primitive);
+                                position      = convertPositionToObjectSpace(     position, &primitive);
+                                hit->position = convertPositionToObjectSpace(hit->position, &primitive);
 
                                 selection->primitive->scale = mulVec3(selection->object_scale,
                                                                              mulVec3(hit->position, oneOverVec3(position)));
@@ -336,15 +337,18 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
 void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     Mouse *mouse = &controls->mouse;
     Selection *selection = &scene->selection;
-    Primitive *primitive = selection->primitive;
     Box *box = &selection->box;
 
     if (controls->is_pressed.alt &&
         !mouse->is_captured &&
         selection->object_type &&
-        primitive) {
+        selection->primitive) {
+        Primitive primitive = *selection->primitive;
+        if (primitive.type == PrimitiveType_Mesh)
+            primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
+
         initBox(box);
-        drawBox(viewport, Color(Yellow), box, primitive, BOX__ALL_SIDES);
+        drawBox(viewport, Color(Yellow), box, &primitive, BOX__ALL_SIDES);
         if (selection->box_side) {
             RGBA color = Color(White);
             switch (selection->box_side) {
@@ -353,7 +357,7 @@ void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                 case Front: case Back:   color = Color(Blue);  break;
                 case NoSide: break;
             }
-            drawBox(viewport, color, box, primitive, selection->box_side);
+            drawBox(viewport, color, box, &primitive, selection->box_side);
         }
     }
 }

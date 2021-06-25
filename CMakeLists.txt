@@ -14,3 +14,6 @@ add_executable(SlimEngine_4_scene WIN32 src/examples/4_scene.c)
 
 project(SlimEngine_5_manipulation)
 add_executable(SlimEngine_5_manipulation WIN32 src/examples/5_manipulation.c)
+
+project(SlimEngine_6_meshes)
+add_executable(SlimEngine_6_meshes WIN32 src/examples/6_meshes.c)

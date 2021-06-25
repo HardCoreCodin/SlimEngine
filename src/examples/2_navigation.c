@@ -24,15 +24,15 @@ void onDoubleClick(MouseButton *mouse_button) {
         onButtonDown(mouse_button);
     }
 }
-void updateViewport(Viewport *vp, Mouse *mouse, f32 dt) {
+void updateViewport(Viewport *viewport, Mouse *mouse) {
     if (mouse->is_captured) {
-        if (mouse->moved)         orientViewport(vp, mouse, dt);
-        if (mouse->wheel_scrolled)  zoomViewport(vp, mouse, dt);
+        if (mouse->moved)         orientViewport(viewport, mouse);
+        if (mouse->wheel_scrolled)  zoomViewport(viewport, mouse);
     } else {
-        if (mouse->wheel_scrolled) dollyViewport(vp, mouse, dt);
+        if (mouse->wheel_scrolled) dollyViewport(viewport, mouse);
         if (mouse->moved) {
-            if (mouse->middle_button.is_pressed)  panViewport(vp, mouse, dt);
-            if (mouse->right_button.is_pressed) orbitViewport(vp, mouse, dt);
+            if (mouse->middle_button.is_pressed)  panViewport(viewport, mouse);
+            if (mouse->right_button.is_pressed) orbitViewport(viewport, mouse);
         }
     }
 }
@@ -52,17 +52,21 @@ void setupCamera(Viewport *viewport) {
     rotateXform3(xf, 0, -0.2f, 0);
 }
 void updateAndRender() {
-    startFrameTimer(&app->time.timers.update);
-    float delta_time = app->time.timers.update.delta_time;
+    Timer *timer = &app->time.timers.update;
+    Scene *scene = &app->scene;
+    Mouse *mouse = &app->controls.mouse;
+    Viewport *viewport = &app->viewport;
 
-    updateViewport(&app->viewport, &app->controls.mouse, delta_time);
-    navigateViewport(&app->viewport, delta_time);
+    startFrameTimer(timer);
 
-    drawSceneToViewport(&app->scene, &app->viewport);
-    drawMouseAndKeyboard(&app->viewport, &app->controls.mouse);
+    updateViewport(viewport, mouse);
+    navigateViewport(viewport, timer->delta_time);
 
-    resetMouseChanges(&app->controls.mouse);
-    endFrameTimer(&app->time.timers.update);
+    drawSceneToViewport(scene, viewport);
+    drawMouseAndKeyboard(viewport, mouse);
+
+    resetMouseChanges(mouse);
+    endFrameTimer(timer);
 }
 void onKeyChanged(u8 key, bool is_pressed) {
     NavigationMove *move = &app->viewport.navigation.move;

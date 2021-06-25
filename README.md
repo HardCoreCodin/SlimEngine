@@ -86,3 +86,14 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/5_manipulation_update_c.png" alt="4_manipulation_update_code" width="350">
     <img src="src/examples/5_manipulation_scene_setup_c.png" alt="4_manipulation_scene_setup_code" width="350">
   </p>
+  
+* Meshes: Loading from file, instancing and wire-frame drawing<br>
+  <img src="src/examples/6_meshes.gif" alt="6_meshes" height="360"><br>
+  Meshes can be loaded from '.mesh' files containing a binary dump of a mesh struct.<br>
+  The app's memory capacity can be increased for the allocation of memory for the meshes.<br>  
+  A mesh can have multiple instances, each with their own transformation and/or colors.<br>
+  Simply have multiple mesh primitives all set with same mesh id.<br> 
+  <p float="left">
+    <img src="src/examples/6_meshes_draw_c.png" alt="6_meshes_draw_code" width="350">
+    <img src="src/examples/6_meshes_setup_c.png" alt="6_meshes_setup_code" width="350">
+  </p>

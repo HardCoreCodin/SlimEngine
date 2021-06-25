@@ -58,9 +58,14 @@ void updateScene(Scene *scene, f32 delta_time) {
 }
 void updateAndRender() {
     Timer *timer = &app->time.timers.update;
+    Scene *scene = &app->scene;
+    Viewport *viewport = &app->viewport;
+
     startFrameTimer(timer);
-    updateScene(&app->scene, timer->delta_time);
-    drawSceneToViewport(&app->scene, &app->viewport);
+
+    updateScene(scene, timer->delta_time);
+    drawSceneToViewport(scene, viewport);
+
     endFrameTimer(timer);
 }
 void setupScene(Scene *scene) {

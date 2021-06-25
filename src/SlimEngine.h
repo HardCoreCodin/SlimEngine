@@ -96,16 +96,16 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define ALL_FLAGS (IS_VISIBLE | IS_TRANSLATED | IS_ROTATED | IS_SCALED | IS_SCALED_NON_UNIFORMLY)
 
 #define CAMERA_DEFAULT__FOCAL_LENGTH 2.0f
-#define CAMERA_DEFAULT__TARGET_DISTANCE 15
+#define CAMERA_DEFAULT__TARGET_DISTANCE 10
 
 #define NAVIGATION_DEFAULT__MAX_VELOCITY 5
 #define NAVIGATION_DEFAULT__ACCELERATION 10
-#define NAVIGATION_SPEED_DEFAULT__TURN 1
-#define NAVIGATION_SPEED_DEFAULT__ORIENT 1
-#define NAVIGATION_SPEED_DEFAULT__ORBIT 1
-#define NAVIGATION_SPEED_DEFAULT__ZOOM 2
-#define NAVIGATION_SPEED_DEFAULT__DOLLY 300
-#define NAVIGATION_SPEED_DEFAULT__PAN 30
+#define NAVIGATION_SPEED_DEFAULT__TURN   1
+#define NAVIGATION_SPEED_DEFAULT__ORIENT 0.002f
+#define NAVIGATION_SPEED_DEFAULT__ORBIT  0.002f
+#define NAVIGATION_SPEED_DEFAULT__ZOOM   0.003f
+#define NAVIGATION_SPEED_DEFAULT__DOLLY  1
+#define NAVIGATION_SPEED_DEFAULT__PAN    0.03f
 
 #define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.1f
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
@@ -343,6 +343,19 @@ void setString(String *string, char *char_ptr) {
     if (char_ptr)
         while (char_ptr[string->length])
             string->length++;
+}
+
+void copyToString(String *string, char* char_ptr, u32 offset) {
+    string->length = offset;
+    char *source_char = char_ptr;
+    char *string_char = string->char_ptr + offset;
+    while (source_char[0]) {
+        *string_char = *source_char;
+        string_char++;
+        source_char++;
+        string->length++;
+    }
+    *string_char = 0;
 }
 
 typedef struct NumberString {
@@ -643,22 +656,14 @@ typedef struct RayHit {
     bool from_behind;
 } RayHit;
 
-typedef struct Triangle {
-    mat3 world_to_tangent;
-    vec3 position, normal;
-} Triangle;
-
-typedef struct TriangleVertexIndices {
-    u32 ids[3];
-} TriangleVertexIndices;
-
+typedef struct EdgeVertexIndices { u32 from, to; } EdgeVertexIndices;
+typedef struct TriangleVertexIndices { u32 ids[3]; } TriangleVertexIndices;
 typedef struct Mesh {
     AABB aabb;
-    u32 triangle_count, vertex_count;
+    u32 triangle_count, vertex_count, edge_count;
     vec3 *vertex_positions;
     TriangleVertexIndices *triangle_vertex_indices;
-    Triangle *triangles;
-    Edge *edges;
+    EdgeVertexIndices *edge_vertex_indices;
 } Mesh;
 
 typedef struct Selection {
@@ -693,6 +698,45 @@ typedef struct Scene {
     Grid *grids;
     Box *boxes;
 } Scene;
+
+typedef struct AppCallbacks {
+    void (*sceneReady)(Scene *scene);
+    void (*viewportReady)(Viewport *viewport);
+    void (*windowRedraw)();
+    void (*windowResize)(u16 width, u16 height);
+    void (*keyChanged)(  u8 key, bool pressed);
+    void (*mouseButtonUp)(  MouseButton *mouse_button);
+    void (*mouseButtonDown)(MouseButton *mouse_button);
+    void (*mouseButtonDoubleClicked)(MouseButton *mouse_button);
+    void (*mouseWheelScrolled)(f32 amount);
+    void (*mousePositionSet)(i32 x, i32 y);
+    void (*mouseMovementSet)(i32 x, i32 y);
+    void (*mouseRawMovementSet)(i32 x, i32 y);
+} AppCallbacks;
+
+typedef void* (*CallbackForFileOpen)(const char* file_path);
+typedef bool  (*CallbackForFileRW)(void *out, unsigned long, void *handle);
+typedef void  (*CallbackForFileClose)(void *handle);
+
+typedef struct Platform {
+    GetTicks             getTicks;
+    CallbackWithInt      getMemory;
+    CallbackWithCharPtr  setWindowTitle;
+    CallbackWithBool     setWindowCapture;
+    CallbackWithBool     setCursorVisibility;
+    CallbackForFileClose closeFile;
+    CallbackForFileOpen  openFileForReading;
+    CallbackForFileOpen  openFileForWriting;
+    CallbackForFileRW    readFromFile;
+    CallbackForFileRW    writeToFile;
+    u64 ticks_per_second;
+} Platform;
+
+typedef struct Settings {
+    SceneCounts scene;
+    ViewportSettings viewport;
+    NavigationSettings navigation;
+} Settings;
 
 void setBoxEdgesFromVertices(BoxEdges *edges, BoxVertices *vertices) {
     edges->sides.front_top.from    = vertices->corners.front_top_left;
@@ -925,6 +969,7 @@ SceneCounts getDefaultSceneCounts() {
 
     default_scene_counts.cameras = 1;
     default_scene_counts.primitives = 0;
+    default_scene_counts.meshes = 0;
     default_scene_counts.curves = 0;
     default_scene_counts.boxes = 0;
     default_scene_counts.grids = 0;
@@ -1032,9 +1077,11 @@ void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
     scene->curves     = null;
     scene->boxes      = null;
     scene->grids      = null;
+    scene->meshes     = null;
 
     initSelection(&scene->selection);
 
+    if (scene_counts.meshes) scene->meshes = allocateMemory(memory, sizeof(Mesh) * scene->counts.meshes);
     if (scene_counts.cameras) {
         scene->cameras = allocateMemory(memory, sizeof(Camera) * scene->counts.cameras);
         if (scene->cameras)
@@ -2691,8 +2738,6 @@ void drawLine2D(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
     i32 current1 = start1;
     i32 current2 = start2;
     while (current1 != end) {
-        current1 += inc1;
-
         if (inRange(index, canvas->dimensions.width_times_height, 0)) {
             if (is_steap) {
                 if (inRange(current1, height, 0) &&
@@ -2707,6 +2752,7 @@ void drawLine2D(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
 
         index += index_inc1;
         error += error_inc;
+        current1 += inc1;
         if (error > threshold) {
             error -= error_dec;
             index += index_inc2;
@@ -2859,47 +2905,44 @@ void panCamera(Camera *camera, Navigation *navigation, f32 right, f32 up) {
     navigation->moved = true;
 }
 
-void panViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.pan * delta_time;
-    panCamera(viewport->camera, &viewport->navigation,
-              -(f32)mouse->pos_raw_diff.x * speed,
-              +(f32)mouse->pos_raw_diff.y * speed);
+void panViewport(Viewport *viewport, Mouse *mouse) {
+    f32 x = viewport->navigation.settings.speeds.pan * -(f32)mouse->pos_raw_diff.x;
+    f32 y = viewport->navigation.settings.speeds.pan * +(f32)mouse->pos_raw_diff.y;
+    panCamera(viewport->camera, &viewport->navigation, x, y);
 
     mouse->raw_movement_handled = true;
     mouse->moved = false;
 }
 
-void zoomViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.zoom * delta_time;
-    zoomCamera(viewport->camera, mouse->wheel_scroll_amount * speed);
+void zoomViewport(Viewport *viewport, Mouse *mouse) {
+    f32 z = viewport->navigation.settings.speeds.zoom * mouse->wheel_scroll_amount;
+    zoomCamera(viewport->camera, z);
 
     viewport->navigation.zoomed = true;
     mouse->wheel_scroll_handled = true;
 }
 
-void dollyViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.dolly * delta_time;
-    dollyCamera(viewport->camera, mouse->wheel_scroll_amount * speed);
+void dollyViewport(Viewport *viewport, Mouse *mouse) {
+    f32 z = viewport->navigation.settings.speeds.dolly * mouse->wheel_scroll_amount;
+    dollyCamera(viewport->camera, z);
     viewport->navigation.moved = true;
     mouse->wheel_scroll_handled = true;
 }
 
-void orientViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.orient * delta_time;
-    rotateXform3(&viewport->camera->transform,
-                 -(f32)mouse->pos_raw_diff.x * speed,
-                 -(f32)mouse->pos_raw_diff.y * speed, 0);
+void orientViewport(Viewport *viewport, Mouse *mouse) {
+    f32 x = viewport->navigation.settings.speeds.orient * -(f32)mouse->pos_raw_diff.x;
+    f32 y = viewport->navigation.settings.speeds.orient * -(f32)mouse->pos_raw_diff.y;
+    rotateXform3(&viewport->camera->transform, x, y, 0);
 
     mouse->moved = false;
     mouse->raw_movement_handled = true;
     viewport->navigation.turned = true;
 }
 
-void orbitViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.orbit * delta_time;
-    orbitCamera(viewport->camera, &viewport->navigation,
-                -(f32)mouse->pos_raw_diff.x * speed,
-                -(f32)mouse->pos_raw_diff.y * speed);
+void orbitViewport(Viewport *viewport, Mouse *mouse) {
+    f32 x = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.x;
+    f32 y = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.y;
+    orbitCamera(viewport->camera, &viewport->navigation, x, y);
 
     mouse->raw_movement_handled = true;
     mouse->moved = false;
@@ -2969,6 +3012,49 @@ void drawBox(Viewport *viewport, RGBA color, Box *box, Primitive *primitive, u8 
         if (sides & Left  | sides & Bottom) drawEdge(viewport, color, &edges.sides.left_bottom);
         if (sides & Right | sides & Top   ) drawEdge(viewport, color, &edges.sides.right_top);
         if (sides & Right | sides & Bottom) drawEdge(viewport, color, &edges.sides.right_bottom);
+    }
+}
+
+void loadMeshFromFile(Mesh *mesh, String file_path, Platform *platform, Memory *memory) {
+    void *file = platform->openFileForReading(file_path.char_ptr);
+
+    platform->readFromFile(&mesh->aabb,           sizeof(AABB), file);
+    platform->readFromFile(&mesh->vertex_count,   sizeof(u32),  file);
+    platform->readFromFile(&mesh->triangle_count, sizeof(u32),  file);
+    platform->readFromFile(&mesh->edge_count,     sizeof(u32),  file);
+
+    mesh->vertex_positions        = allocateMemory(memory, sizeof(vec3)                  * mesh->vertex_count);
+    mesh->triangle_vertex_indices = allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
+    mesh->edge_vertex_indices     = allocateMemory(memory, sizeof(EdgeVertexIndices)     * mesh->edge_count);
+
+    platform->readFromFile(mesh->vertex_positions,        sizeof(vec3)                  * mesh->vertex_count,   file);
+    platform->readFromFile(mesh->triangle_vertex_indices, sizeof(TriangleVertexIndices) * mesh->triangle_count, file);
+    platform->readFromFile(mesh->edge_vertex_indices,     sizeof(EdgeVertexIndices)     * mesh->edge_count,     file);
+
+    platform->closeFile(file);
+}
+
+void drawMesh(Viewport *viewport, RGBA color, Mesh *mesh, Primitive *primitive) {
+    EdgeVertexIndices *ids = mesh->edge_vertex_indices;
+    quat cam_rot = viewport->camera->transform.rotation_inverted;
+    vec3 cam_pos = viewport->camera->transform.position;
+    vec3 *positions = mesh->vertex_positions;
+    vec3 position;
+    Edge edge;
+    for (u32 i = 0; i < mesh->edge_count; i++, ids++) {
+        position = positions[ids->from];
+        position = convertPositionToWorldSpace(position, primitive);
+        position = subVec3(position,     cam_pos);
+        position = mulVec3Quat(position, cam_rot);
+        edge.from = position;
+
+        position = positions[ids->to];
+        position = convertPositionToWorldSpace(position, primitive);
+        position = subVec3(position,     cam_pos);
+        position = mulVec3Quat(position, cam_rot);
+        edge.to  = position;
+
+        drawEdge(viewport, color, &edge);
     }
 }
 
@@ -3243,18 +3329,22 @@ INLINE BoxSide hitCube(RayHit *hit, vec3 *Ro, vec3 *Rd) {
 INLINE bool rayHitScene(Ray *ray, RayHit *local_hit, RayHit *hit, Scene *scene) {
     bool current_found, found = false;
     vec3 Ro, Rd;
-    Primitive *hit_primitive, *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++) {
-        convertPositionAndDirectionToObjectSpace(ray->origin, ray->direction, primitive, &Ro, &Rd);
+    Primitive hit_primitive, primitive;
+    for (u32 i = 0; i < scene->counts.primitives; i++) {
+        primitive = scene->primitives[i];
+        if (primitive.type == PrimitiveType_Mesh)
+            primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
+
+        convertPositionAndDirectionToObjectSpace(ray->origin, ray->direction, &primitive, &Ro, &Rd);
 
         current_found = hitCube(local_hit, &Ro, &Rd);
         if (current_found) {
-            local_hit->position       = convertPositionToWorldSpace(local_hit->position, primitive);
+            local_hit->position       = convertPositionToWorldSpace(local_hit->position, &primitive);
             local_hit->distance_squared = squaredLengthVec3(subVec3(local_hit->position, ray->origin));
             if (local_hit->distance_squared < hit->distance_squared) {
                 *hit = *local_hit;
-                hit->object_type = primitive->type;
-                hit->material_id = primitive->material_id;
+                hit->object_type = primitive.type;
+                hit->material_id = primitive.material_id;
                 hit->object_id = i;
 
                 hit_primitive = primitive;
@@ -3265,7 +3355,7 @@ INLINE bool rayHitScene(Ray *ray, RayHit *local_hit, RayHit *hit, Scene *scene) 
 
     if (found) {
         hit->distance = sqrtf(hit->distance_squared);
-        hit->normal = normVec3(convertDirectionToWorldSpace(hit->normal, hit_primitive));
+        hit->normal = normVec3(convertDirectionToWorldSpace(hit->normal, &hit_primitive));
     }
 
     return found;
@@ -3285,6 +3375,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     mat3 *inv_rot = &camera->transform.rotation_matrix_inverted;
     RayHit *hit = &selection->hit;
     Ray ray, *local_ray = &selection->local_ray;
+    Primitive primitive;
 
     if (mouse->left_button.is_pressed) {
         if (!mouse->left_button.is_handled) { // This is the first frame after the left mouse button went down:
@@ -3333,25 +3424,17 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
             if (selection->primitive && !any_mouse_button_is_pressed) {
                 // Cast a ray onto the bounding box of the currently selected object:
                 setRayFromCoords(&ray, mouse->pos, viewport);
-                convertPositionAndDirectionToObjectSpace(ray.origin, ray.direction, selection->primitive, &local_ray->origin, &local_ray->direction);
+                primitive = *selection->primitive;
+                if (primitive.type == PrimitiveType_Mesh)
+                    primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
 
-                if (selection->primitive->type == PrimitiveType_Mesh) {
-                    vec3 inv_scale = oneOverVec3(scene->meshes[selection->primitive->id].aabb.max);
-                    position = addVec3(local_ray->origin, local_ray->direction);
-                    position = mulVec3(position, inv_scale);
-
-                    local_ray->origin    = mulVec3(local_ray->origin, inv_scale);
-                    local_ray->direction = normVec3(subVec3(position, local_ray->origin));
-                }
+                convertPositionAndDirectionToObjectSpace(ray.origin, ray.direction, &primitive, &local_ray->origin, &local_ray->direction);
 
                 selection->box_side = hitCube(hit, &local_ray->origin, &local_ray->direction);
                 if (selection->box_side) {
-                    if (selection->primitive->type == PrimitiveType_Mesh)
-                        hit->position = mulVec3(hit->position, scene->meshes[selection->primitive->id].aabb.max);
-
-                    selection->transformation_plane_center = convertPositionToWorldSpace(hit->normal,   selection->primitive);
-                    selection->transformation_plane_origin = convertPositionToWorldSpace(hit->position, selection->primitive);
-                    selection->transformation_plane_normal = convertDirectionToWorldSpace(hit->normal,  selection->primitive);
+                    selection->transformation_plane_center = convertPositionToWorldSpace(hit->normal,   &primitive);
+                    selection->transformation_plane_origin = convertPositionToWorldSpace(hit->position, &primitive);
+                    selection->transformation_plane_normal = convertDirectionToWorldSpace(hit->normal,  &primitive);
                     selection->transformation_plane_normal = normVec3(selection->transformation_plane_normal);
                     selection->world_offset = subVec3(selection->transformation_plane_origin, *selection->world_position);
                     selection->object_scale    = selection->primitive->scale;
@@ -3368,6 +3451,10 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                                      &ray.origin,
                                      &ray.direction,
                                      hit)) {
+
+                            primitive = *selection->primitive;
+                            if (primitive.type == PrimitiveType_Mesh)
+                                primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
                             if (mouse->left_button.is_pressed) {
                                 position = subVec3(hit->position, selection->world_offset);
                                 *selection->world_position = position;
@@ -3375,8 +3462,8 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                                     selection->primitive->flags |= IS_TRANSLATED;
                             } else if (mouse->middle_button.is_pressed) {
                                 position      = selection->transformation_plane_origin;
-                                position      = convertPositionToObjectSpace(     position, selection->primitive);
-                                hit->position = convertPositionToObjectSpace(hit->position, selection->primitive);
+                                position      = convertPositionToObjectSpace(     position, &primitive);
+                                hit->position = convertPositionToObjectSpace(hit->position, &primitive);
 
                                 selection->primitive->scale = mulVec3(selection->object_scale,
                                                                       mulVec3(hit->position, oneOverVec3(position)));
@@ -3429,15 +3516,18 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
 void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     Mouse *mouse = &controls->mouse;
     Selection *selection = &scene->selection;
-    Primitive *primitive = selection->primitive;
     Box *box = &selection->box;
 
     if (controls->is_pressed.alt &&
         !mouse->is_captured &&
         selection->object_type &&
-        primitive) {
+        selection->primitive) {
+        Primitive primitive = *selection->primitive;
+        if (primitive.type == PrimitiveType_Mesh)
+            primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
+
         initBox(box);
-        drawBox(viewport, Color(Yellow), box, primitive, BOX__ALL_SIDES);
+        drawBox(viewport, Color(Yellow), box, &primitive, BOX__ALL_SIDES);
         if (selection->box_side) {
             RGBA color = Color(White);
             switch (selection->box_side) {
@@ -3446,49 +3536,10 @@ void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                 case Front: case Back:   color = Color(Blue);  break;
                 case NoSide: break;
             }
-            drawBox(viewport, color, box, primitive, selection->box_side);
+            drawBox(viewport, color, box, &primitive, selection->box_side);
         }
     }
 }
-
-typedef struct AppCallbacks {
-    void (*sceneReady)(Scene *scene);
-    void (*viewportReady)(Viewport *viewport);
-    void (*windowRedraw)();
-    void (*windowResize)(u16 width, u16 height);
-    void (*keyChanged)(  u8 key, bool pressed);
-    void (*mouseButtonUp)(  MouseButton *mouse_button);
-    void (*mouseButtonDown)(MouseButton *mouse_button);
-    void (*mouseButtonDoubleClicked)(MouseButton *mouse_button);
-    void (*mouseWheelScrolled)(f32 amount);
-    void (*mousePositionSet)(i32 x, i32 y);
-    void (*mouseMovementSet)(i32 x, i32 y);
-    void (*mouseRawMovementSet)(i32 x, i32 y);
-} AppCallbacks;
-
-typedef void* (*CallbackForFileOpen)(const char* file_path);
-typedef bool  (*CallbackForFileRW)(void *out, unsigned long, void *handle);
-typedef void  (*CallbackForFileClose)(void *handle);
-
-typedef struct Platform {
-    GetTicks             getTicks;
-    CallbackWithInt      getMemory;
-    CallbackWithCharPtr  setWindowTitle;
-    CallbackWithBool     setWindowCapture;
-    CallbackWithBool     setCursorVisibility;
-    CallbackForFileClose closeFile;
-    CallbackForFileOpen  openFileForReading;
-    CallbackForFileOpen  openFileForWriting;
-    CallbackForFileRW    readFromFile;
-    CallbackForFileRW    writeToFile;
-    u64 ticks_per_second;
-} Platform;
-
-typedef struct Settings {
-    SceneCounts scene;
-    ViewportSettings viewport;
-    NavigationSettings navigation;
-} Settings;
 
 void initSettings(Settings *settings) {
     settings->scene      = getDefaultSceneCounts();

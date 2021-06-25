@@ -96,16 +96,16 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define ALL_FLAGS (IS_VISIBLE | IS_TRANSLATED | IS_ROTATED | IS_SCALED | IS_SCALED_NON_UNIFORMLY)
 
 #define CAMERA_DEFAULT__FOCAL_LENGTH 2.0f
-#define CAMERA_DEFAULT__TARGET_DISTANCE 15
+#define CAMERA_DEFAULT__TARGET_DISTANCE 10
 
 #define NAVIGATION_DEFAULT__MAX_VELOCITY 5
 #define NAVIGATION_DEFAULT__ACCELERATION 10
-#define NAVIGATION_SPEED_DEFAULT__TURN 1
-#define NAVIGATION_SPEED_DEFAULT__ORIENT 1
-#define NAVIGATION_SPEED_DEFAULT__ORBIT 1
-#define NAVIGATION_SPEED_DEFAULT__ZOOM 2
-#define NAVIGATION_SPEED_DEFAULT__DOLLY 300
-#define NAVIGATION_SPEED_DEFAULT__PAN 30
+#define NAVIGATION_SPEED_DEFAULT__TURN   1
+#define NAVIGATION_SPEED_DEFAULT__ORIENT 0.002f
+#define NAVIGATION_SPEED_DEFAULT__ORBIT  0.002f
+#define NAVIGATION_SPEED_DEFAULT__ZOOM   0.003f
+#define NAVIGATION_SPEED_DEFAULT__DOLLY  1
+#define NAVIGATION_SPEED_DEFAULT__PAN    0.03f
 
 #define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.1f
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
@@ -343,6 +343,19 @@ void setString(String *string, char *char_ptr) {
     if (char_ptr)
         while (char_ptr[string->length])
             string->length++;
+}
+
+void copyToString(String *string, char* char_ptr, u32 offset) {
+    string->length = offset;
+    char *source_char = char_ptr;
+    char *string_char = string->char_ptr + offset;
+    while (source_char[0]) {
+        *string_char = *source_char;
+        string_char++;
+        source_char++;
+        string->length++;
+    }
+    *string_char = 0;
 }
 
 typedef struct NumberString {

@@ -50,19 +50,19 @@ void onDoubleClick(MouseButton *mouse_button) {
     }
 }
 
-void updateViewport(Viewport *vp, Mouse *mouse, f32 dt) {
+void updateViewport(Viewport *viewport, Mouse *mouse) {
     if (mouse->is_captured) {
-        if (mouse->moved)         orientViewport(vp, mouse, dt);
-        if (mouse->wheel_scrolled)  zoomViewport(vp, mouse, dt);
+        if (mouse->moved)         orientViewport(viewport, mouse);
+        if (mouse->wheel_scrolled)  zoomViewport(viewport, mouse);
     } else {
-        if (mouse->wheel_scrolled) dollyViewport(vp, mouse, dt);
+        if (mouse->wheel_scrolled) dollyViewport(viewport, mouse);
         if (mouse->moved) {
             if (mouse->middle_button.is_pressed)
-                panViewport(vp, mouse, dt);
+                panViewport(viewport, mouse);
 
             if (mouse->right_button.is_pressed &&
                 !app->controls.is_pressed.alt)
-                orbitViewport(vp, mouse, dt);
+                orbitViewport(viewport, mouse);
         }
     }
 }
@@ -81,7 +81,7 @@ void updateAndRender() {
         manipulateSelection(scene, viewport, controls);
 
     if (!controls->is_pressed.alt)
-        updateViewport(viewport, mouse, timer->delta_time);
+        updateViewport(viewport, mouse);
 
     drawSceneToViewport(scene, viewport);
     drawSelection(scene, viewport, controls);

@@ -238,22 +238,14 @@ typedef struct RayHit {
     bool from_behind;
 } RayHit;
 
-typedef struct Triangle {
-    mat3 world_to_tangent;
-    vec3 position, normal;
-} Triangle;
-
-typedef struct TriangleVertexIndices {
-    u32 ids[3];
-} TriangleVertexIndices;
-
+typedef struct EdgeVertexIndices { u32 from, to; } EdgeVertexIndices;
+typedef struct TriangleVertexIndices { u32 ids[3]; } TriangleVertexIndices;
 typedef struct Mesh {
     AABB aabb;
-    u32 triangle_count, vertex_count;
+    u32 triangle_count, vertex_count, edge_count;
     vec3 *vertex_positions;
     TriangleVertexIndices *triangle_vertex_indices;
-    Triangle *triangles;
-    Edge *edges;
+    EdgeVertexIndices *edge_vertex_indices;
 } Mesh;
 
 typedef struct Selection {

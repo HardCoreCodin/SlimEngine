@@ -48,47 +48,44 @@ void panCamera(Camera *camera, Navigation *navigation, f32 right, f32 up) {
     navigation->moved = true;
 }
 
-void panViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.pan * delta_time;
-    panCamera(viewport->camera, &viewport->navigation,
-              -(f32)mouse->pos_raw_diff.x * speed,
-              +(f32)mouse->pos_raw_diff.y * speed);
+void panViewport(Viewport *viewport, Mouse *mouse) {
+    f32 x = viewport->navigation.settings.speeds.pan * -(f32)mouse->pos_raw_diff.x;
+    f32 y = viewport->navigation.settings.speeds.pan * +(f32)mouse->pos_raw_diff.y;
+    panCamera(viewport->camera, &viewport->navigation, x, y);
 
     mouse->raw_movement_handled = true;
     mouse->moved = false;
 }
 
-void zoomViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.zoom * delta_time;
-    zoomCamera(viewport->camera, mouse->wheel_scroll_amount * speed);
+void zoomViewport(Viewport *viewport, Mouse *mouse) {
+    f32 z = viewport->navigation.settings.speeds.zoom * mouse->wheel_scroll_amount;
+    zoomCamera(viewport->camera, z);
 
     viewport->navigation.zoomed = true;
     mouse->wheel_scroll_handled = true;
 }
 
-void dollyViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.dolly * delta_time;
-    dollyCamera(viewport->camera, mouse->wheel_scroll_amount * speed);
+void dollyViewport(Viewport *viewport, Mouse *mouse) {
+    f32 z = viewport->navigation.settings.speeds.dolly * mouse->wheel_scroll_amount;
+    dollyCamera(viewport->camera, z);
     viewport->navigation.moved = true;
     mouse->wheel_scroll_handled = true;
 }
 
-void orientViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.orient * delta_time;
-    rotateXform3(&viewport->camera->transform,
-                -(f32)mouse->pos_raw_diff.x * speed,
-               -(f32)mouse->pos_raw_diff.y * speed, 0);
+void orientViewport(Viewport *viewport, Mouse *mouse) {
+    f32 x = viewport->navigation.settings.speeds.orient * -(f32)mouse->pos_raw_diff.x;
+    f32 y = viewport->navigation.settings.speeds.orient * -(f32)mouse->pos_raw_diff.y;
+    rotateXform3(&viewport->camera->transform, x, y, 0);
 
     mouse->moved = false;
     mouse->raw_movement_handled = true;
     viewport->navigation.turned = true;
 }
 
-void orbitViewport(Viewport *viewport, Mouse *mouse, f32 delta_time) {
-    f32 speed = viewport->navigation.settings.speeds.orbit * delta_time;
-    orbitCamera(viewport->camera, &viewport->navigation,
-                -(f32)mouse->pos_raw_diff.x * speed,
-                -(f32)mouse->pos_raw_diff.y * speed);
+void orbitViewport(Viewport *viewport, Mouse *mouse) {
+    f32 x = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.x;
+    f32 y = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.y;
+    orbitCamera(viewport->camera, &viewport->navigation, x, y);
 
     mouse->raw_movement_handled = true;
     mouse->moved = false;

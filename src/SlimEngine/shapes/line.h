@@ -84,8 +84,6 @@ void drawLine2D(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
     i32 current1 = start1;
     i32 current2 = start2;
     while (current1 != end) {
-        current1 += inc1;
-
         if (inRange(index, canvas->dimensions.width_times_height, 0)) {
             if (is_steap) {
                 if (inRange(current1, height, 0) &&
@@ -97,9 +95,9 @@ void drawLine2D(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
                     canvas->pixels[index].color = color;
             }
         }
-
         index += index_inc1;
         error += error_inc;
+        current1 += inc1;
         if (error > threshold) {
             error -= error_dec;
             index += index_inc2;
