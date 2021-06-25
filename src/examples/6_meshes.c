@@ -25,14 +25,15 @@ void onDoubleClick(MouseButton *mouse_button) {
     }
 }
 String getPathTo(char* file_name) {
-    String name, path;
-    setString(&name, __FILE_NAME__);
-    setString(&path, __FILE__);
-    u32 dir_len = path.length - name.length;
+    u32 path_len = getStringLength(__FILE__);
+    u32 name_len = getStringLength(__FILE_NAME__);
+    u32 dir_len = path_len - name_len;
     static char string_buffer[100];
+    String path;
     path.char_ptr = string_buffer;
     copyToString(&path, __FILE__, 0);
     copyToString(&path, file_name, dir_len);
+    return path;
 }
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     fillPixelGrid(viewport->frame_buffer, Color(Black));

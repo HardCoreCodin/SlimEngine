@@ -345,6 +345,13 @@ void setString(String *string, char *char_ptr) {
             string->length++;
 }
 
+u32 getStringLength(char *string) {
+    char *char_ptr = string;
+    u32 length = 0;
+    if (char_ptr) while (char_ptr[length]) length++;
+    return length;
+}
+
 void copyToString(String *string, char* char_ptr, u32 offset) {
     string->length = offset;
     char *source_char = char_ptr;
