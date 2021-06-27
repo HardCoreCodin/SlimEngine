@@ -15,9 +15,9 @@ void DisplayError(LPTSTR lpszFunction) {
             FORMAT_MESSAGE_ALLOCATE_BUFFER |
             FORMAT_MESSAGE_FROM_SYSTEM |
             FORMAT_MESSAGE_IGNORE_INSERTS,
-            NULL, last_error,
+            null, last_error,
             MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-            (LPTSTR) &lpMsgBuf, 0, NULL);
+            (LPTSTR) &lpMsgBuf, 0, null);
 
     lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT, (lstrlen((LPCTSTR)lpMsgBuf) + lstrlen((LPCTSTR)lpszFunction) + 40) * sizeof(TCHAR));
 
@@ -25,7 +25,7 @@ void DisplayError(LPTSTR lpszFunction) {
                                 TEXT("%s failed with error code %d as follows:\n%s"), lpszFunction, last_error, lpMsgBuf)))
         printf("FATAL ERROR: Unable to output error code.\n");
 
-    _tprintf(TEXT("ERROR: %s\n"), (LPCTSTR)lpDisplayBuf);
+    _tprintf(TEXT((LPTSTR)"ERROR: %s\n"), (LPCTSTR)lpDisplayBuf);
 
     LocalFree(lpMsgBuf);
     LocalFree(lpDisplayBuf);
@@ -81,15 +81,15 @@ void* Win32_openFileForReading(const char* path) {
     HANDLE handle = CreateFile(path,           // file to open
                                GENERIC_READ,          // open for reading
                                FILE_SHARE_READ,       // share for reading
-                               NULL,                  // default security
+                               null,                  // default security
                                OPEN_EXISTING,         // existing file only
                                FILE_ATTRIBUTE_NORMAL, // normal file
-                               NULL);                 // no attr. template
+                               null);                 // no attr. template
 #ifndef NDEBUG
     if (handle == INVALID_HANDLE_VALUE) {
-        DisplayError(TEXT("CreateFile"));
+        DisplayError(TEXT((LPTSTR)"CreateFile"));
         _tprintf(TEXT("Terminal failure: unable to open file \"%s\" for read.\n"), path);
-        return NULL;
+        return null;
     }
 #endif
     return handle;
@@ -98,25 +98,25 @@ void* Win32_openFileForWriting(const char* path) {
     HANDLE handle = CreateFile(path,           // file to open
                                GENERIC_WRITE,          // open for writing
                                0,                      // do not share
-                               NULL,                   // default security
-                               CREATE_NEW,             // create new file only
+                               null,                   // default security
+                               OPEN_ALWAYS,            // create new or open existing
                                FILE_ATTRIBUTE_NORMAL,  // normal file
-                               NULL);
+                               null);
 #ifndef NDEBUG
     if (handle == INVALID_HANDLE_VALUE) {
-        DisplayError(TEXT("CreateFile"));
-        _tprintf(TEXT("Terminal failure: unable to open file \"%s\" for read.\n"), path);
-        return NULL;
+        DisplayError(TEXT((LPTSTR)"CreateFile"));
+        _tprintf(TEXT("Terminal failure: unable to open file \"%s\" for write.\n"), path);
+        return null;
     }
 #endif
     return handle;
 }
 bool Win32_readFromFile(LPVOID out, DWORD size, HANDLE handle) {
     DWORD bytes_read = 0;
-    BOOL result = ReadFile(handle, out, size, &bytes_read, NULL);
+    BOOL result = ReadFile(handle, out, size, &bytes_read, null);
 #ifndef NDEBUG
     if (result == FALSE) {
-        DisplayError(TEXT("ReadFile"));
+        DisplayError(TEXT((LPTSTR)"ReadFile"));
         printf("Terminal failure: Unable to read from file.\n GetLastError=%08x\n", (unsigned int)GetLastError());
         CloseHandle(handle);
     }
@@ -126,11 +126,11 @@ bool Win32_readFromFile(LPVOID out, DWORD size, HANDLE handle) {
 
 bool Win32_writeToFile(LPVOID out, DWORD size, HANDLE handle) {
     DWORD bytes_written = 0;
-    BOOL result = WriteFile(handle, out, size, &bytes_written, NULL);
+    BOOL result = WriteFile(handle, out, size, &bytes_written, null);
 #ifndef NDEBUG
     if (result == FALSE) {
-        DisplayError(TEXT("ReadFile"));
-        printf("Terminal failure: Unable to read from file.\n GetLastError=%08x\n", (unsigned int)GetLastError());
+        DisplayError(TEXT((LPTSTR)"WriteFile"));
+        printf("Terminal failure: Unable to write from file.\n GetLastError=%08x\n", (unsigned int)GetLastError());
         CloseHandle(handle);
     }
 #endif
