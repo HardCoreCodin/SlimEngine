@@ -15,8 +15,8 @@ add_executable(SlimEngine_4_scene WIN32 src/examples/4_shapes.c)
 project(SlimEngine_5_manipulation)
 add_executable(SlimEngine_5_manipulation WIN32 src/examples/5_manipulation.c)
 
-project(SlimEngine_6_meshes)
-add_executable(SlimEngine_6_meshes WIN32 src/examples/6_meshes.c)
+project(SlimEngine_6_mesh)
+add_executable(SlimEngine_6_mesh WIN32 src/examples/6_mesh.c)
 
 
 project(obj2mesh)
