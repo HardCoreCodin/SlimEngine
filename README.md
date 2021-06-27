@@ -100,6 +100,14 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/6_mesh_setup_c.png" alt="6_mesh_setup_code" width="350">
   </p>
 
+* Scene: Saving to and loading from `.scene` files<br>
+  <img src="src/examples/7_scene.gif" alt="7_scene" height="360"><br>
+  Scenes can be stored in a binary format, and then loaded back in-place.
+  <p float="left">
+    <img src="src/examples/7_scene_io_c.png" alt="7_scene_io_code" width="350">
+    <img src="src/examples/7_scene_message_c.png" alt="7_scene_message_code" width="350">
+  </p>
+
 * obj2mesh: Also privided is a separate CLI tool for converting `.obj` files to `.mesh` files.<br>
   It is also written in plain C, so should compile with either C or C++.<br>
   Usage is simple: `./obj2mesh my_obj_file.obj my_mesh_file.mesh`
