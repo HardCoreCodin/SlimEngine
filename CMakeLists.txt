@@ -10,10 +10,14 @@ project(SlimEngine_3_cameras)
 add_executable(SlimEngine_3_cameras WIN32 src/examples/3_cameras.c)
 
 project(SlimEngine_4_scene)
-add_executable(SlimEngine_4_scene WIN32 src/examples/4_scene.c)
+add_executable(SlimEngine_4_scene WIN32 src/examples/4_shapes.c)
 
 project(SlimEngine_5_manipulation)
 add_executable(SlimEngine_5_manipulation WIN32 src/examples/5_manipulation.c)
 
 project(SlimEngine_6_meshes)
 add_executable(SlimEngine_6_meshes WIN32 src/examples/6_meshes.c)
+
+
+project(obj2mesh)
+add_executable(obj2mesh src/obj2mesh.c)

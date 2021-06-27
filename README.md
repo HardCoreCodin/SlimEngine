@@ -66,13 +66,13 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/3_cameras_setup_c.png" alt="3_cameras_setup_code" height="260">
   </p>
 
-* Scene: Setup and drawing parametric primitives (Grid, Box, Curves, etc.)<br>
+* Shapes: Setup and drawing parametric primitives (Grid, Box, Curves, etc.)<br>
   <img src="src/examples/4_scene.gif" alt="1_scene" height="360"><br>
   SlimEngine allocates and initializes the scene based on quantities set at app-initialization time.<br>
   Wireframe drawing of the scene to the viewport can be invoked manually on window-redraw.<br>  
   <p float="left">
-    <img src="src/examples/4_scene_initialization_c.png" alt="4_scene_initialization_and_viewport_drawing_code" width="350">
-    <img src="src/examples/4_scene_viewport_drawing_c.png" alt="4_scene_viewport_drawing_code" height="300">
+    <img src="src/examples/4_shapes_scene_initialization_c.png" alt="4_scene_initialization_and_viewport_drawing_code" width="350">
+    <img src="src/examples/4_shapes_viewport_drawing_c.png" alt="4_scene_viewport_drawing_code" height="300">
   </p>
 
 * Scene: Object selection and manipulation (Translation, Rotation and Scale)<br>
@@ -87,10 +87,11 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/5_manipulation_scene_setup_c.png" alt="4_manipulation_scene_setup_code" width="350">
   </p>
   
-* Meshes: Loading from file, instancing and wire-frame drawing<br>
-  <img src="src/examples/6_meshes.gif" alt="6_meshes" height="360"><br>
-  Meshes can be loaded from binary files, containing members of the Mesh struct.<br>
+* Scene: Mesh loading from file, instancing and wire-frame drawing<br>
+  <img src="src/examples/6_meshes_with_normals.gif" alt="6_meshes_with_normals" height="360"><br>
+  Meshes can be loaded from binary files, with vertex positions, normals and texture coordinates.<br>
   The app's memory capacity can be increased for the allocation of memory for the meshes.<br>
+  <img src="src/examples/6_meshes.gif" alt="6_meshes" height="360"><br>
   A mesh can have multiple instances, each with their own transformation and colors.<br>
   Simply have multiple mesh primitives all set with same mesh id.<br>
   Meshes can be moves and transformed just like any other kind of primitive.<br>
@@ -98,3 +99,8 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/6_meshes_draw_c.png" alt="6_meshes_draw_code" width="350">
     <img src="src/examples/6_meshes_setup_c.png" alt="6_meshes_setup_code" width="350">
   </p>
+
+* obj2mesh: Also privided is a separate CLI tool for converting `.obj` files to `.mesh` files.<br>
+  It is also written in plain C, so should compile with either C or C++.<br>
+  Usage is simple: `./obj2mesh my_obj_file.obj my_mesh_file.mesh`
+  

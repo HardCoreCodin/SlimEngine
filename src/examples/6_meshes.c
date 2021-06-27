@@ -26,8 +26,10 @@ void onDoubleClick(MouseButton *mouse_button) {
 }
 String getPathTo(char* file_name) {
     u32 path_len = getStringLength(__FILE__);
-    u32 name_len = getStringLength(__FILE_NAME__);
-    u32 dir_len = path_len - name_len;
+    u32 dir_len = path_len;
+    while (__FILE__[dir_len] != '/'
+        && __FILE__[dir_len] != '\\') dir_len--;
+    dir_len++;
     static char string_buffer[100];
     String path;
     path.char_ptr = string_buffer;
@@ -37,11 +39,12 @@ String getPathTo(char* file_name) {
 }
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     fillPixelGrid(viewport->frame_buffer, Color(Black));
+    bool normals = app->controls.is_pressed.ctrl;
     Primitive *primitive = scene->primitives;
     for (u32 i = 0; i < scene->counts.primitives; i++, primitive++)
         if (primitive->type == PrimitiveType_Mesh)
             drawMesh(viewport, Color(primitive->color),
-                     &scene->meshes[primitive->id], primitive);
+                     &scene->meshes[primitive->id], primitive, normals);
         else if (primitive->type == PrimitiveType_Grid)
             drawGrid(viewport, Color(primitive->color),
                      &scene->grids[primitive->id], primitive);
@@ -135,13 +138,13 @@ void setupScene(Scene *scene) {
     scene->primitives[2].position.x = -10;
     scene->primitives[2].color = Cyan;
 
-    String dragon_file = getPathTo("dragon.mesh");
+    String dragon_file = getPathTo("suzanne.mesh");
     Mesh *dragon_mesh = &scene->meshes[0];
     loadMeshFromFile(dragon_mesh, dragon_file,
                      &app->platform, &app->memory);
 }
 void initApp(Defaults *defaults) {
-    defaults->additional_memory_size = Megabytes(3);
+    defaults->additional_memory_size = Kilobytes(64);
     defaults->settings.scene.grids  = 1;
     defaults->settings.scene.meshes = 1;
     defaults->settings.scene.primitives = 3;

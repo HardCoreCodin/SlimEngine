@@ -242,9 +242,12 @@ typedef struct EdgeVertexIndices { u32 from, to; } EdgeVertexIndices;
 typedef struct TriangleVertexIndices { u32 ids[3]; } TriangleVertexIndices;
 typedef struct Mesh {
     AABB aabb;
-    u32 triangle_count, vertex_count, edge_count;
-    vec3 *vertex_positions;
-    TriangleVertexIndices *triangle_vertex_indices;
+    u32 triangle_count, vertex_count, edge_count, normals_count, uvs_count;
+    vec3 *vertex_positions, *vertex_normals;
+    vec2 *vertex_uvs;
+    TriangleVertexIndices *vertex_position_indices;
+    TriangleVertexIndices *vertex_normal_indices;
+    TriangleVertexIndices *vertex_uvs_indices;
     EdgeVertexIndices *edge_vertex_indices;
 } Mesh;
 
