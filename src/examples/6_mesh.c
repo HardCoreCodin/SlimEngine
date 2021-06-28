@@ -138,10 +138,9 @@ void setupScene(Scene *scene) {
     scene->primitives[2].position.x = -10;
     scene->primitives[2].color = Cyan;
 
-    String dragon_file = getPathTo("suzanne.mesh");
-    Mesh *dragon_mesh = &scene->meshes[0];
-    loadMeshFromFile(dragon_mesh, dragon_file,
-                     &app->platform, &app->memory);
+    String file = getPathTo("suzanne.mesh");
+    Mesh *mesh = &scene->meshes[0];
+    loadMeshFromFile(mesh, file, &app->platform, &app->memory);
 }
 void initApp(Defaults *defaults) {
     defaults->additional_memory_size = Kilobytes(64);

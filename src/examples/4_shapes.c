@@ -68,6 +68,12 @@ void updateAndRender() {
 
     endFrameTimer(timer);
 }
+void setupViewport(Viewport *viewport) {
+    xform3 *xf = &viewport->camera->transform;
+    xf->position.y = 7;
+    xf->position.z = -11;
+    rotateXform3(xf, 0, -0.2f, 0);
+}
 void setupScene(Scene *scene) {
     Primitive *helix_primitive = &scene->primitives[0];
     Primitive *coil_primitive  = &scene->primitives[1];
@@ -81,31 +87,28 @@ void setupScene(Scene *scene) {
     grid_primitive->color  = Green;
     coil_primitive->color  = Magenta;
     helix_primitive->color = Cyan;
+    box_primitive->id = grid_primitive->id = helix_primitive->id = 0;
     helix_primitive->position.x = -3;
     helix_primitive->position.y = 4;
     helix_primitive->position.z = 2;
     coil_primitive->position.x = 4;
     coil_primitive->position.y = 4;
     coil_primitive->position.z = 2;
-    box_primitive->id = grid_primitive->id = helix_primitive->id = 0;
     coil_primitive->id  = 1;
     grid_primitive->scale.x = 5;
     grid_primitive->scale.z = 5;
-    scene->curves[0].revolution_count = 10;
-    scene->curves[1].revolution_count = 30;
+    Grid *grid = &scene->grids[0];
+    Curve *helix = &scene->curves[0];
+    Curve *coil  = &scene->curves[1];
+    helix->revolution_count = 10;
+    coil->revolution_count = 30;
     rotatePrimitive(grid_primitive, 0.5f, 0, 0);
-    initGrid(scene->grids, 11, 11);
-}
-void setupCamera(Viewport *viewport) {
-    xform3 *xf = &viewport->camera->transform;
-    xf->position.y = 7;
-    xf->position.z = -11;
-    rotateXform3(xf, 0, -0.2f, 0);
+    initGrid(grid, 11, 11);
 }
 void initApp(Defaults *defaults) {
     app->on.windowRedraw  = updateAndRender;
+    app->on.viewportReady = setupViewport;
     app->on.sceneReady    = setupScene;
-    app->on.viewportReady = setupCamera;
     defaults->settings.scene.boxes      = 1;
     defaults->settings.scene.grids      = 1;
     defaults->settings.scene.curves     = 2;
