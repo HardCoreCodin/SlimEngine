@@ -105,7 +105,7 @@ Well documented example applications cover the features:<br>
   <img src="src/examples/7_scene.gif" alt="7_scene" height="360"><br>
   Scenes can be stored in a binary format, and then loaded back in-place.
   <p float="left">
-    <img src="src/examples/7_scene_io_c.png" alt="7_scene_io_code" width="350">
+    <img src="src/examples/7_scene_saving_and_loading_c.png" alt="7_scene_io_code" width="350">
     <img src="src/examples/7_scene_message_c.png" alt="7_scene_message_code" width="350">
   </p>
 

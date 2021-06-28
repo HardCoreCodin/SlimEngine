@@ -146,16 +146,20 @@ void updateAndRender() {
     endFrameTimer(timer);
 }
 void onKeyChanged(u8 key, bool is_pressed) {
-    if (app->controls.is_pressed.ctrl && !is_pressed &&
-        key == 'S' || key == 'Z') {
+    Scene *scene = &app->scene;
+    Platform *platform = &app->platform;
+
+    if (app->controls.is_pressed.ctrl &&
+        !is_pressed &&
+        key == 'S' ||
+        key == 'Z')
+    {
         last_scene_io_is_save = key == 'S';
-        Scene *scene = &app->scene;
-        Platform *platform = &app->platform;
-        String scene_file = getPathTo("this.scene");
+        String file = getPathTo("this.scene");
         if (last_scene_io_is_save)
-            saveSceneToFile(  scene, scene_file, platform);
+            saveSceneToFile(  scene, file, platform);
         else
-            loadSceneFromFile(scene, scene_file, platform);
+            loadSceneFromFile(scene, file, platform);
 
         scene_io_time = app->time.getTicks();
     }
