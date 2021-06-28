@@ -1,8 +1,9 @@
 # SlimEngine
 
-Minimalist, platform-agnostic, interactive render engine for writing graphical 2D/3D applications.<br>
-Available as either a single header file or a directory of headers (a "unity build" setup).<br>
-Can be complied in either C or C++.<br>
+A minimalist and platform-agnostic base project for interactive graphical applications (2D/3D)<br>
+with a strong emphasis on simplicity, ease of use and almost no setup to get started with.<br>  
+Available as either a single header file, or a directory of headers (a "unity build").<br>
+Written in plain C and can be complied in either C or C++.<br>
 
 This project uses [SlimApp](https://github.com/HardCoreCodin/SlimApp) as it's base platform/application layer(s).
 
@@ -19,13 +20,13 @@ More details on this architecture [here](https://youtu.be/Ev_TeQmus68).
 Usage:
 -
 The single header file variant includes everything.<br>
-Otherwise, specific headers can be included from the directory variant.<br>
-The entry point needs to be defined (see [SlimApp](https://github.com/HardCoreCodin/SlimApp)). <br>
+Otherwise, specific headers can be included from the directory of headers.<br>
+The main entry point for the app needs to be defined explicitly (see [SlimApp](https://github.com/HardCoreCodin/SlimApp)). <br>
 
 Features:
 -
 All features of SlimApp are available here as well.<br>
-Additional features include facilities for interactive 3D application development:<br>
+Additional features include basic facilities needed in interactive 3D application:<br>
 * A 3D viewport with wireframe rendering, a HUD and rich mouse/keyboard navigation.<br>
 * A scene with cameras, meshes and parametric shapes.<br>
 * Scene selection and interactive transformations (moving, rotating and scaling).
@@ -67,7 +68,7 @@ Well documented example applications cover the features:<br>
   </p>
 
 * Shapes: Setup and drawing parametric primitives (Grid, Box, Curves, etc.)<br>
-  <img src="src/examples/4_scene.gif" alt="1_scene" height="360"><br>
+  <img src="src/examples/4_shapes.gif" alt="1_scene" height="360"><br>
   SlimEngine allocates and initializes the scene based on quantities set at app-initialization time.<br>
   Wireframe drawing of the scene to the viewport can be invoked manually on window-redraw.<br>  
   <p float="left">
