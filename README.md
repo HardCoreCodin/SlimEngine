@@ -68,7 +68,7 @@ Well documented example applications cover the features:<br>
   </p>
 
 * Shapes: Setup and drawing parametric primitives (Grid, Box, Curves, etc.)<br>
-  <img src="src/examples/4_shapes.gif" alt="1_scene" height="360"><br>
+  <img src="src/examples/4_shapes_rotating.gif" alt="1_scene" height="360"><br>
   SlimEngine allocates and initializes the scene based on quantities set at app-initialization time.<br>
   Wireframe drawing of the scene to the viewport can be invoked manually on window-redraw.<br>  
   <p float="left">
