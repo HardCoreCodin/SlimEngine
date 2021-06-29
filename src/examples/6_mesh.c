@@ -24,31 +24,26 @@ void onDoubleClick(MouseButton *mouse_button) {
         onButtonDown(mouse_button);
     }
 }
-String getPathTo(char* file_name) {
-    u32 path_len = getStringLength(__FILE__);
-    u32 dir_len = path_len;
-    while (__FILE__[dir_len] != '/'
-        && __FILE__[dir_len] != '\\') dir_len--;
-    dir_len++;
-    static char string_buffer[100];
-    String path;
-    path.char_ptr = string_buffer;
-    copyToString(&path, __FILE__, 0);
-    copyToString(&path, file_name, dir_len);
-    return path;
-}
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     fillPixelGrid(viewport->frame_buffer, Color(Black));
+
     bool normals = app->controls.is_pressed.ctrl;
     Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++)
-        if (primitive->type == PrimitiveType_Mesh)
-            drawMesh(viewport, Color(primitive->color),
-                     &scene->meshes[primitive->id], primitive, normals);
-        else if (primitive->type == PrimitiveType_Grid)
-            drawGrid(viewport, Color(primitive->color),
-                     &scene->grids[primitive->id], primitive);
+    for (u32 i = 0; i < scene->settings.primitives; i++, primitive++)
+        switch (primitive->type) {
+            case PrimitiveType_Mesh:
+                drawMesh(viewport, Color(primitive->color),
+                         &scene->meshes[primitive->id], primitive, normals);
+                break;
+            case PrimitiveType_Grid:
+                drawGrid(viewport, Color(primitive->color),
+                         &scene->grids[primitive->id], primitive);
+                break;
+            default:
+                break;
+        }
 }
+
 void setupViewport(Viewport *viewport) {
     HUD *hud = &viewport->hud;
     hud->line_height = 1.2f;
@@ -123,29 +118,33 @@ void onKeyChanged(u8 key, bool is_pressed) {
 }
 void setupScene(Scene *scene) {
     Primitive *grid_primitive = &scene->primitives[0];
+    Primitive *suzanne1_prim  = &scene->primitives[1];
+    Primitive *suzanne2_prim  = &scene->primitives[2];
     grid_primitive->type = PrimitiveType_Grid;
     grid_primitive->scale.x = 5;
     grid_primitive->scale.z = 5;
     initGrid(scene->grids,11, 11);
 
-    scene->primitives[1].position.x = 10;
-    scene->primitives[1].position.z = 5;
-    scene->primitives[1].position.y = 4;
-    scene->primitives[1].type = PrimitiveType_Mesh;
-    scene->primitives[1].color = Magenta;
+    suzanne1_prim->position.x = 10;
+    suzanne1_prim->position.z = 5;
+    suzanne1_prim->position.y = 4;
+    suzanne1_prim->type = PrimitiveType_Mesh;
+    suzanne1_prim->color = Magenta;
 
-    scene->primitives[2] = scene->primitives[1];
-    scene->primitives[2].position.x = -10;
-    scene->primitives[2].color = Cyan;
-
-    String file = getPathTo("suzanne.mesh");
-    Mesh *mesh = &scene->meshes[0];
-    loadMeshFromFile(mesh, file, &app->platform, &app->memory);
+    *suzanne2_prim = *suzanne1_prim;
+    suzanne2_prim->position.x = -10;
+    suzanne2_prim->color = Cyan;
 }
+String mesh_file;
+char string_buffer[100];
 void initApp(Defaults *defaults) {
+    mesh_file.char_ptr = string_buffer;
+    u32 offset = getDirectoryLength(__FILE__);
+    mergeString(&mesh_file, __FILE__, "suzanne.mesh", offset);
+    defaults->settings.scene.mesh_files = &mesh_file;
     defaults->additional_memory_size = Kilobytes(64);
-    defaults->settings.scene.grids  = 1;
     defaults->settings.scene.meshes = 1;
+    defaults->settings.scene.grids  = 1;
     defaults->settings.scene.primitives = 3;
     defaults->settings.viewport.hud_line_count = 2;
     app->on.keyChanged               = onKeyChanged;

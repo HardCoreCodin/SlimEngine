@@ -13,7 +13,7 @@ void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     fillPixelGrid(viewport->frame_buffer, Color(Black));
 
     Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++) {
+    for (u32 i = 0; i < scene->settings.primitives; i++, primitive++) {
         switch (primitive->type) {
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:

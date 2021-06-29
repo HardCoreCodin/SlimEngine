@@ -151,7 +151,7 @@ INLINE bool rayHitScene(Ray *ray, RayHit *local_hit, RayHit *hit, Scene *scene) 
     bool current_found, found = false;
     vec3 Ro, Rd;
     Primitive hit_primitive, primitive;
-    for (u32 i = 0; i < scene->counts.primitives; i++) {
+    for (u32 i = 0; i < scene->settings.primitives; i++) {
         primitive = scene->primitives[i];
         if (primitive.type == PrimitiveType_Mesh)
             primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);

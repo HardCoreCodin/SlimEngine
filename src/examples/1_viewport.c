@@ -1,5 +1,6 @@
 #include "../SlimEngine/app.h"
 #include "../SlimEngine/core/time.h"
+#include "../SlimEngine/core/string.h"
 #include "../SlimEngine/scene/grid.h"
 #include "../SlimEngine/scene/xform.h"
 #include "../SlimEngine/viewport/hud.h"

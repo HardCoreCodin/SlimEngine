@@ -352,6 +352,13 @@ u32 getStringLength(char *string) {
     return length;
 }
 
+u32 getDirectoryLength(char *path) {
+    u32 path_len = getStringLength(path);
+    u32 dir_len = path_len;
+    while (path[dir_len] != '/' && path[dir_len] != '\\') dir_len--;
+    return dir_len + 1;
+}
+
 void copyToString(String *string, char* char_ptr, u32 offset) {
     string->length = offset;
     char *source_char = char_ptr;
@@ -363,6 +370,11 @@ void copyToString(String *string, char* char_ptr, u32 offset) {
         string->length++;
     }
     *string_char = 0;
+}
+
+void mergeString(String *string, char* first, char* second, u32 offset) {
+    copyToString(string, first, 0);
+    copyToString(string, second, offset);
 }
 
 typedef struct NumberString {
@@ -694,12 +706,13 @@ typedef struct Selection {
     bool changed;
 } Selection;
 
-typedef struct SceneCounts {
+typedef struct SceneSettings {
     u32 cameras, primitives, meshes, curves, boxes, grids;
-} SceneCounts;
+    String file, *mesh_files;
+} SceneSettings;
 
 typedef struct Scene {
-    SceneCounts counts;
+    SceneSettings settings;
     Selection selection;
     Camera *cameras;
     Mesh *meshes;
@@ -743,10 +756,30 @@ typedef struct Platform {
 } Platform;
 
 typedef struct Settings {
-    SceneCounts scene;
+    SceneSettings scene;
     ViewportSettings viewport;
     NavigationSettings navigation;
 } Settings;
+
+typedef struct Defaults {
+    char* title;
+    u16 width, height;
+    u64 additional_memory_size;
+    Settings settings;
+} Defaults;
+
+typedef struct App {
+    Memory memory;
+    Platform platform;
+    Controls controls;
+    PixelGrid window_content;
+    AppCallbacks on;
+    Time time;
+    Scene scene;
+    Viewport viewport;
+    bool is_running;
+    void *user_data;
+} App;
 
 void setBoxEdgesFromVertices(BoxEdges *edges, BoxVertices *vertices) {
     edges->sides.front_top.from    = vertices->corners.front_top_left;
@@ -974,17 +1007,20 @@ void initViewport(Viewport *viewport,
     initNavigation(&viewport->navigation, navigation_settings);
 }
 
-SceneCounts getDefaultSceneCounts() {
-    SceneCounts default_scene_counts;
+SceneSettings getDefaultSceneSettings() {
+    SceneSettings settings;
 
-    default_scene_counts.cameras = 1;
-    default_scene_counts.primitives = 0;
-    default_scene_counts.meshes = 0;
-    default_scene_counts.curves = 0;
-    default_scene_counts.boxes = 0;
-    default_scene_counts.grids = 0;
+    settings.cameras = 1;
+    settings.primitives = 0;
+    settings.meshes = 0;
+    settings.curves = 0;
+    settings.boxes = 0;
+    settings.grids = 0;
+    settings.mesh_files = null;
+    settings.file.char_ptr = null;
+    settings.file.length = 0;
 
-    return default_scene_counts;
+    return settings;
 }
 
 void initCurve(Curve *curve) {
@@ -1078,54 +1114,6 @@ void initBox(Box *box) {
 void initSelection(Selection *selection) {
     selection->object_type = selection->object_id = 0;
     selection->changed = false;
-}
-
-void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
-    scene->counts = scene_counts;
-    scene->primitives = null;
-    scene->cameras    = null;
-    scene->curves     = null;
-    scene->boxes      = null;
-    scene->grids      = null;
-    scene->meshes     = null;
-
-    initSelection(&scene->selection);
-
-    if (scene_counts.meshes) scene->meshes = allocateMemory(memory, sizeof(Mesh) * scene->counts.meshes);
-    if (scene_counts.cameras) {
-        scene->cameras = allocateMemory(memory, sizeof(Camera) * scene->counts.cameras);
-        if (scene->cameras)
-            for (u32 i = 0; i < scene_counts.cameras; i++)
-                initCamera(scene->cameras + i);
-    }
-
-    if (scene_counts.primitives) {
-        scene->primitives = allocateMemory(memory, sizeof(Primitive) * scene->counts.primitives);
-        if (scene->primitives)
-            for (u32 i = 0; i < scene_counts.primitives; i++)
-                initPrimitive(scene->primitives + i);
-    }
-
-    if (scene_counts.curves) {
-        scene->curves = allocateMemory(memory, sizeof(Curve) * scene->counts.curves);
-        if (scene->curves)
-            for (u32 i = 0; i < scene_counts.curves; i++)
-                initCurve(scene->curves + i);
-    }
-
-    if (scene_counts.boxes) {
-        scene->boxes = allocateMemory(memory, sizeof(Box) * scene->counts.boxes);
-        if (scene->boxes)
-            for (u32 i = 0; i < scene_counts.boxes; i++)
-                initBox(scene->boxes + i);
-    }
-
-    if (scene_counts.grids) {
-        scene->grids = allocateMemory(memory, sizeof(Grid) * scene->counts.grids);
-        if (scene->grids)
-            for (u32 i = 0; i < scene_counts.grids; i++)
-                initGrid(scene->grids + i, 3, 3);
-    }
 }
 
 void accumulateTimer(Timer* timer) {
@@ -3025,8 +3013,8 @@ void drawBox(Viewport *viewport, RGBA color, Box *box, Primitive *primitive, u8 
     }
 }
 
-void loadMeshFromFile(Mesh *mesh, String file_path, Platform *platform, Memory *memory) {
-    void *file = platform->openFileForReading(file_path.char_ptr);
+void loadMeshFromFile(Mesh *mesh, char* file_path, Platform *platform, Memory *memory) {
+    void *file = platform->openFileForReading(file_path);
 
     mesh->vertex_normals          = null;
     mesh->vertex_normal_indices   = null;
@@ -3063,8 +3051,8 @@ void loadMeshFromFile(Mesh *mesh, String file_path, Platform *platform, Memory *
     platform->closeFile(file);
 }
 
-void saveMeshToFile(Mesh *mesh, String file_path, Platform *platform) {
-    void *file = platform->openFileForWriting(file_path.char_ptr);
+void saveMeshToFile(Mesh *mesh, char* file_path, Platform *platform) {
+    void *file = platform->openFileForWriting(file_path);
 
     platform->writeToFile(&mesh->aabb,           sizeof(AABB), file);
     platform->writeToFile(&mesh->vertex_count,   sizeof(u32),  file);
@@ -3087,13 +3075,13 @@ void saveMeshToFile(Mesh *mesh, String file_path, Platform *platform) {
     platform->closeFile(file);
 }
 
-void loadSceneFromFile(Scene *scene, String file_path, Platform *platform) {
-    void *file = platform->openFileForReading(file_path.char_ptr);
+void loadSceneFromFile(Scene *scene, char* file_path, Platform *platform) {
+    void *file = platform->openFileForReading(file_path);
 
-    platform->readFromFile(&scene->counts, sizeof(SceneCounts), file);
+    platform->readFromFile(&scene->settings, sizeof(SceneSettings), file);
 
     if (scene->cameras)
-        for (u32 i = 0; i < scene->counts.cameras; i++) {
+        for (u32 i = 0; i < scene->settings.cameras; i++) {
             platform->readFromFile(scene->cameras + i, sizeof(Camera), file);
             scene->cameras[i].transform.right_direction   = &scene->cameras[i].transform.rotation_matrix.X;
             scene->cameras[i].transform.up_direction      = &scene->cameras[i].transform.rotation_matrix.Y;
@@ -3101,24 +3089,24 @@ void loadSceneFromFile(Scene *scene, String file_path, Platform *platform) {
         }
 
     if (scene->primitives)
-        for (u32 i = 0; i < scene->counts.primitives; i++)
+        for (u32 i = 0; i < scene->settings.primitives; i++)
             platform->readFromFile(scene->primitives + i, sizeof(Primitive), file);
 
     if (scene->grids)
-        for (u32 i = 0; i < scene->counts.grids; i++)
+        for (u32 i = 0; i < scene->settings.grids; i++)
             platform->readFromFile(scene->grids + i, sizeof(Grid), file);
 
     if (scene->boxes)
-        for (u32 i = 0; i < scene->counts.boxes; i++)
+        for (u32 i = 0; i < scene->settings.boxes; i++)
             platform->readFromFile(scene->boxes + i, sizeof(Box), file);
 
     if (scene->curves)
-        for (u32 i = 0; i < scene->counts.curves; i++)
+        for (u32 i = 0; i < scene->settings.curves; i++)
             platform->readFromFile(scene->curves + i, sizeof(Curve), file);
 
     if (scene->meshes) {
         Mesh *mesh = scene->meshes;
-        for (u32 i = 0; i < scene->counts.meshes; i++, mesh++) {
+        for (u32 i = 0; i < scene->settings.meshes; i++, mesh++) {
             platform->readFromFile(&mesh->aabb,           sizeof(AABB), file);
             platform->readFromFile(&mesh->vertex_count,   sizeof(u32),  file);
             platform->readFromFile(&mesh->triangle_count, sizeof(u32),  file);
@@ -3143,34 +3131,34 @@ void loadSceneFromFile(Scene *scene, String file_path, Platform *platform) {
     platform->closeFile(file);
 }
 
-void saveSceneToFile(Scene *scene, String file_path, Platform *platform) {
-    void *file = platform->openFileForWriting(file_path.char_ptr);
+void saveSceneToFile(Scene *scene, char* file_path, Platform *platform) {
+    void *file = platform->openFileForWriting(file_path);
 
-    platform->writeToFile(&scene->counts, sizeof(SceneCounts), file);
+    platform->writeToFile(&scene->settings, sizeof(SceneSettings), file);
 
     if (scene->cameras)
-        for (u32 i = 0; i < scene->counts.cameras; i++)
+        for (u32 i = 0; i < scene->settings.cameras; i++)
             platform->writeToFile(scene->cameras + i, sizeof(Camera), file);
 
     if (scene->primitives)
-        for (u32 i = 0; i < scene->counts.primitives; i++)
+        for (u32 i = 0; i < scene->settings.primitives; i++)
             platform->writeToFile(scene->primitives + i, sizeof(Primitive), file);
 
     if (scene->grids)
-        for (u32 i = 0; i < scene->counts.grids; i++)
+        for (u32 i = 0; i < scene->settings.grids; i++)
             platform->writeToFile(scene->grids + i, sizeof(Grid), file);
 
     if (scene->boxes)
-        for (u32 i = 0; i < scene->counts.boxes; i++)
+        for (u32 i = 0; i < scene->settings.boxes; i++)
             platform->writeToFile(scene->boxes + i, sizeof(Box), file);
 
     if (scene->curves)
-        for (u32 i = 0; i < scene->counts.curves; i++)
+        for (u32 i = 0; i < scene->settings.curves; i++)
             platform->writeToFile(scene->curves + i, sizeof(Curve), file);
 
     if (scene->meshes) {
         Mesh *mesh = scene->meshes;
-        for (u32 i = 0; i < scene->counts.meshes; i++, mesh++) {
+        for (u32 i = 0; i < scene->settings.meshes; i++, mesh++) {
             platform->writeToFile(&mesh->aabb,           sizeof(AABB), file);
             platform->writeToFile(&mesh->vertex_count,   sizeof(u32),  file);
             platform->writeToFile(&mesh->triangle_count, sizeof(u32),  file);
@@ -3512,7 +3500,7 @@ INLINE bool rayHitScene(Ray *ray, RayHit *local_hit, RayHit *hit, Scene *scene) 
     bool current_found, found = false;
     vec3 Ro, Rd;
     Primitive hit_primitive, primitive;
-    for (u32 i = 0; i < scene->counts.primitives; i++) {
+    for (u32 i = 0; i < scene->settings.primitives; i++) {
         primitive = scene->primitives[i];
         if (primitive.type == PrimitiveType_Mesh)
             primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
@@ -3723,32 +3711,6 @@ void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     }
 }
 
-void initSettings(Settings *settings) {
-    settings->scene      = getDefaultSceneCounts();
-    settings->viewport   = getDefaultViewportSettings();
-    settings->navigation = getDefaultNavigationSettings();
-}
-
-typedef struct Defaults {
-    char* title;
-    u16 width, height;
-    u64 additional_memory_size;
-    Settings settings;
-} Defaults;
-
-typedef struct App {
-    Memory memory;
-    Platform platform;
-    Controls controls;
-    PixelGrid window_content;
-    AppCallbacks on;
-    Time time;
-    Scene scene;
-    Viewport viewport;
-    bool is_running;
-    void *user_data;
-} App;
-
 App *app;
 
 void initApp(Defaults *defaults);
@@ -3854,6 +3816,60 @@ void* allocateAppMemory(u64 size) {
     return null;
 }
 
+void initScene(Scene *scene, SceneSettings settings, Memory *memory, Platform *platform) {
+    scene->settings = settings;
+    scene->primitives = null;
+    scene->cameras    = null;
+    scene->curves     = null;
+    scene->boxes      = null;
+    scene->grids      = null;
+    scene->meshes     = null;
+
+    scene->selection.object_type = scene->selection.object_id = 0;
+    scene->selection.changed = false;
+
+    if (settings.meshes && settings.mesh_files) {
+        scene->meshes = allocateMemory(memory, sizeof(Mesh) * scene->settings.meshes);
+        for (u32 i = 0; i < settings.meshes; i++)
+            loadMeshFromFile(&scene->meshes[i], settings.mesh_files[i].char_ptr, platform, memory);
+    }
+
+    if (settings.cameras) {
+        scene->cameras = allocateMemory(memory, sizeof(Camera) * settings.cameras);
+        if (scene->cameras)
+            for (u32 i = 0; i < settings.cameras; i++)
+                initCamera(scene->cameras + i);
+    }
+
+    if (settings.primitives) {
+        scene->primitives = allocateMemory(memory, sizeof(Primitive) * settings.primitives);
+        if (scene->primitives)
+            for (u32 i = 0; i < settings.primitives; i++)
+                initPrimitive(scene->primitives + i);
+    }
+
+    if (settings.curves) {
+        scene->curves = allocateMemory(memory, sizeof(Curve) * settings.curves);
+        if (scene->curves)
+            for (u32 i = 0; i < settings.curves; i++)
+                initCurve(scene->curves + i);
+    }
+
+    if (settings.boxes) {
+        scene->boxes = allocateMemory(memory, sizeof(Box) * settings.boxes);
+        if (scene->boxes)
+            for (u32 i = 0; i < settings.boxes; i++)
+                initBox(scene->boxes + i);
+    }
+
+    if (settings.grids) {
+        scene->grids = allocateMemory(memory, sizeof(Grid) * settings.grids);
+        if (scene->grids)
+            for (u32 i = 0; i < settings.grids; i++)
+                initGrid(scene->grids + i, 3, 3);
+    }
+}
+
 void _initApp(Defaults *defaults, void* window_content_memory) {
     app->is_running = true;
     app->user_data = null;
@@ -3879,7 +3895,10 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     defaults->width = 480;
     defaults->height = 360;
     defaults->additional_memory_size = 0;
-    initSettings(&defaults->settings);
+    defaults->settings.scene      = getDefaultSceneSettings();
+    defaults->settings.viewport   = getDefaultViewportSettings();
+    defaults->settings.navigation = getDefaultNavigationSettings();
+
     initApp(defaults);
     initAppMemory(defaults->additional_memory_size +
                   defaults->settings.scene.primitives * sizeof(Primitive) +
@@ -3888,7 +3907,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
                   defaults->settings.scene.grids * sizeof(Grid) +
                   defaults->settings.scene.cameras * sizeof(Camera) +
                   defaults->settings.viewport.hud_line_count * sizeof(HUDLine));
-    initScene(&app->scene, defaults->settings.scene, &app->memory);
+    initScene(&app->scene, defaults->settings.scene, &app->memory, &app->platform);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
     HUDLine *hud_lines = defaults->settings.viewport.hud_line_count ?
                          allocateAppMemory(defaults->settings.viewport.hud_line_count * sizeof(HUDLine)) : null;

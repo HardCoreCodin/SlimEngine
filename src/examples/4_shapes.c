@@ -11,7 +11,7 @@ void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     fillPixelGrid(viewport->frame_buffer, Color(Black));
 
     Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++)
+    for (u32 i = 0; i < scene->settings.primitives; i++, primitive++)
         switch (primitive->type) {
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:
@@ -97,20 +97,22 @@ void setupScene(Scene *scene) {
     coil_primitive->id  = 1;
     grid_primitive->scale.x = 5;
     grid_primitive->scale.z = 5;
+
     Grid *grid = &scene->grids[0];
+    rotatePrimitive(grid_primitive, 0.5f, 0, 0);
+    initGrid(grid, 11, 11);
+
     Curve *helix = &scene->curves[0];
     Curve *coil  = &scene->curves[1];
     helix->revolution_count = 10;
     coil->revolution_count = 30;
-    rotatePrimitive(grid_primitive, 0.5f, 0, 0);
-    initGrid(grid, 11, 11);
 }
 void initApp(Defaults *defaults) {
-    app->on.windowRedraw  = updateAndRender;
-    app->on.viewportReady = setupViewport;
-    app->on.sceneReady    = setupScene;
     defaults->settings.scene.boxes      = 1;
     defaults->settings.scene.grids      = 1;
     defaults->settings.scene.curves     = 2;
     defaults->settings.scene.primitives = 4;
+    app->on.windowRedraw  = updateAndRender;
+    app->on.viewportReady = setupViewport;
+    app->on.sceneReady    = setupScene;
 }

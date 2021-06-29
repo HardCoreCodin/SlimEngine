@@ -1,6 +1,5 @@
 #include "../SlimEngine/app.h"
 #include "../SlimEngine/core/time.h"
-#include "../SlimEngine/scene/io.h"
 #include "../SlimEngine/scene/grid.h"
 #include "../SlimEngine/scene/mesh.h"
 #include "../SlimEngine/scene/curve.h"
@@ -29,23 +28,10 @@ void onDoubleClick(MouseButton *mouse_button) {
         onButtonDown(mouse_button);
     }
 }
-String getPathTo(char* file_name) {
-    u32 path_len = getStringLength(__FILE__);
-    u32 dir_len = path_len;
-    while (__FILE__[dir_len] != '/'
-        && __FILE__[dir_len] != '\\') dir_len--;
-    dir_len++;
-    static char string_buffer[100];
-    String path;
-    path.char_ptr = string_buffer;
-    copyToString(&path, __FILE__, 0);
-    copyToString(&path, file_name, dir_len);
-    return path;
-}
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     fillPixelGrid(viewport->frame_buffer, Color(Black));
     Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->counts.primitives; i++, primitive++)
+    for (u32 i = 0; i < scene->settings.primitives; i++, primitive++)
         switch (primitive->type) {
             case PrimitiveType_Mesh:
                 drawMesh(viewport, Color(primitive->color),
@@ -145,36 +131,6 @@ void updateAndRender() {
     resetMouseChanges(mouse);
     endFrameTimer(timer);
 }
-void onKeyChanged(u8 key, bool is_pressed) {
-    Scene *scene = &app->scene;
-    Platform *platform = &app->platform;
-
-    if (app->controls.is_pressed.ctrl &&
-        !is_pressed &&
-        key == 'S' ||
-        key == 'Z')
-    {
-        last_scene_io_is_save = key == 'S';
-        String file = getPathTo("this.scene");
-        if (last_scene_io_is_save)
-            saveSceneToFile(  scene, file, platform);
-        else
-            loadSceneFromFile(scene, file, platform);
-
-        scene_io_time = app->time.getTicks();
-    }
-    NavigationMove *move = &app->viewport.navigation.move;
-    if (key == 'R') move->up       = is_pressed;
-    if (key == 'F') move->down     = is_pressed;
-    if (key == 'W') move->forward  = is_pressed;
-    if (key == 'A') move->left     = is_pressed;
-    if (key == 'S') move->backward = is_pressed;
-    if (key == 'D') move->right    = is_pressed;
-
-    ViewportSettings *settings = &app->viewport.settings;
-    if (!is_pressed && key == app->controls.key_map.tab)
-        settings->show_hud = !settings->show_hud;
-}
 void setupScene(Scene *scene) {
     Primitive *grid_primitive  = &scene->primitives[0];
     Primitive *dragon_prim     = &scene->primitives[1];
@@ -192,23 +148,25 @@ void setupScene(Scene *scene) {
     grid_primitive->color  = Green;
     coil_primitive->color  = Magenta;
     helix_primitive->color = Cyan;
+    box_primitive->id = grid_primitive->id = helix_primitive->id = 0;
     helix_primitive->position.x = -3;
     helix_primitive->position.y = 4;
     helix_primitive->position.z = 2;
     coil_primitive->position.x = 4;
     coil_primitive->position.y = 4;
     coil_primitive->position.z = 2;
-    box_primitive->id = grid_primitive->id = helix_primitive->id = 0;
     coil_primitive->id  = 1;
     grid_primitive->scale.x = 5;
     grid_primitive->scale.z = 5;
-    scene->curves[0].revolution_count = 10;
-    scene->curves[1].revolution_count = 30;
 
-    grid_primitive->type = PrimitiveType_Grid;
-    grid_primitive->scale.x = 5;
-    grid_primitive->scale.z = 5;
-    initGrid(scene->grids,11, 11);
+    Grid *grid = &scene->grids[0];
+    rotatePrimitive(grid_primitive, 0.5f, 0, 0);
+    initGrid(grid, 11, 11);
+
+    Curve *helix = &scene->curves[0];
+    Curve *coil  = &scene->curves[1];
+    helix->revolution_count = 10;
+    coil->revolution_count = 30;
 
     suzanne1_prim->position.x = 10;
     suzanne1_prim->position.z = 5;
@@ -220,25 +178,57 @@ void setupScene(Scene *scene) {
     suzanne2_prim->position.x = -10;
     suzanne2_prim->color = Cyan;
 
-    String mesh_file = getPathTo("suzanne.mesh");
-    Mesh *mesh = &scene->meshes[0];
-    loadMeshFromFile(mesh, mesh_file, &app->platform, &app->memory);
-
-    mesh_file = getPathTo("dragon.mesh");
-    mesh = &scene->meshes[1];
-    loadMeshFromFile(mesh, mesh_file, &app->platform, &app->memory);
-
     *dragon_prim = *suzanne1_prim;
     dragon_prim->id = 1;
     dragon_prim->position.z = 10;
     dragon_prim->color = Blue;
 }
+void onKeyChanged(u8 key, bool is_pressed) {
+    Scene *scene = &app->scene;
+    Platform *platform = &app->platform;
+    NavigationMove *move = &app->viewport.navigation.move;
+    if (key == 'R') move->up       = is_pressed;
+    if (key == 'F') move->down     = is_pressed;
+    if (key == 'W') move->forward  = is_pressed;
+    if (key == 'A') move->left     = is_pressed;
+    if (key == 'S') move->backward = is_pressed;
+    if (key == 'D') move->right    = is_pressed;
+
+    ViewportSettings *settings = &app->viewport.settings;
+    if (!is_pressed && key == app->controls.key_map.tab)
+        settings->show_hud = !settings->show_hud;
+
+    if (app->controls.is_pressed.ctrl &&
+        !is_pressed && key == 'S' || key == 'Z') {
+        last_scene_io_is_save = key == 'S';
+        char *file = scene->settings.file.char_ptr;
+        if (last_scene_io_is_save)
+            saveSceneToFile(  scene, file, platform);
+        else
+            loadSceneFromFile(scene, file, platform);
+        scene_io_time = app->time.getTicks();
+    }
+}
+String file_paths[2];
+char string_buffers[3][100];
 void initApp(Defaults *defaults) {
-    defaults->additional_memory_size = Megabytes(3) + Kilobytes(64);
+    String *scene_file = &defaults->settings.scene.file;
+    String *mesh_file1 = &file_paths[0];
+    String *mesh_file2 = &file_paths[1];
+    mesh_file1->char_ptr = string_buffers[0];
+    mesh_file2->char_ptr = string_buffers[1];
+    scene_file->char_ptr = string_buffers[2];
+    u32 offset = getDirectoryLength(__FILE__);
+    mergeString(mesh_file1, __FILE__, "suzanne.mesh", offset);
+    mergeString(mesh_file2, __FILE__, "dragon.mesh",  offset);
+    mergeString(scene_file, __FILE__, "this.scene",   offset);
+    defaults->settings.scene.mesh_files = file_paths;
+    defaults->additional_memory_size  = Megabytes(3);
+    defaults->additional_memory_size += Kilobytes(64);
+    defaults->settings.scene.meshes     = 2;
     defaults->settings.scene.boxes      = 1;
     defaults->settings.scene.grids      = 1;
     defaults->settings.scene.curves     = 2;
-    defaults->settings.scene.meshes     = 2;
     defaults->settings.scene.primitives = 7;
     defaults->settings.viewport.hud_line_count = 2;
     scene_io_time = 0;

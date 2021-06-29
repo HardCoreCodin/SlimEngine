@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./base.h"
+#include "./string.h"
 
 #define FONT_HEIGHT 8
 #define FONT_WIDTH 8

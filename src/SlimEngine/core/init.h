@@ -192,17 +192,20 @@ void initViewport(Viewport *viewport,
     initNavigation(&viewport->navigation, navigation_settings);
 }
 
-SceneCounts getDefaultSceneCounts() {
-    SceneCounts default_scene_counts;
+SceneSettings getDefaultSceneSettings() {
+    SceneSettings settings;
 
-    default_scene_counts.cameras = 1;
-    default_scene_counts.primitives = 0;
-    default_scene_counts.meshes = 0;
-    default_scene_counts.curves = 0;
-    default_scene_counts.boxes = 0;
-    default_scene_counts.grids = 0;
+    settings.cameras = 1;
+    settings.primitives = 0;
+    settings.meshes = 0;
+    settings.curves = 0;
+    settings.boxes = 0;
+    settings.grids = 0;
+    settings.mesh_files = null;
+    settings.file.char_ptr = null;
+    settings.file.length = 0;
 
-    return default_scene_counts;
+    return settings;
 }
 
 void initCurve(Curve *curve) {
@@ -291,57 +294,4 @@ void initBox(Box *box) {
     box->vertices.corners.back_bottom_right.z = -1;
 
     setBoxEdgesFromVertices(&box->edges, &box->vertices);
-}
-
-void initSelection(Selection *selection) {
-    selection->object_type = selection->object_id = 0;
-    selection->changed = false;
-}
-
-void initScene(Scene *scene, SceneCounts scene_counts, Memory *memory) {
-    scene->counts = scene_counts;
-    scene->primitives = null;
-    scene->cameras    = null;
-    scene->curves     = null;
-    scene->boxes      = null;
-    scene->grids      = null;
-    scene->meshes     = null;
-
-    initSelection(&scene->selection);
-
-    if (scene_counts.meshes) scene->meshes = allocateMemory(memory, sizeof(Mesh) * scene->counts.meshes);
-    if (scene_counts.cameras) {
-        scene->cameras = allocateMemory(memory, sizeof(Camera) * scene->counts.cameras);
-        if (scene->cameras)
-            for (u32 i = 0; i < scene_counts.cameras; i++)
-                initCamera(scene->cameras + i);
-    }
-
-    if (scene_counts.primitives) {
-        scene->primitives = allocateMemory(memory, sizeof(Primitive) * scene->counts.primitives);
-        if (scene->primitives)
-            for (u32 i = 0; i < scene_counts.primitives; i++)
-                initPrimitive(scene->primitives + i);
-    }
-
-    if (scene_counts.curves) {
-        scene->curves = allocateMemory(memory, sizeof(Curve) * scene->counts.curves);
-        if (scene->curves)
-            for (u32 i = 0; i < scene_counts.curves; i++)
-                initCurve(scene->curves + i);
-    }
-
-    if (scene_counts.boxes) {
-        scene->boxes = allocateMemory(memory, sizeof(Box) * scene->counts.boxes);
-        if (scene->boxes)
-            for (u32 i = 0; i < scene_counts.boxes; i++)
-                initBox(scene->boxes + i);
-    }
-
-    if (scene_counts.grids) {
-        scene->grids = allocateMemory(memory, sizeof(Grid) * scene->counts.grids);
-        if (scene->grids)
-            for (u32 i = 0; i < scene_counts.grids; i++)
-                initGrid(scene->grids + i, 3, 3);
-    }
 }

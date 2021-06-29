@@ -269,12 +269,13 @@ typedef struct Selection {
     bool changed;
 } Selection;
 
-typedef struct SceneCounts {
+typedef struct SceneSettings {
     u32 cameras, primitives, meshes, curves, boxes, grids;
-} SceneCounts;
+    String file, *mesh_files;
+} SceneSettings;
 
 typedef struct Scene {
-    SceneCounts counts;
+    SceneSettings settings;
     Selection selection;
     Camera *cameras;
     Mesh *meshes;
@@ -283,6 +284,65 @@ typedef struct Scene {
     Grid *grids;
     Box *boxes;
 } Scene;
+
+typedef struct AppCallbacks {
+    void (*sceneReady)(Scene *scene);
+    void (*viewportReady)(Viewport *viewport);
+    void (*windowRedraw)();
+    void (*windowResize)(u16 width, u16 height);
+    void (*keyChanged)(  u8 key, bool pressed);
+    void (*mouseButtonUp)(  MouseButton *mouse_button);
+    void (*mouseButtonDown)(MouseButton *mouse_button);
+    void (*mouseButtonDoubleClicked)(MouseButton *mouse_button);
+    void (*mouseWheelScrolled)(f32 amount);
+    void (*mousePositionSet)(i32 x, i32 y);
+    void (*mouseMovementSet)(i32 x, i32 y);
+    void (*mouseRawMovementSet)(i32 x, i32 y);
+} AppCallbacks;
+
+typedef void* (*CallbackForFileOpen)(const char* file_path);
+typedef bool  (*CallbackForFileRW)(void *out, unsigned long, void *handle);
+typedef void  (*CallbackForFileClose)(void *handle);
+
+typedef struct Platform {
+    GetTicks             getTicks;
+    CallbackWithInt      getMemory;
+    CallbackWithCharPtr  setWindowTitle;
+    CallbackWithBool     setWindowCapture;
+    CallbackWithBool     setCursorVisibility;
+    CallbackForFileClose closeFile;
+    CallbackForFileOpen  openFileForReading;
+    CallbackForFileOpen  openFileForWriting;
+    CallbackForFileRW    readFromFile;
+    CallbackForFileRW    writeToFile;
+    u64 ticks_per_second;
+} Platform;
+
+typedef struct Settings {
+    SceneSettings scene;
+    ViewportSettings viewport;
+    NavigationSettings navigation;
+} Settings;
+
+typedef struct Defaults {
+    char* title;
+    u16 width, height;
+    u64 additional_memory_size;
+    Settings settings;
+} Defaults;
+
+typedef struct App {
+    Memory memory;
+    Platform platform;
+    Controls controls;
+    PixelGrid window_content;
+    AppCallbacks on;
+    Time time;
+    Scene scene;
+    Viewport viewport;
+    bool is_running;
+    void *user_data;
+} App;
 
 void setBoxEdgesFromVertices(BoxEdges *edges, BoxVertices *vertices) {
     edges->sides.front_top.from    = vertices->corners.front_top_left;
