@@ -187,29 +187,42 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     defaults->width = 480;
     defaults->height = 360;
     defaults->additional_memory_size = 0;
-    defaults->settings.scene      = getDefaultSceneSettings();
-    defaults->settings.viewport   = getDefaultViewportSettings();
-    defaults->settings.navigation = getDefaultNavigationSettings();
+
+    SceneSettings *scene_settings = &defaults->settings.scene;
+    ViewportSettings *viewport_settings = &defaults->settings.viewport;
+    NavigationSettings *navigation_settings = &defaults->settings.navigation;
+
+    setDefaultSceneSettings(scene_settings);
+    setDefaultViewportSettings(viewport_settings);
+    setDefaultNavigationSettings(navigation_settings);
 
     initApp(defaults);
-    initAppMemory(defaults->additional_memory_size +
-            defaults->settings.scene.primitives * sizeof(Primitive) +
-            defaults->settings.scene.curves * sizeof(Curve) +
-            defaults->settings.scene.boxes * sizeof(Box) +
-            defaults->settings.scene.grids * sizeof(Grid) +
-            defaults->settings.scene.cameras * sizeof(Camera) +
-            defaults->settings.viewport.hud_line_count * sizeof(HUDLine));
+    u32 memory_size = defaults->additional_memory_size;
+    memory_size += scene_settings->primitives * sizeof(Primitive);
+    memory_size += scene_settings->meshes     * sizeof(Mesh);
+    memory_size += scene_settings->curves     * sizeof(Curve);
+    memory_size += scene_settings->boxes      * sizeof(Box);
+    memory_size += scene_settings->grids      * sizeof(Grid);
+    memory_size += scene_settings->cameras    * sizeof(Camera);
+    memory_size += viewport_settings->hud_line_count * sizeof(HUDLine);
+    if (scene_settings->meshes && scene_settings->mesh_files) {
+        Mesh mesh;
+        for (u32 i = 0; i < scene_settings->meshes; i++)
+            memory_size +=  getMeshMemorySize(&mesh, scene_settings->mesh_files[i].char_ptr, &app->platform);
+    }
+
+    initAppMemory(memory_size);
     initScene(&app->scene, defaults->settings.scene, &app->memory, &app->platform);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
-    HUDLine *hud_lines = defaults->settings.viewport.hud_line_count ?
-                         allocateAppMemory(defaults->settings.viewport.hud_line_count * sizeof(HUDLine)) : null;
+
+    if (viewport_settings->hud_line_count)
+        viewport_settings->hud_lines = allocateAppMemory(viewport_settings->hud_line_count * sizeof(HUDLine));
+
     initViewport(&app->viewport,
-                 defaults->settings.viewport,
-                 defaults->settings.navigation,
+                 viewport_settings,
+                 navigation_settings,
                  app->scene.cameras,
-                 &app->window_content,
-                 hud_lines,
-                 defaults->settings.viewport.hud_line_count);
+                 &app->window_content);
     if (app->on.viewportReady) app->on.viewportReady(&app->viewport);
 }
 

@@ -135,14 +135,15 @@ void setupScene(Scene *scene) {
     suzanne2_prim->position.x = -10;
     suzanne2_prim->color = Cyan;
 }
+
 String mesh_file;
 char string_buffer[100];
+
 void initApp(Defaults *defaults) {
     mesh_file.char_ptr = string_buffer;
     u32 offset = getDirectoryLength(__FILE__);
     mergeString(&mesh_file, __FILE__, "suzanne.mesh", offset);
     defaults->settings.scene.mesh_files = &mesh_file;
-    defaults->additional_memory_size = Kilobytes(64);
     defaults->settings.scene.meshes = 1;
     defaults->settings.scene.grids  = 1;
     defaults->settings.scene.primitives = 3;

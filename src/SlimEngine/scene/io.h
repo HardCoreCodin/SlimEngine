@@ -3,6 +3,34 @@
 #include "../core/base.h"
 #include "../core/types.h"
 
+u32 getMeshMemorySize(Mesh *mesh, char *file_path, Platform *platform) {
+    void *file = platform->openFileForReading(file_path);
+
+    platform->readFromFile(&mesh->aabb,           sizeof(AABB), file);
+    platform->readFromFile(&mesh->vertex_count,   sizeof(u32),  file);
+    platform->readFromFile(&mesh->triangle_count, sizeof(u32),  file);
+    platform->readFromFile(&mesh->edge_count,     sizeof(u32),  file);
+    platform->readFromFile(&mesh->uvs_count,      sizeof(u32),  file);
+    platform->readFromFile(&mesh->normals_count,  sizeof(u32),  file);
+
+    u32 memory_size = sizeof(vec3) * mesh->vertex_count;
+    memory_size += sizeof(TriangleVertexIndices) * mesh->triangle_count;
+    memory_size += sizeof(EdgeVertexIndices) * mesh->edge_count;
+
+    if (mesh->uvs_count) {
+        memory_size += sizeof(vec2) * mesh->uvs_count;
+        memory_size += sizeof(TriangleVertexIndices) * mesh->triangle_count;
+    }
+    if (mesh->normals_count) {
+        memory_size += sizeof(vec3) * mesh->normals_count;
+        memory_size += sizeof(TriangleVertexIndices) * mesh->triangle_count;
+    }
+
+    platform->closeFile(file);
+
+    return memory_size;
+}
+
 void loadMeshFromFile(Mesh *mesh, char *file_path, Platform *platform, Memory *memory) {
     void *file = platform->openFileForReading(file_path);
 

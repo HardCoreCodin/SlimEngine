@@ -134,23 +134,19 @@ void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, i32 posi
             lines[i].value_color = lines[i].title_color = White;
 }
 
-NavigationSettings getDefaultNavigationSettings() {
-    NavigationSettings navigation_settings;
-
-    navigation_settings.max_velocity  = NAVIGATION_DEFAULT__MAX_VELOCITY;
-    navigation_settings.acceleration  = NAVIGATION_DEFAULT__ACCELERATION;
-    navigation_settings.speeds.turn   = NAVIGATION_SPEED_DEFAULT__TURN;
-    navigation_settings.speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
-    navigation_settings.speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
-    navigation_settings.speeds.zoom   = NAVIGATION_SPEED_DEFAULT__ZOOM;
-    navigation_settings.speeds.dolly  = NAVIGATION_SPEED_DEFAULT__DOLLY;
-    navigation_settings.speeds.pan    = NAVIGATION_SPEED_DEFAULT__PAN;
-
-    return navigation_settings;
+void setDefaultNavigationSettings(NavigationSettings *settings) {
+    settings->max_velocity  = NAVIGATION_DEFAULT__MAX_VELOCITY;
+    settings->acceleration  = NAVIGATION_DEFAULT__ACCELERATION;
+    settings->speeds.turn   = NAVIGATION_SPEED_DEFAULT__TURN;
+    settings->speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
+    settings->speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
+    settings->speeds.zoom   = NAVIGATION_SPEED_DEFAULT__ZOOM;
+    settings->speeds.dolly  = NAVIGATION_SPEED_DEFAULT__DOLLY;
+    settings->speeds.pan    = NAVIGATION_SPEED_DEFAULT__PAN;
 }
 
-void initNavigation(Navigation *navigation, NavigationSettings navigation_settings) {
-    navigation->settings = navigation_settings;
+void initNavigation(Navigation *navigation, NavigationSettings *navigation_settings) {
+    navigation->settings = *navigation_settings;
 
     navigation->turned = false;
     navigation->moved = false;
@@ -167,45 +163,37 @@ void initNavigation(Navigation *navigation, NavigationSettings navigation_settin
     navigation->turn.left = false;
 }
 
-ViewportSettings getDefaultViewportSettings() {
-    ViewportSettings default_viewport_settings;
-
-    default_viewport_settings.near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
-    default_viewport_settings.far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
-    default_viewport_settings.hud_line_count = 0;
-    default_viewport_settings.show_hud = false;
-
-    return default_viewport_settings;
+void setDefaultViewportSettings(ViewportSettings *settings) {
+    settings->near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
+    settings->far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
+    settings->hud_line_count = 0;
+    settings->hud_lines = null;
+    settings->show_hud = false;
 }
 
 void initViewport(Viewport *viewport,
-                  ViewportSettings viewport_settings,
-                  NavigationSettings navigation_settings,
+                  ViewportSettings *viewport_settings,
+                  NavigationSettings *navigation_settings,
                   Camera *camera,
-                  PixelGrid *frame_buffer,
-                  HUDLine *hud_lines,
-                  u32 hud_line_count) {
+                  PixelGrid *frame_buffer) {
     viewport->camera = camera;
-    viewport->settings = viewport_settings;
+    viewport->settings = *viewport_settings;
     viewport->frame_buffer = frame_buffer;
-    initHUD(&viewport->hud, hud_lines, hud_line_count, 1, 0, 0);
+    initHUD(&viewport->hud, viewport_settings->hud_lines, viewport_settings->hud_line_count, 1, 0, 0);
     initNavigation(&viewport->navigation, navigation_settings);
 }
 
-SceneSettings getDefaultSceneSettings() {
-    SceneSettings settings;
-
-    settings.cameras = 1;
-    settings.primitives = 0;
-    settings.meshes = 0;
-    settings.curves = 0;
-    settings.boxes = 0;
-    settings.grids = 0;
-    settings.mesh_files = null;
-    settings.file.char_ptr = null;
-    settings.file.length = 0;
-
-    return settings;
+void setDefaultSceneSettings(SceneSettings *settings) {
+    settings->cameras = 1;
+    settings->primitives = 0;
+    settings->meshes = 0;
+    settings->curves = 0;
+    settings->boxes = 0;
+    settings->grids = 0;
+    settings->mesh_files = null;
+    settings->file.char_ptr = null;
+    settings->file.length = 0;
+    settings->autoload = false;
 }
 
 void initCurve(Curve *curve) {

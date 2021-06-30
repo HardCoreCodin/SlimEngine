@@ -209,8 +209,10 @@ void onKeyChanged(u8 key, bool is_pressed) {
         scene_io_time = app->time.getTicks();
     }
 }
+
 String file_paths[2];
 char string_buffers[3][100];
+
 void initApp(Defaults *defaults) {
     String *scene_file = &defaults->settings.scene.file;
     String *mesh_file1 = &file_paths[0];
@@ -223,8 +225,6 @@ void initApp(Defaults *defaults) {
     mergeString(mesh_file2, __FILE__, "dragon.mesh",  offset);
     mergeString(scene_file, __FILE__, "this.scene",   offset);
     defaults->settings.scene.mesh_files = file_paths;
-    defaults->additional_memory_size  = Megabytes(3);
-    defaults->additional_memory_size += Kilobytes(64);
     defaults->settings.scene.meshes     = 2;
     defaults->settings.scene.boxes      = 1;
     defaults->settings.scene.grids      = 1;

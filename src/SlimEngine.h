@@ -648,8 +648,9 @@ typedef struct ProjectionPlane {
 
 typedef struct ViewportSettings {
     f32 near_clipping_plane_distance,
-        far_clipping_plane_distance;
+            far_clipping_plane_distance;
     u32 hud_line_count;
+    HUDLine *hud_lines;
     bool show_hud;
 } ViewportSettings;
 
@@ -709,6 +710,7 @@ typedef struct Selection {
 typedef struct SceneSettings {
     u32 cameras, primitives, meshes, curves, boxes, grids;
     String file, *mesh_files;
+    bool autoload;
 } SceneSettings;
 
 typedef struct Scene {
@@ -949,23 +951,19 @@ void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, i32 posi
             lines[i].value_color = lines[i].title_color = White;
 }
 
-NavigationSettings getDefaultNavigationSettings() {
-    NavigationSettings navigation_settings;
-
-    navigation_settings.max_velocity  = NAVIGATION_DEFAULT__MAX_VELOCITY;
-    navigation_settings.acceleration  = NAVIGATION_DEFAULT__ACCELERATION;
-    navigation_settings.speeds.turn   = NAVIGATION_SPEED_DEFAULT__TURN;
-    navigation_settings.speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
-    navigation_settings.speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
-    navigation_settings.speeds.zoom   = NAVIGATION_SPEED_DEFAULT__ZOOM;
-    navigation_settings.speeds.dolly  = NAVIGATION_SPEED_DEFAULT__DOLLY;
-    navigation_settings.speeds.pan    = NAVIGATION_SPEED_DEFAULT__PAN;
-
-    return navigation_settings;
+void setDefaultNavigationSettings(NavigationSettings *settings) {
+    settings->max_velocity  = NAVIGATION_DEFAULT__MAX_VELOCITY;
+    settings->acceleration  = NAVIGATION_DEFAULT__ACCELERATION;
+    settings->speeds.turn   = NAVIGATION_SPEED_DEFAULT__TURN;
+    settings->speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
+    settings->speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
+    settings->speeds.zoom   = NAVIGATION_SPEED_DEFAULT__ZOOM;
+    settings->speeds.dolly  = NAVIGATION_SPEED_DEFAULT__DOLLY;
+    settings->speeds.pan    = NAVIGATION_SPEED_DEFAULT__PAN;
 }
 
-void initNavigation(Navigation *navigation, NavigationSettings navigation_settings) {
-    navigation->settings = navigation_settings;
+void initNavigation(Navigation *navigation, NavigationSettings *navigation_settings) {
+    navigation->settings = *navigation_settings;
 
     navigation->turned = false;
     navigation->moved = false;
@@ -982,45 +980,37 @@ void initNavigation(Navigation *navigation, NavigationSettings navigation_settin
     navigation->turn.left = false;
 }
 
-ViewportSettings getDefaultViewportSettings() {
-    ViewportSettings default_viewport_settings;
-
-    default_viewport_settings.near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
-    default_viewport_settings.far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
-    default_viewport_settings.hud_line_count = 0;
-    default_viewport_settings.show_hud = false;
-
-    return default_viewport_settings;
+void setDefaultViewportSettings(ViewportSettings *settings) {
+    settings->near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
+    settings->far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
+    settings->hud_line_count = 0;
+    settings->hud_lines = null;
+    settings->show_hud = false;
 }
 
 void initViewport(Viewport *viewport,
-                  ViewportSettings viewport_settings,
-                  NavigationSettings navigation_settings,
+                  ViewportSettings *viewport_settings,
+                  NavigationSettings *navigation_settings,
                   Camera *camera,
-                  PixelGrid *frame_buffer,
-                  HUDLine *hud_lines,
-                  u32 hud_line_count) {
+                  PixelGrid *frame_buffer) {
     viewport->camera = camera;
-    viewport->settings = viewport_settings;
+    viewport->settings = *viewport_settings;
     viewport->frame_buffer = frame_buffer;
-    initHUD(&viewport->hud, hud_lines, hud_line_count, 1, 0, 0);
+    initHUD(&viewport->hud, viewport_settings->hud_lines, viewport_settings->hud_line_count, 1, 0, 0);
     initNavigation(&viewport->navigation, navigation_settings);
 }
 
-SceneSettings getDefaultSceneSettings() {
-    SceneSettings settings;
-
-    settings.cameras = 1;
-    settings.primitives = 0;
-    settings.meshes = 0;
-    settings.curves = 0;
-    settings.boxes = 0;
-    settings.grids = 0;
-    settings.mesh_files = null;
-    settings.file.char_ptr = null;
-    settings.file.length = 0;
-
-    return settings;
+void setDefaultSceneSettings(SceneSettings *settings) {
+    settings->cameras = 1;
+    settings->primitives = 0;
+    settings->meshes = 0;
+    settings->curves = 0;
+    settings->boxes = 0;
+    settings->grids = 0;
+    settings->mesh_files = null;
+    settings->file.char_ptr = null;
+    settings->file.length = 0;
+    settings->autoload = false;
 }
 
 void initCurve(Curve *curve) {
@@ -3013,6 +3003,34 @@ void drawBox(Viewport *viewport, RGBA color, Box *box, Primitive *primitive, u8 
     }
 }
 
+u32 getMeshMemorySize(Mesh *mesh, char *file_path, Platform *platform) {
+    void *file = platform->openFileForReading(file_path);
+
+    platform->readFromFile(&mesh->aabb,           sizeof(AABB), file);
+    platform->readFromFile(&mesh->vertex_count,   sizeof(u32),  file);
+    platform->readFromFile(&mesh->triangle_count, sizeof(u32),  file);
+    platform->readFromFile(&mesh->edge_count,     sizeof(u32),  file);
+    platform->readFromFile(&mesh->uvs_count,      sizeof(u32),  file);
+    platform->readFromFile(&mesh->normals_count,  sizeof(u32),  file);
+
+    u32 memory_size = sizeof(vec3) * mesh->vertex_count;
+    memory_size += sizeof(TriangleVertexIndices) * mesh->triangle_count;
+    memory_size += sizeof(EdgeVertexIndices) * mesh->edge_count;
+
+    if (mesh->uvs_count) {
+        memory_size += sizeof(vec2) * mesh->uvs_count;
+        memory_size += sizeof(TriangleVertexIndices) * mesh->triangle_count;
+    }
+    if (mesh->normals_count) {
+        memory_size += sizeof(vec3) * mesh->normals_count;
+        memory_size += sizeof(TriangleVertexIndices) * mesh->triangle_count;
+    }
+
+    platform->closeFile(file);
+
+    return memory_size;
+}
+
 void loadMeshFromFile(Mesh *mesh, char* file_path, Platform *platform, Memory *memory) {
     void *file = platform->openFileForReading(file_path);
 
@@ -3895,29 +3913,42 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     defaults->width = 480;
     defaults->height = 360;
     defaults->additional_memory_size = 0;
-    defaults->settings.scene      = getDefaultSceneSettings();
-    defaults->settings.viewport   = getDefaultViewportSettings();
-    defaults->settings.navigation = getDefaultNavigationSettings();
+
+    SceneSettings *scene_settings = &defaults->settings.scene;
+    ViewportSettings *viewport_settings = &defaults->settings.viewport;
+    NavigationSettings *navigation_settings = &defaults->settings.navigation;
+
+    setDefaultSceneSettings(scene_settings);
+    setDefaultViewportSettings(viewport_settings);
+    setDefaultNavigationSettings(navigation_settings);
 
     initApp(defaults);
-    initAppMemory(defaults->additional_memory_size +
-                  defaults->settings.scene.primitives * sizeof(Primitive) +
-                  defaults->settings.scene.curves * sizeof(Curve) +
-                  defaults->settings.scene.boxes * sizeof(Box) +
-                  defaults->settings.scene.grids * sizeof(Grid) +
-                  defaults->settings.scene.cameras * sizeof(Camera) +
-                  defaults->settings.viewport.hud_line_count * sizeof(HUDLine));
+    u32 memory_size = defaults->additional_memory_size;
+    memory_size += scene_settings->primitives * sizeof(Primitive);
+    memory_size += scene_settings->meshes     * sizeof(Mesh);
+    memory_size += scene_settings->curves     * sizeof(Curve);
+    memory_size += scene_settings->boxes      * sizeof(Box);
+    memory_size += scene_settings->grids      * sizeof(Grid);
+    memory_size += scene_settings->cameras    * sizeof(Camera);
+    memory_size += viewport_settings->hud_line_count * sizeof(HUDLine);
+    if (scene_settings->meshes && scene_settings->mesh_files) {
+        Mesh mesh;
+        for (u32 i = 0; i < scene_settings->meshes; i++)
+            memory_size +=  getMeshMemorySize(&mesh, scene_settings->mesh_files[i].char_ptr, &app->platform);
+    }
+
+    initAppMemory(memory_size);
     initScene(&app->scene, defaults->settings.scene, &app->memory, &app->platform);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
-    HUDLine *hud_lines = defaults->settings.viewport.hud_line_count ?
-                         allocateAppMemory(defaults->settings.viewport.hud_line_count * sizeof(HUDLine)) : null;
+
+    if (viewport_settings->hud_line_count)
+        viewport_settings->hud_lines = allocateAppMemory(viewport_settings->hud_line_count * sizeof(HUDLine));
+
     initViewport(&app->viewport,
-                 defaults->settings.viewport,
-                 defaults->settings.navigation,
+                 viewport_settings,
+                 navigation_settings,
                  app->scene.cameras,
-                 &app->window_content,
-                 hud_lines,
-                 defaults->settings.viewport.hud_line_count);
+                 &app->window_content);
     if (app->on.viewportReady) app->on.viewportReady(&app->viewport);
 }
 

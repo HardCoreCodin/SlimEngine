@@ -95,11 +95,11 @@ Well documented example applications cover the features:<br>
   <img src="src/examples/6_mesh_instancing.gif" alt="6_mesh_instancing" height="360"><br>
   A mesh can have multiple instances, each with their own transformation and colors.<br>
   Simply have multiple mesh primitives all set with same mesh id.<br>
+  Memory is allocated automatically for the meshes by reading their headers before loading.<br>
   <p float="left">
     <img src="src/examples/6_mesh_drawing_c.png" alt="6_mesh_drawing_code" width="350">
     <img src="src/examples/6_mesh_setup_c.png" alt="6_mesh_setup_code" width="350">
   </p>
-  The app's memory capacity can be increased for the allocation of memory for the meshes.<br>
 
 * Scene: Saving to and loading from `.scene` files<br>
   <img src="src/examples/7_scene.gif" alt="7_scene" height="360"><br>

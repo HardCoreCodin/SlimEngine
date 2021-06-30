@@ -213,6 +213,7 @@ typedef struct ViewportSettings {
     f32 near_clipping_plane_distance,
         far_clipping_plane_distance;
     u32 hud_line_count;
+    HUDLine *hud_lines;
     bool show_hud;
 } ViewportSettings;
 
@@ -272,6 +273,7 @@ typedef struct Selection {
 typedef struct SceneSettings {
     u32 cameras, primitives, meshes, curves, boxes, grids;
     String file, *mesh_files;
+    bool autoload;
 } SceneSettings;
 
 typedef struct Scene {
