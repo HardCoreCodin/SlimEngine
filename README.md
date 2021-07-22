@@ -5,9 +5,8 @@ A bare-bone application executable on Windows measures at around 17 KB(!)<br>
 Strong emphasis on simplicity, ease of use and virtually no setup to get started with.<br>  
 Available as either a single header file, or a directory of headers (a "unity build").<br>
 Written in plain C and can be complied in either C or C++.<br>
-
-This project uses [SlimApp](https://github.com/HardCoreCodin/SlimApp) as it's base platform/application layer(s).
-An example of a project that is using this one as it's base is [SlimTracin](https://github.com/HardCoreCodin/SlimTracin)
+This project uses [SlimApp](https://github.com/HardCoreCodin/SlimApp) as it's base platform/application layer(s)..<br>
+An example of a project that is using this one as it's base is [SlimTracin](https://github.com/HardCoreCodin/SlimTracin).<br>
 
 Architecture:
 -
