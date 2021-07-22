@@ -1,4 +1,4 @@
-# SlimEngine
+<img src="SlimEngine_logo.png" alt="SlimEngine_logo"><br>
 
 A minimalist and platform-agnostic base project for interactive graphical applications (2D/3D)<br>
 A bare-bone application executable on Windows measures at around 17 KB(!)<br>
