@@ -108,8 +108,8 @@ void* allocateAppMemory(u64 size) {
     return null;
 }
 
-void initScene(Scene *scene, SceneSettings settings, Memory *memory, Platform *platform) {
-    scene->settings = settings;
+void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *platform) {
+    scene->settings   = *settings;
     scene->primitives = null;
     scene->cameras    = null;
     scene->curves     = null;
@@ -117,50 +117,57 @@ void initScene(Scene *scene, SceneSettings settings, Memory *memory, Platform *p
     scene->grids      = null;
     scene->meshes     = null;
 
-    scene->selection.object_type = scene->selection.object_id = 0;
-    scene->selection.changed = false;
+    scene->selection = (Selection*)allocateMemory(memory, sizeof(Selection));
+    scene->selection->object_type = scene->selection->object_id = 0;
+    scene->selection->changed = false;
 
-    if (settings.meshes && settings.mesh_files) {
-        scene->meshes = allocateMemory(memory, sizeof(Mesh) * scene->settings.meshes);
-        for (u32 i = 0; i < settings.meshes; i++)
-            loadMeshFromFile(&scene->meshes[i], settings.mesh_files[i].char_ptr, platform, memory);
+    if (settings->meshes && settings->mesh_files) {
+        scene->meshes = allocateMemory(memory, sizeof(Mesh) * settings->meshes);
+        for (u32 i = 0; i < settings->meshes; i++)
+            loadMeshFromFile(&scene->meshes[i], settings->mesh_files[i].char_ptr, platform, memory);
     }
 
-    if (settings.cameras) {
-        scene->cameras = allocateMemory(memory, sizeof(Camera) * settings.cameras);
+    if (settings->cameras) {
+        scene->cameras = allocateMemory(memory, sizeof(Camera) * settings->cameras);
         if (scene->cameras)
-            for (u32 i = 0; i < settings.cameras; i++)
+            for (u32 i = 0; i < settings->cameras; i++)
                 initCamera(scene->cameras + i);
     }
 
-    if (settings.primitives) {
-        scene->primitives = allocateMemory(memory, sizeof(Primitive) * settings.primitives);
+    if (settings->primitives) {
+        scene->primitives = allocateMemory(memory, sizeof(Primitive) * settings->primitives);
         if (scene->primitives)
-            for (u32 i = 0; i < settings.primitives; i++)
+            for (u32 i = 0; i < settings->primitives; i++) {
                 initPrimitive(scene->primitives + i);
+                scene->primitives[i].id = i;
+            }
     }
 
-    if (settings.curves) {
-        scene->curves = allocateMemory(memory, sizeof(Curve) * settings.curves);
+    if (settings->curves) {
+        scene->curves = allocateMemory(memory, sizeof(Curve) * settings->curves);
         if (scene->curves)
-            for (u32 i = 0; i < settings.curves; i++)
+            for (u32 i = 0; i < settings->curves; i++)
                 initCurve(scene->curves + i);
     }
 
-    if (settings.boxes) {
-        scene->boxes = allocateMemory(memory, sizeof(Box) * settings.boxes);
+    if (settings->boxes) {
+        scene->boxes = allocateMemory(memory, sizeof(Box) * settings->boxes);
         if (scene->boxes)
-            for (u32 i = 0; i < settings.boxes; i++)
+            for (u32 i = 0; i < settings->boxes; i++)
                 initBox(scene->boxes + i);
     }
 
-    if (settings.grids) {
-        scene->grids = allocateMemory(memory, sizeof(Grid) * settings.grids);
+    if (settings->grids) {
+        scene->grids = allocateMemory(memory, sizeof(Grid) * settings->grids);
         if (scene->grids)
-            for (u32 i = 0; i < settings.grids; i++)
+            for (u32 i = 0; i < settings->grids; i++)
                 initGrid(scene->grids + i, 3, 3);
     }
+
+    scene->last_io_ticks = 0;
+    scene->last_io_is_save = false;
 }
+
 
 void _initApp(Defaults *defaults, void* window_content_memory) {
     app->is_running = true;
@@ -197,7 +204,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     setDefaultNavigationSettings(navigation_settings);
 
     initApp(defaults);
-    u32 memory_size = defaults->additional_memory_size;
+    u64 memory_size = sizeof(Selection) + defaults->additional_memory_size;
     memory_size += scene_settings->primitives * sizeof(Primitive);
     memory_size += scene_settings->meshes     * sizeof(Mesh);
     memory_size += scene_settings->curves     * sizeof(Curve);
@@ -212,7 +219,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     }
 
     initAppMemory(memory_size);
-    initScene(&app->scene, defaults->settings.scene, &app->memory, &app->platform);
+    initScene(&app->scene, scene_settings, &app->memory, &app->platform);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
 
     if (viewport_settings->hud_line_count)
@@ -226,4 +233,8 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     if (app->on.viewportReady) app->on.viewportReady(&app->viewport);
 }
 
+#ifdef __linux__
+//linux code goes here
+#elif _WIN32
 #include "./platforms/win32.h"
+#endif

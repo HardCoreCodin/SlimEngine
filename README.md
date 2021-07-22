@@ -1,13 +1,13 @@
 # SlimEngine
 
 A minimalist and platform-agnostic base project for interactive graphical applications (2D/3D)<br>
-with a strong emphasis on simplicity, ease of use and almost no setup to get started with.<br>  
+A bare-bone application executable on Windows measures at around 17 KB(!)<br>
+Strong emphasis on simplicity, ease of use and virtually no setup to get started with.<br>  
 Available as either a single header file, or a directory of headers (a "unity build").<br>
 Written in plain C and can be complied in either C or C++.<br>
 
 This project uses [SlimApp](https://github.com/HardCoreCodin/SlimApp) as it's base platform/application layer(s).
-
-<i>(*A bare-bone application executable on Windows measures at around 17 KB(!))<br></i>
+An example of a project that is using this one as it's base is [SlimTracin](https://github.com/HardCoreCodin/SlimTracin)
 
 Architecture:
 -
@@ -32,7 +32,7 @@ Additional features include basic facilities needed in interactive 3D applicatio
 * Scene selection and interactive transformations (moving, rotating and scaling).
 
 Well documented example applications cover the features:<br>
-* Viewport: HUD (Head-UP Display)<br>
+* <b><u>Viewport</b>:</u> Head-Up Display (a.k.a: HUD)<br>
   <img src="src/examples/1_viewport_HUD.gif" alt="1_viewport_HUD" height="360"><br>
   Viewports come with a HUD that can be toggled on/off<br>
   SlimEngine comes with an empty scene, apart from a default camera bound to a default viewport.<br>
@@ -46,7 +46,7 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/1_viewport_setup_c.png" alt="1_viewport_setup_code" height="300">  
   </p>
   
-* Viewport: Navigation<br>
+* <b><u>Viewport</b>:</u> Navigation<br>
   <img src="src/examples/2_navigation.gif" alt="1_scene" height="360"><br>
   Viewport navigation actions can be composed to set-up WASD(FPS)/DCC(orb) navigation style(s).<br>
   Keyboard navigation is agnostic to key-binding and is trivial to map keys to.<br>
@@ -58,7 +58,7 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/2_navigation_mouse_c.png" alt="2_navigation_mouse_code" height="300">
   </p>
 
-* Cameras: Viewport binding<br>
+* <b><u>Cameras</b>:</u> Viewport binding<br>
   <img src="src/examples/3_cameras.gif" alt="1_scene" height="360"><br>
   The scene can have any number of cameras which can be bound to any viewport dynamically.<br>
   The camera can be drawn as part of the drawing of the scene<br>
@@ -67,7 +67,7 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/3_cameras_setup_c.png" alt="3_cameras_setup_code" height="260">
   </p>
 
-* Shapes: Setup and drawing parametric primitives (Grid, Box, Curves, etc.)<br>
+* <b><u>Shapes</b>:</u> Setup and drawing parametric primitives (Grid, Box, Curves, etc.)<br>
   <img src="src/examples/4_shapes_rotating.gif" alt="1_scene" height="360"><br>
   SlimEngine allocates and initializes the scene based on quantities set at app-initialization time.<br>
   Wireframe drawing of the scene to the viewport can be set-up to occur on window-redraw.<br>  
@@ -76,7 +76,7 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/4_shapes_viewport_drawing_c.png" alt="4_scene_viewport_drawing_code" height="300">
   </p>
 
-* Scene: Object selection and manipulation (Translation, Rotation and Scale)<br>
+* <b><u>Scene</b>:</u> Object selection and manipulation (Translation, Rotation and Scale)<br>
   <p float="left">
     <img src="src/examples/5_manipulation_along_screen.gif" alt="5_manipulation_along_screen" height="300">
     <img src="src/examples/5_manipulation_along_axis_shapes.gif" alt="5_manipulation_along_axis_shapes" height="300">
@@ -88,7 +88,7 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/5_manipulation_scene_setup_c.png" alt="4_manipulation_scene_setup_code" width="350">
   </p>
   
-* Scene: Mesh loading from file, instancing and wire-frame drawing<br>
+* <b><u>Scene</b>:</u> Mesh loading from file, instancing and wire-frame drawing<br>
   <img src="src/examples/6_mesh_with_normals.gif" alt="6_mesh_with_normals" height="360"><br>
   Meshes can be loaded from binary files, with vertex positions, normals and texture coordinates.<br>
   They can be moves and transformed just like any other kind of primitive.<br>
@@ -101,7 +101,7 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/6_mesh_setup_c.png" alt="6_mesh_setup_code" width="350">
   </p>
 
-* Scene: Saving to and loading from `.scene` files<br>
+* <b><u>Scene</b>:</u> Saving to and loading from `.scene` files<br>
   <img src="src/examples/7_scene.gif" alt="7_scene" height="360"><br>
   Scenes can be saved to a file and later loaded back in-place.
   <p float="left">
@@ -109,7 +109,48 @@ Well documented example applications cover the features:<br>
     <img src="src/examples/7_scene_message_c.png" alt="7_scene_message_code" width="350">
   </p>
 
-* obj2mesh: Also privided is a separate CLI tool for converting `.obj` files to `.mesh` files.<br>
+* <b><u>obj2mesh</b>:</u> Also privided is a separate CLI tool for converting `.obj` files to `.mesh` files.<br>
   It is also written in plain C, so should compile with either C or C++.<br>
-  Usage is simple: `./obj2mesh my_obj_file.obj my_mesh_file.mesh`
-  
+  Usage is simple: `./obj2mesh my_obj_file.obj my_mesh_file.mesh`<br>
+
+<b>SlimEngine</b> does not come with any GUI functionality at this point.<br>
+Some example apps have an optional HUD (heads up display) that shows additional information.<br>
+It can be toggled on or off using the`tab` key.<br>
+
+All examples are interactive using <b>SlimEngine</b>'s facilities having 2 interaction modes:
+1. FPS navigation (WASD + mouse look + zooming)<br>
+2. DCC application (default)<br>
+
+Double clicking the `left mouse button` anywhere within the window toggles between these 2 modes.<btr>
+
+Entering FPS mode captures the mouse movement for the window and hides the cursor.<br>
+Navigation is then as in a typical first-person game (plus lateral movement and zooming):<br>
+
+Move the `mouse` to freely look around (even if the cursor would leave the window border)<br>
+Scroll the `mouse wheel` to zoom in and out (changes the field of view of the perspective)<br>
+Hold `W` to move forward<br>
+Hold `S` to move backward<br>
+Hold `A` to move left<br>
+Hold `D` to move right<br>
+Hold `R` to move up<br>
+Hold `F` to move down<br>
+
+Exit this mode by double clicking the `left mouse button`.
+
+The default interaction mode is similar to a typical DCC application (i.e: Maya):<br>
+The mouse is not captured to the window and the cursor is visible.<br>
+Holding the `right mouse button` and dragging the mouse orbits the camera around a target.<br>
+Holding the `middle mouse button` and dragging the mouse pans the camera (left, right, up and down).<br>
+Scrolling the `mouse wheel` dollys the camera forward and backward.<br>
+
+Clicking the `left mouse button` selects an object in the scene that is under the cursor.<br>
+Holding the `left mouse button` while hovering an object and then dragging the mouse,<br>
+moves the object parallel to the screen.<br>
+
+Holding `alt` highlights the currently selecte object by drawing a bounding box around it.<br>
+While `alt` is still held, if the cursor hovers the selected object's bounding box,<br>
+mouse interaction transforms the object along the plane of the bounding box that the cursor hovers on:<br>
+Holding the `left mouse button` and dragging the mouse moves the object.<br>
+Holding the `right mouse button` and dragging the mouse rotates the object.<br>
+Holding the `middle mouse button` and dragging the mouse scales the object.<br>
+<i>(`mouse wheel` interaction is disabled while `alt` is held)</i><br>

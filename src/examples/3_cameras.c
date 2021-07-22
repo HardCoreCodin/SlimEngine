@@ -7,8 +7,7 @@
 // #include "../SlimEngine.h"
 
 void onButtonDown(MouseButton *mouse_button) {
-    app->controls.mouse.pos_raw_diff.x = 0;
-    app->controls.mouse.pos_raw_diff.y = 0;
+    app->controls.mouse.pos_raw_diff = Vec2i(0, 0);
 }
 void onDoubleClick(MouseButton *mouse_button) {
     if (mouse_button == &app->controls.mouse.left_button) {
@@ -20,6 +19,7 @@ void onDoubleClick(MouseButton *mouse_button) {
 }
 void updateViewport(Viewport *viewport, Mouse *mouse) {
     if (mouse->is_captured) {
+        navigateViewport(viewport, app->time.timers.update.delta_time);
         if (mouse->moved)         orientViewport(viewport, mouse);
         if (mouse->wheel_scrolled)  zoomViewport(viewport, mouse);
     } else {
@@ -30,16 +30,6 @@ void updateViewport(Viewport *viewport, Mouse *mouse) {
         }
     }
 }
-void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer, Color(Black));
-
-    Primitive *prim = &scene->primitives[0];
-    drawGrid(viewport, Color(prim->color), scene->grids, prim);
-
-    u8 camera_id = viewport->camera == scene->cameras ? 1 : 0;
-    Camera *camera = &scene->cameras[camera_id];
-    drawCamera(viewport, Color(camera_id ? Yellow : Cyan), camera);
-}
 void updateAndRender() {
     Timer *timer = &app->time.timers.update;
     Scene *scene = &app->scene;
@@ -49,11 +39,20 @@ void updateAndRender() {
     startFrameTimer(timer);
 
     updateViewport(viewport, mouse);
-    navigateViewport(viewport, timer->delta_time);
 
-    drawSceneToViewport(scene, viewport);
+    fillPixelGrid(viewport->frame_buffer, Color(Black));
+
+    Primitive *prim = &scene->primitives[0];
+    drawGrid(viewport, Color(prim->color), scene->grids, prim);
+
+    Camera *camera1 = &scene->cameras[0];
+    Camera *camera2 = &scene->cameras[1];
+    if (viewport->camera == camera1)
+        drawCamera(viewport, Color(Yellow), camera2);
+    else
+        drawCamera(viewport, Color(Cyan  ), camera1);
+
     resetMouseChanges(mouse);
-
     endFrameTimer(timer);
 }
 void onKeyChanged(u8 key, bool is_pressed) {
@@ -72,30 +71,27 @@ void onKeyChanged(u8 key, bool is_pressed) {
 void setupScene(Scene *scene) {
     Primitive *grid_primitive = &scene->primitives[0];
     grid_primitive->type = PrimitiveType_Grid;
-    grid_primitive->scale.x = grid_primitive->scale.z = 5;
+    grid_primitive->scale = Vec3(5, 1, 5);
     grid_primitive->position.z = 5;
     rotatePrimitive(grid_primitive, 0.5f, 0, 0);
-    initGrid(scene->grids,11, 11);
-    xform3 *xf = &scene->cameras[1].transform;
-    xf->position.y = 6;
-    xf->position.z = 21;
-    rotateXform3(xf, 8, -0.1f, 0);
+    initGrid(&scene->grids[0],11, 11);
+
+    xform3 *camera_xform = &scene->cameras[0].transform;
+    camera_xform->position = Vec3(0, 7, -11);
+    rotateXform3(camera_xform, 0, -0.2f, 0);
+
+    camera_xform = &scene->cameras[1].transform;
+    camera_xform->position = Vec3(0, 6, 21);
+    rotateXform3(camera_xform, 8, -0.1f, 0);
     zoomCamera(&scene->cameras[1], -2);
-}
-void setupCamera(Viewport *viewport) {
-    xform3 *xf = &viewport->camera->transform;
-    xf->position.y = 7;
-    xf->position.z = -11;
-    rotateXform3(xf, 0, -0.2f, 0);
 }
 void initApp(Defaults *defaults) {
     defaults->settings.scene.cameras    = 2;
     defaults->settings.scene.grids      = 1;
     defaults->settings.scene.primitives = 1;
+    app->on.sceneReady    = setupScene;
+    app->on.windowRedraw  = updateAndRender;
     app->on.keyChanged               = onKeyChanged;
     app->on.mouseButtonDown          = onButtonDown;
     app->on.mouseButtonDoubleClicked = onDoubleClick;
-    app->on.windowRedraw  = updateAndRender;
-    app->on.sceneReady    = setupScene;
-    app->on.viewportReady = setupCamera;
 }

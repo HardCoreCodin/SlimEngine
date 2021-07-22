@@ -2,6 +2,14 @@
 
 #include "./types.h"
 
+void initNumberString(NumberString *number_string) {
+    number_string->string.char_ptr = number_string->_buffer;
+    number_string->string.length = 1;
+    number_string->_buffer[11] = 0;
+    for (u8 i = 0; i < 11; i++)
+        number_string->_buffer[i] = ' ';
+}
+
 void initMouse(Mouse *mouse) {
     mouse->is_captured = false;
 
@@ -122,16 +130,60 @@ void initCamera(Camera* camera) {
     initXform3(&camera->transform);
 }
 
-void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, i32 position_x, i32 position_y) {
+void initBox(Box *box) {
+    box->vertices.corners.front_top_left.x    = -1;
+    box->vertices.corners.back_top_left.x     = -1;
+    box->vertices.corners.front_bottom_left.x = -1;
+    box->vertices.corners.back_bottom_left.x  = -1;
+
+    box->vertices.corners.front_top_right.x    = 1;
+    box->vertices.corners.back_top_right.x     = 1;
+    box->vertices.corners.front_bottom_right.x = 1;
+    box->vertices.corners.back_bottom_right.x  = 1;
+
+
+    box->vertices.corners.front_bottom_left.y  = -1;
+    box->vertices.corners.front_bottom_right.y = -1;
+    box->vertices.corners.back_bottom_left.y   = -1;
+    box->vertices.corners.back_bottom_right.y  = -1;
+
+    box->vertices.corners.front_top_left.y  = 1;
+    box->vertices.corners.front_top_right.y = 1;
+    box->vertices.corners.back_top_left.y   = 1;
+    box->vertices.corners.back_top_right.y  = 1;
+
+
+    box->vertices.corners.front_top_left.z     = 1;
+    box->vertices.corners.front_top_right.z    = 1;
+    box->vertices.corners.front_bottom_left.z  = 1;
+    box->vertices.corners.front_bottom_right.z = 1;
+
+    box->vertices.corners.back_top_left.z     = -1;
+    box->vertices.corners.back_top_right.z    = -1;
+    box->vertices.corners.back_bottom_left.z  = -1;
+    box->vertices.corners.back_bottom_right.z = -1;
+
+    setBoxEdgesFromVertices(&box->edges, &box->vertices);
+}
+
+void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, enum ColorID default_color, i32 position_x, i32 position_y) {
     hud->lines = lines;
     hud->line_count = line_count;
     hud->line_height = line_height;
     hud->position.x = position_x;
     hud->position.y = position_y;
 
-    if (lines)
-        for (u32 i = 0; i < line_count; i++)
-            lines[i].value_color = lines[i].title_color = White;
+    if (lines) {
+        HUDLine *line = lines;
+        for (u32 i = 0; i < line_count; i++, line++) {
+            line->use_alternate = null;
+            line->invert_alternate_use = false;
+            line->title_color = line->value_color = line->alternate_value_color = default_color;
+            initNumberString(&line->value);
+            line->title.char_ptr = line->alternate_value.char_ptr = (char*)("");
+            line->title.length = line->alternate_value.length = 0;
+        }
+    }
 }
 
 void setDefaultNavigationSettings(NavigationSettings *settings) {
@@ -166,6 +218,7 @@ void initNavigation(Navigation *navigation, NavigationSettings *navigation_setti
 void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
     settings->far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
+    settings->hud_default_color = White;
     settings->hud_line_count = 0;
     settings->hud_lines = null;
     settings->show_hud = false;
@@ -179,7 +232,8 @@ void initViewport(Viewport *viewport,
     viewport->camera = camera;
     viewport->settings = *viewport_settings;
     viewport->frame_buffer = frame_buffer;
-    initHUD(&viewport->hud, viewport_settings->hud_lines, viewport_settings->hud_line_count, 1, 0, 0);
+    initBox(&viewport->default_box);
+    initHUD(&viewport->hud, viewport_settings->hud_lines, viewport_settings->hud_line_count, 1, viewport_settings->hud_default_color, 0, 0);
     initNavigation(&viewport->navigation, navigation_settings);
 }
 
@@ -246,40 +300,4 @@ bool initGrid(Grid *grid, u8 u_segments, u8 v_segments) {
     setGridEdgesFromVertices(grid->edges.uv.v, grid->v_segments, grid->vertices.uv.v.from, grid->vertices.uv.v.to);
 
     return true;
-}
-
-void initBox(Box *box) {
-    box->vertices.corners.front_top_left.x    = -1;
-    box->vertices.corners.back_top_left.x     = -1;
-    box->vertices.corners.front_bottom_left.x = -1;
-    box->vertices.corners.back_bottom_left.x  = -1;
-
-    box->vertices.corners.front_top_right.x    = 1;
-    box->vertices.corners.back_top_right.x     = 1;
-    box->vertices.corners.front_bottom_right.x = 1;
-    box->vertices.corners.back_bottom_right.x  = 1;
-
-
-    box->vertices.corners.front_bottom_left.y  = -1;
-    box->vertices.corners.front_bottom_right.y = -1;
-    box->vertices.corners.back_bottom_left.y   = -1;
-    box->vertices.corners.back_bottom_right.y  = -1;
-
-    box->vertices.corners.front_top_left.y  = 1;
-    box->vertices.corners.front_top_right.y = 1;
-    box->vertices.corners.back_top_left.y   = 1;
-    box->vertices.corners.back_top_right.y  = 1;
-
-
-    box->vertices.corners.front_top_left.z     = 1;
-    box->vertices.corners.front_top_right.z    = 1;
-    box->vertices.corners.front_bottom_left.z  = 1;
-    box->vertices.corners.front_bottom_right.z = 1;
-
-    box->vertices.corners.back_top_left.z     = -1;
-    box->vertices.corners.back_top_right.z    = -1;
-    box->vertices.corners.back_bottom_left.z  = -1;
-    box->vertices.corners.back_bottom_right.z = -1;
-
-    setBoxEdgesFromVertices(&box->edges, &box->vertices);
 }

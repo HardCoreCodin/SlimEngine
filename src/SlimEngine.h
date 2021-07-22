@@ -125,6 +125,28 @@ typedef struct Rect { vec2i min, max; } Rect;
 typedef struct RGBA { u8 B, G, R, A; } RGBA;
 typedef union  Pixel { RGBA color; u32 value; } Pixel;
 
+INLINE vec2i Vec2i(i32 x, i32 y) {
+    vec2i out;
+    out.x = x;
+    out.y = y;
+    return out;
+}
+
+INLINE vec3 Vec3(f32 x, f32 y, f32 z) {
+    vec3 out;
+    out.x = x;
+    out.y = y;
+    out.z = z;
+    return out;
+}
+
+INLINE quat Quat(vec3 axis, f32 amout) {
+    quat out;
+    out.axis = axis;
+    out.amount = amout;
+    return out;
+}
+
 #define Kilobytes(value) ((value)*1024LL)
 #define Megabytes(value) (Kilobytes(value)*1024LL)
 #define Gigabytes(value) (Megabytes(value)*1024LL)
@@ -271,10 +293,14 @@ enum ColorID {
 
     Cyan,
     Magenta,
-    Yellow
+    Yellow,
+
+    DarkRed,
+    DarkGreen,
+    DarkBlue
 };
 
-RGBA Color(enum ColorID color_id) {
+INLINE RGBA Color(enum ColorID color_id) {
     RGBA color;
     color.A = MAX_COLOR_VALUE;
 
@@ -310,6 +336,22 @@ RGBA Color(enum ColorID color_id) {
             color.R = 0;
             color.G = 0;
             color.B = MAX_COLOR_VALUE;
+            break;
+
+        case DarkRed:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = 0;
+            color.B = 0;
+            break;
+        case DarkGreen:
+            color.R = 0;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = 0;
+            break;
+        case DarkBlue:
+            color.R = 0;
+            color.G = 0;
+            color.B = MAX_COLOR_VALUE/2;
             break;
 
         case Cyan:
@@ -427,9 +469,10 @@ void printNumberIntoString(i32 number, NumberString *number_string) {
 }
 
 typedef struct HUDLine {
-    String title;
+    String title, alternate_value;
     NumberString value;
-    enum ColorID title_color, value_color;
+    enum ColorID title_color, value_color, alternate_value_color;
+    bool invert_alternate_use, *use_alternate;
 } HUDLine;
 
 typedef struct HUD {
@@ -438,7 +481,6 @@ typedef struct HUD {
     f32 line_height;
     HUDLine *lines;
 } HUD;
-
 typedef struct KeyMap      { u8 ctrl, alt, shift, space, tab; } KeyMap;
 typedef struct IsPressed { bool ctrl, alt, shift, space, tab; } IsPressed;
 typedef struct Controls {
@@ -648,9 +690,10 @@ typedef struct ProjectionPlane {
 
 typedef struct ViewportSettings {
     f32 near_clipping_plane_distance,
-            far_clipping_plane_distance;
+        far_clipping_plane_distance;
     u32 hud_line_count;
     HUDLine *hud_lines;
+    enum ColorID hud_default_color;
     bool show_hud;
 } ViewportSettings;
 
@@ -661,6 +704,7 @@ typedef struct Viewport {
     HUD hud;
     Camera *camera;
     PixelGrid *frame_buffer;
+    Box default_box;
 } Viewport;
 
 typedef struct Ray {
@@ -715,13 +759,15 @@ typedef struct SceneSettings {
 
 typedef struct Scene {
     SceneSettings settings;
-    Selection selection;
+    Selection *selection;
     Camera *cameras;
     Mesh *meshes;
     Primitive *primitives;
     Curve *curves;
     Grid *grids;
     Box *boxes;
+    u64 last_io_ticks;
+    bool last_io_is_save;
 } Scene;
 
 typedef struct AppCallbacks {
@@ -939,16 +985,60 @@ void initCamera(Camera* camera) {
     initXform3(&camera->transform);
 }
 
-void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, i32 position_x, i32 position_y) {
+void initBox(Box *box) {
+    box->vertices.corners.front_top_left.x    = -1;
+    box->vertices.corners.back_top_left.x     = -1;
+    box->vertices.corners.front_bottom_left.x = -1;
+    box->vertices.corners.back_bottom_left.x  = -1;
+
+    box->vertices.corners.front_top_right.x    = 1;
+    box->vertices.corners.back_top_right.x     = 1;
+    box->vertices.corners.front_bottom_right.x = 1;
+    box->vertices.corners.back_bottom_right.x  = 1;
+
+
+    box->vertices.corners.front_bottom_left.y  = -1;
+    box->vertices.corners.front_bottom_right.y = -1;
+    box->vertices.corners.back_bottom_left.y   = -1;
+    box->vertices.corners.back_bottom_right.y  = -1;
+
+    box->vertices.corners.front_top_left.y  = 1;
+    box->vertices.corners.front_top_right.y = 1;
+    box->vertices.corners.back_top_left.y   = 1;
+    box->vertices.corners.back_top_right.y  = 1;
+
+
+    box->vertices.corners.front_top_left.z     = 1;
+    box->vertices.corners.front_top_right.z    = 1;
+    box->vertices.corners.front_bottom_left.z  = 1;
+    box->vertices.corners.front_bottom_right.z = 1;
+
+    box->vertices.corners.back_top_left.z     = -1;
+    box->vertices.corners.back_top_right.z    = -1;
+    box->vertices.corners.back_bottom_left.z  = -1;
+    box->vertices.corners.back_bottom_right.z = -1;
+
+    setBoxEdgesFromVertices(&box->edges, &box->vertices);
+}
+
+void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, enum ColorID default_color, i32 position_x, i32 position_y) {
     hud->lines = lines;
     hud->line_count = line_count;
     hud->line_height = line_height;
     hud->position.x = position_x;
     hud->position.y = position_y;
 
-    if (lines)
-        for (u32 i = 0; i < line_count; i++)
-            lines[i].value_color = lines[i].title_color = White;
+    if (lines) {
+        HUDLine *line = lines;
+        for (u32 i = 0; i < line_count; i++, line++) {
+            line->use_alternate = null;
+            line->invert_alternate_use = false;
+            line->title_color = line->value_color = line->alternate_value_color = default_color;
+            initNumberString(&line->value);
+            line->title.char_ptr = line->alternate_value.char_ptr = (char*)("");
+            line->title.length = line->alternate_value.length = 0;
+        }
+    }
 }
 
 void setDefaultNavigationSettings(NavigationSettings *settings) {
@@ -983,6 +1073,7 @@ void initNavigation(Navigation *navigation, NavigationSettings *navigation_setti
 void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
     settings->far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
+    settings->hud_default_color = White;
     settings->hud_line_count = 0;
     settings->hud_lines = null;
     settings->show_hud = false;
@@ -996,7 +1087,8 @@ void initViewport(Viewport *viewport,
     viewport->camera = camera;
     viewport->settings = *viewport_settings;
     viewport->frame_buffer = frame_buffer;
-    initHUD(&viewport->hud, viewport_settings->hud_lines, viewport_settings->hud_line_count, 1, 0, 0);
+    initBox(&viewport->default_box);
+    initHUD(&viewport->hud, viewport_settings->hud_lines, viewport_settings->hud_line_count, 1, viewport_settings->hud_default_color, 0, 0);
     initNavigation(&viewport->navigation, navigation_settings);
 }
 
@@ -1063,42 +1155,6 @@ bool initGrid(Grid *grid, u8 u_segments, u8 v_segments) {
     setGridEdgesFromVertices(grid->edges.uv.v, grid->v_segments, grid->vertices.uv.v.from, grid->vertices.uv.v.to);
 
     return true;
-}
-
-void initBox(Box *box) {
-    box->vertices.corners.front_top_left.x    = -1;
-    box->vertices.corners.back_top_left.x     = -1;
-    box->vertices.corners.front_bottom_left.x = -1;
-    box->vertices.corners.back_bottom_left.x  = -1;
-
-    box->vertices.corners.front_top_right.x    = 1;
-    box->vertices.corners.back_top_right.x     = 1;
-    box->vertices.corners.front_bottom_right.x = 1;
-    box->vertices.corners.back_bottom_right.x  = 1;
-
-
-    box->vertices.corners.front_bottom_left.y  = -1;
-    box->vertices.corners.front_bottom_right.y = -1;
-    box->vertices.corners.back_bottom_left.y   = -1;
-    box->vertices.corners.back_bottom_right.y  = -1;
-
-    box->vertices.corners.front_top_left.y  = 1;
-    box->vertices.corners.front_top_right.y = 1;
-    box->vertices.corners.back_top_left.y   = 1;
-    box->vertices.corners.back_top_right.y  = 1;
-
-
-    box->vertices.corners.front_top_left.z     = 1;
-    box->vertices.corners.front_top_right.z    = 1;
-    box->vertices.corners.front_bottom_left.z  = 1;
-    box->vertices.corners.front_bottom_right.z = 1;
-
-    box->vertices.corners.back_top_left.z     = -1;
-    box->vertices.corners.back_top_right.z    = -1;
-    box->vertices.corners.back_bottom_left.z  = -1;
-    box->vertices.corners.back_bottom_right.z = -1;
-
-    setBoxEdgesFromVertices(&box->edges, &box->vertices);
 }
 
 void initSelection(Selection *selection) {
@@ -2841,9 +2897,20 @@ void drawHUD(PixelGrid *canvas, HUD *hud) {
     i32 y = hud->position.y;
 
     HUDLine *line = hud->lines;
+    bool alt;
     for (u32 i = 0; i < hud->line_count; i++, line++) {
+        if (line->use_alternate) {
+            alt = *line->use_alternate;
+            if (line->invert_alternate_use)
+                alt = !alt;
+        } else
+            alt = false;
+
         drawText(canvas, Color(line->title_color), line->title.char_ptr, x, y);
-        drawText(canvas, Color(line->value_color), line->value.string.char_ptr, x + line->title.length * FONT_WIDTH, y);
+        drawText(canvas, Color(
+                alt ? line->alternate_value_color    : line->value_color),
+                 alt ? line->alternate_value.char_ptr : line->value.string.char_ptr,
+                 x + line->title.length * FONT_WIDTH, y);
         y += (i32)(hud->line_height * (f32)FONT_HEIGHT);
     }
 }
@@ -3553,7 +3620,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     Mouse *mouse = &controls->mouse;
     Camera *camera = viewport->camera;
     Dimensions *dimensions = &viewport->frame_buffer->dimensions;
-    Selection *selection = &scene->selection;
+    Selection *selection = scene->selection;
 
     setViewportProjectionPlane(viewport);
 
@@ -3703,7 +3770,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
 
 void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     Mouse *mouse = &controls->mouse;
-    Selection *selection = &scene->selection;
+    Selection *selection = scene->selection;
     Box *box = &selection->box;
 
     if (controls->is_pressed.alt &&
@@ -3834,8 +3901,8 @@ void* allocateAppMemory(u64 size) {
     return null;
 }
 
-void initScene(Scene *scene, SceneSettings settings, Memory *memory, Platform *platform) {
-    scene->settings = settings;
+void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *platform) {
+    scene->settings   = *settings;
     scene->primitives = null;
     scene->cameras    = null;
     scene->curves     = null;
@@ -3843,49 +3910,55 @@ void initScene(Scene *scene, SceneSettings settings, Memory *memory, Platform *p
     scene->grids      = null;
     scene->meshes     = null;
 
-    scene->selection.object_type = scene->selection.object_id = 0;
-    scene->selection.changed = false;
+    scene->selection = (Selection*)allocateMemory(memory, sizeof(Selection));
+    scene->selection->object_type = scene->selection->object_id = 0;
+    scene->selection->changed = false;
 
-    if (settings.meshes && settings.mesh_files) {
-        scene->meshes = allocateMemory(memory, sizeof(Mesh) * scene->settings.meshes);
-        for (u32 i = 0; i < settings.meshes; i++)
-            loadMeshFromFile(&scene->meshes[i], settings.mesh_files[i].char_ptr, platform, memory);
+    if (settings->meshes && settings->mesh_files) {
+        scene->meshes = allocateMemory(memory, sizeof(Mesh) * settings->meshes);
+        for (u32 i = 0; i < settings->meshes; i++)
+            loadMeshFromFile(&scene->meshes[i], settings->mesh_files[i].char_ptr, platform, memory);
     }
 
-    if (settings.cameras) {
-        scene->cameras = allocateMemory(memory, sizeof(Camera) * settings.cameras);
+    if (settings->cameras) {
+        scene->cameras = allocateMemory(memory, sizeof(Camera) * settings->cameras);
         if (scene->cameras)
-            for (u32 i = 0; i < settings.cameras; i++)
+            for (u32 i = 0; i < settings->cameras; i++)
                 initCamera(scene->cameras + i);
     }
 
-    if (settings.primitives) {
-        scene->primitives = allocateMemory(memory, sizeof(Primitive) * settings.primitives);
+    if (settings->primitives) {
+        scene->primitives = allocateMemory(memory, sizeof(Primitive) * settings->primitives);
         if (scene->primitives)
-            for (u32 i = 0; i < settings.primitives; i++)
+            for (u32 i = 0; i < settings->primitives; i++) {
                 initPrimitive(scene->primitives + i);
+                scene->primitives[i].id = i;
+            }
     }
 
-    if (settings.curves) {
-        scene->curves = allocateMemory(memory, sizeof(Curve) * settings.curves);
+    if (settings->curves) {
+        scene->curves = allocateMemory(memory, sizeof(Curve) * settings->curves);
         if (scene->curves)
-            for (u32 i = 0; i < settings.curves; i++)
+            for (u32 i = 0; i < settings->curves; i++)
                 initCurve(scene->curves + i);
     }
 
-    if (settings.boxes) {
-        scene->boxes = allocateMemory(memory, sizeof(Box) * settings.boxes);
+    if (settings->boxes) {
+        scene->boxes = allocateMemory(memory, sizeof(Box) * settings->boxes);
         if (scene->boxes)
-            for (u32 i = 0; i < settings.boxes; i++)
+            for (u32 i = 0; i < settings->boxes; i++)
                 initBox(scene->boxes + i);
     }
 
-    if (settings.grids) {
-        scene->grids = allocateMemory(memory, sizeof(Grid) * settings.grids);
+    if (settings->grids) {
+        scene->grids = allocateMemory(memory, sizeof(Grid) * settings->grids);
         if (scene->grids)
-            for (u32 i = 0; i < settings.grids; i++)
+            for (u32 i = 0; i < settings->grids; i++)
                 initGrid(scene->grids + i, 3, 3);
     }
+
+    scene->last_io_ticks = 0;
+    scene->last_io_is_save = false;
 }
 
 void _initApp(Defaults *defaults, void* window_content_memory) {
@@ -3923,7 +3996,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     setDefaultNavigationSettings(navigation_settings);
 
     initApp(defaults);
-    u32 memory_size = defaults->additional_memory_size;
+    u64 memory_size = sizeof(Selection) + defaults->additional_memory_size;
     memory_size += scene_settings->primitives * sizeof(Primitive);
     memory_size += scene_settings->meshes     * sizeof(Mesh);
     memory_size += scene_settings->curves     * sizeof(Curve);
@@ -3938,7 +4011,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     }
 
     initAppMemory(memory_size);
-    initScene(&app->scene, defaults->settings.scene, &app->memory, &app->platform);
+    initScene(&app->scene, scene_settings, &app->memory, &app->platform);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
 
     if (viewport_settings->hud_line_count)

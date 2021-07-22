@@ -214,6 +214,7 @@ typedef struct ViewportSettings {
         far_clipping_plane_distance;
     u32 hud_line_count;
     HUDLine *hud_lines;
+    enum ColorID hud_default_color;
     bool show_hud;
 } ViewportSettings;
 
@@ -224,6 +225,7 @@ typedef struct Viewport {
     HUD hud;
     Camera *camera;
     PixelGrid *frame_buffer;
+    Box default_box;
 } Viewport;
 
 typedef struct Ray {
@@ -278,13 +280,15 @@ typedef struct SceneSettings {
 
 typedef struct Scene {
     SceneSettings settings;
-    Selection selection;
+    Selection *selection;
     Camera *cameras;
     Mesh *meshes;
     Primitive *primitives;
     Curve *curves;
     Grid *grids;
     Box *boxes;
+    u64 last_io_ticks;
+    bool last_io_is_save;
 } Scene;
 
 typedef struct AppCallbacks {

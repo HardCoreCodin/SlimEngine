@@ -125,6 +125,28 @@ typedef struct Rect { vec2i min, max; } Rect;
 typedef struct RGBA { u8 B, G, R, A; } RGBA;
 typedef union  Pixel { RGBA color; u32 value; } Pixel;
 
+INLINE vec2i Vec2i(i32 x, i32 y) {
+    vec2i out;
+    out.x = x;
+    out.y = y;
+    return out;
+}
+
+INLINE vec3 Vec3(f32 x, f32 y, f32 z) {
+    vec3 out;
+    out.x = x;
+    out.y = y;
+    out.z = z;
+    return out;
+}
+
+INLINE quat Quat(vec3 axis, f32 amout) {
+    quat out;
+    out.axis = axis;
+    out.amount = amout;
+    return out;
+}
+
 #define Kilobytes(value) ((value)*1024LL)
 #define Megabytes(value) (Kilobytes(value)*1024LL)
 #define Gigabytes(value) (Megabytes(value)*1024LL)
@@ -271,10 +293,14 @@ enum ColorID {
 
     Cyan,
     Magenta,
-    Yellow
+    Yellow,
+
+    DarkRed,
+    DarkGreen,
+    DarkBlue
 };
 
-RGBA Color(enum ColorID color_id) {
+INLINE RGBA Color(enum ColorID color_id) {
     RGBA color;
     color.A = MAX_COLOR_VALUE;
 
@@ -312,6 +338,22 @@ RGBA Color(enum ColorID color_id) {
             color.B = MAX_COLOR_VALUE;
             break;
 
+        case DarkRed:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = 0;
+            color.B = 0;
+            break;
+        case DarkGreen:
+            color.R = 0;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = 0;
+            break;
+        case DarkBlue:
+            color.R = 0;
+            color.G = 0;
+            color.B = MAX_COLOR_VALUE/2;
+            break;
+
         case Cyan:
             color.R = 0;
             color.G = MAX_COLOR_VALUE;
@@ -343,9 +385,10 @@ typedef struct NumberString {
 } NumberString;
 
 typedef struct HUDLine {
-    String title;
+    String title, alternate_value;
     NumberString value;
-    enum ColorID title_color, value_color;
+    enum ColorID title_color, value_color, alternate_value_color;
+    bool invert_alternate_use, *use_alternate;
 } HUDLine;
 
 typedef struct HUD {

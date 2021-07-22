@@ -1,11 +1,11 @@
-#include "../SlimEngine/app.h"
-#include "../SlimEngine/core/time.h"
-#include "../SlimEngine/scene/xform.h"
-#include "../SlimEngine/scene/box.h"
-#include "../SlimEngine/scene/grid.h"
-#include "../SlimEngine/scene/curve.h"
+//#include "../SlimEngine/app.h"
+//#include "../SlimEngine/core/time.h"
+//#include "../SlimEngine/scene/xform.h"
+//#include "../SlimEngine/scene/box.h"
+//#include "../SlimEngine/scene/grid.h"
+//#include "../SlimEngine/scene/curve.h"
 // Or using the single-header file:
-// #include "../SlimEngine.h"
+ #include "../SlimEngine.h"
 
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     fillPixelGrid(viewport->frame_buffer, Color(Black));
@@ -68,51 +68,39 @@ void updateAndRender() {
 
     endFrameTimer(timer);
 }
-void setupViewport(Viewport *viewport) {
-    xform3 *xf = &viewport->camera->transform;
-    xf->position.y = 7;
-    xf->position.z = -11;
-    rotateXform3(xf, 0, -0.2f, 0);
-}
 void setupScene(Scene *scene) {
-    Primitive *helix_primitive = &scene->primitives[0];
-    Primitive *coil_primitive  = &scene->primitives[1];
-    Primitive *box_primitive   = &scene->primitives[2];
-    Primitive *grid_primitive  = &scene->primitives[3];
-    helix_primitive->type = PrimitiveType_Helix;
-    coil_primitive->type  = PrimitiveType_Coil;
-    grid_primitive->type  = PrimitiveType_Grid;
-    box_primitive->type   = PrimitiveType_Box;
-    box_primitive->color   = Yellow;
-    grid_primitive->color  = Green;
-    coil_primitive->color  = Magenta;
-    helix_primitive->color = Cyan;
-    box_primitive->id = grid_primitive->id = helix_primitive->id = 0;
-    helix_primitive->position.x = -3;
-    helix_primitive->position.y = 4;
-    helix_primitive->position.z = 2;
-    coil_primitive->position.x = 4;
-    coil_primitive->position.y = 4;
-    coil_primitive->position.z = 2;
-    coil_primitive->id  = 1;
-    grid_primitive->scale.x = 5;
-    grid_primitive->scale.z = 5;
+    xform3 *xf = &scene->cameras[0].transform;
+    xf->position = Vec3(0, 7, -11);
+    rotateXform3(xf, 0, -0.2f, 0);
 
-    Grid *grid = &scene->grids[0];
-    rotatePrimitive(grid_primitive, 0.5f, 0, 0);
-    initGrid(grid, 11, 11);
+    Primitive *helix = &scene->primitives[0];
+    Primitive *coil  = &scene->primitives[1];
+    Primitive *box   = &scene->primitives[2];
+    Primitive *grid  = &scene->primitives[3];
+    rotatePrimitive(grid, 0.5f, 0, 0);
+    initGrid(scene->grids, 11, 11);
 
-    Curve *helix = &scene->curves[0];
-    Curve *coil  = &scene->curves[1];
-    helix->revolution_count = 10;
-    coil->revolution_count = 30;
+    helix->type = PrimitiveType_Helix;
+    coil->type  = PrimitiveType_Coil;
+    grid->type  = PrimitiveType_Grid;
+    box->type   = PrimitiveType_Box;
+    box->color   = Yellow;
+    grid->color  = Green;
+    coil->color  = Magenta;
+    helix->color = Cyan;
+    helix->position = Vec3(-3, 4, 2);
+    coil->position  = Vec3(4, 4, 2);
+    grid->scale     = Vec3(5, 1, 5);
+    helix->id = box->id = grid->id = 0;
+    coil->id  = 1;
+    scene->curves[0].revolution_count = 10;
+    scene->curves[1].revolution_count = 30;
 }
 void initApp(Defaults *defaults) {
     defaults->settings.scene.boxes      = 1;
     defaults->settings.scene.grids      = 1;
     defaults->settings.scene.curves     = 2;
     defaults->settings.scene.primitives = 4;
-    app->on.windowRedraw  = updateAndRender;
-    app->on.viewportReady = setupViewport;
     app->on.sceneReady    = setupScene;
+    app->on.windowRedraw  = updateAndRender;
 }

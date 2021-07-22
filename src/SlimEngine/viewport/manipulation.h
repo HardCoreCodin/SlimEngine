@@ -186,7 +186,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     Mouse *mouse = &controls->mouse;
     Camera *camera = viewport->camera;
     Dimensions *dimensions = &viewport->frame_buffer->dimensions;
-    Selection *selection = &scene->selection;
+    Selection *selection = scene->selection;
 
     setViewportProjectionPlane(viewport);
 
@@ -336,7 +336,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
 
 void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     Mouse *mouse = &controls->mouse;
-    Selection *selection = &scene->selection;
+    Selection *selection = scene->selection;
     Box *box = &selection->box;
 
     if (controls->is_pressed.alt &&

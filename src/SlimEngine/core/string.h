@@ -40,14 +40,6 @@ void mergeString(String *string, char* first, char* second, u32 offset) {
     copyToString(string, second, offset);
 }
 
-void initNumberString(NumberString *number_string) {
-    number_string->string.char_ptr = number_string->_buffer;
-    number_string->string.length = 1;
-    number_string->_buffer[11] = 0;
-    for (u8 i = 0; i < 11; i++)
-        number_string->_buffer[i] = ' ';
-}
-
 void printNumberIntoString(i32 number, NumberString *number_string) {
     initNumberString(number_string);
     char *buffer = number_string->_buffer;
