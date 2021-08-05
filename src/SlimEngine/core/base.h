@@ -74,14 +74,13 @@ typedef void (*CallbackWithCharPtr)(char* str);
 
 #define TAU 6.28f
 #define SQRT3 1.73205080757f
+#define COLOR_COMPONENT_TO_FLOAT 0.00392156862f
+#define FLOAT_TO_COLOR_COMPONENT 255.0f
 
 #define MAX_COLOR_VALUE 0xFF
 
 #define MAX_WIDTH 3840
 #define MAX_HEIGHT 2160
-
-#define PIXEL_SIZE 4
-#define RENDER_SIZE Megabytes(8 * PIXEL_SIZE)
 
 #define BOX__ALL_SIDES (Top | Bottom | Left | Right | Front | Back)
 #define BOX__VERTEX_COUNT 8
@@ -123,7 +122,10 @@ typedef struct quat { vec3 axis; f32 amount; } quat;
 typedef struct Edge { vec3 from, to;  } Edge;
 typedef struct Rect { vec2i min, max; } Rect;
 typedef struct RGBA { u8 B, G, R, A; } RGBA;
-typedef union  Pixel { RGBA color; u32 value; } Pixel;
+typedef struct FloatPixel { vec3 color; f32 opacity; f64 depth; } FloatPixel;
+typedef union Pixel { RGBA color; u32 value; } Pixel;
+
+#define RENDER_SIZE ((sizeof(Pixel) + sizeof(FloatPixel) + (sizeof(f64))) * MAX_WIDTH * MAX_HEIGHT)
 
 INLINE vec2i Vec2i(i32 x, i32 y) {
     vec2i out;
@@ -239,6 +241,7 @@ void updateDimensions(Dimensions *dimensions, u16 width, u16 height) {
 typedef struct PixelGrid {
     Dimensions dimensions;
     Pixel* pixels;
+    FloatPixel* float_pixels;
 } PixelGrid;
 
 void swap(i32 *a, i32 *b) {

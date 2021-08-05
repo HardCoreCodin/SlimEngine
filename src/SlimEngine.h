@@ -74,14 +74,13 @@ typedef void (*CallbackWithCharPtr)(char* str);
 
 #define TAU 6.28f
 #define SQRT3 1.73205080757f
+#define COLOR_COMPONENT_TO_FLOAT 0.00392156862f
+#define FLOAT_TO_COLOR_COMPONENT 255.0f
 
 #define MAX_COLOR_VALUE 0xFF
 
 #define MAX_WIDTH 3840
 #define MAX_HEIGHT 2160
-
-#define PIXEL_SIZE 4
-#define RENDER_SIZE Megabytes(8 * PIXEL_SIZE)
 
 #define BOX__ALL_SIDES (Top | Bottom | Left | Right | Front | Back)
 #define BOX__VERTEX_COUNT 8
@@ -123,7 +122,10 @@ typedef struct quat { vec3 axis; f32 amount; } quat;
 typedef struct Edge { vec3 from, to;  } Edge;
 typedef struct Rect { vec2i min, max; } Rect;
 typedef struct RGBA { u8 B, G, R, A; } RGBA;
-typedef union  Pixel { RGBA color; u32 value; } Pixel;
+typedef struct FloatPixel { vec3 color; f32 opacity; f64 depth; } FloatPixel;
+typedef union Pixel { RGBA color; u32 value; } Pixel;
+
+#define RENDER_SIZE ((sizeof(Pixel) + sizeof(FloatPixel) + (sizeof(f64))) * MAX_WIDTH * MAX_HEIGHT)
 
 INLINE vec2i Vec2i(i32 x, i32 y) {
     vec2i out;
@@ -239,6 +241,7 @@ void updateDimensions(Dimensions *dimensions, u16 width, u16 height) {
 typedef struct PixelGrid {
     Dimensions dimensions;
     Pixel* pixels;
+    FloatPixel* float_pixels;
 } PixelGrid;
 
 void swap(i32 *a, i32 *b) {
@@ -694,7 +697,7 @@ typedef struct ViewportSettings {
     u32 hud_line_count;
     HUDLine *hud_lines;
     enum ColorID hud_default_color;
-    bool show_hud;
+    bool show_hud, depth_sort, antialias;
 } ViewportSettings;
 
 typedef struct Viewport {
@@ -943,14 +946,23 @@ void initTime(Time *time, GetTicks getTicks, u64 ticks_per_second) {
     time->timers.update.ticks_before = time->timers.update.ticks_of_last_report = getTicks();
 }
 
-void initPixelGrid(PixelGrid *pixel_grid, Pixel* pixels_memory) {
-    pixel_grid->pixels = pixels_memory;
+void initPixelGrid(PixelGrid *pixel_grid, void* memory) {
+    pixel_grid->pixels = (Pixel*)(memory);
+    pixel_grid->float_pixels = (FloatPixel*)(pixel_grid->pixels + MAX_WIDTH * MAX_HEIGHT);
     updateDimensions(&pixel_grid->dimensions, MAX_WIDTH, MAX_HEIGHT);
 }
 
 void fillPixelGrid(PixelGrid *pixel_grid, RGBA color) {
-    for (u32 i = 0; i < pixel_grid->dimensions.width_times_height; i++)
+    FloatPixel float_pixel;
+    float_pixel.color.x = (f32)color.R * COLOR_COMPONENT_TO_FLOAT;
+    float_pixel.color.y = (f32)color.G * COLOR_COMPONENT_TO_FLOAT;
+    float_pixel.color.z = (f32)color.B * COLOR_COMPONENT_TO_FLOAT;
+    float_pixel.opacity = 0.0f;
+    float_pixel.depth = INFINITY;
+    for (u32 i = 0; i < pixel_grid->dimensions.width_times_height; i++) {
         pixel_grid->pixels[i].color = color;
+        pixel_grid->float_pixels[i] = float_pixel;
+    }
 }
 
 void initXform3(xform3 *xform) {
@@ -1077,6 +1089,8 @@ void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->hud_line_count = 0;
     settings->hud_lines = null;
     settings->show_hud = false;
+    settings->antialias = false;
+    settings->depth_sort = false;
 }
 
 void initViewport(Viewport *viewport,
@@ -2523,30 +2537,26 @@ void projectEdge(Edge *edge, Viewport *viewport) {
     f32 focal_length = viewport->camera->focal_length;
     f32 n = viewport->settings.near_clipping_plane_distance;
 
-    bool v1_is_out = edge->from.z < n;
-    bool v2_is_out = edge->to.z   < n;
+    bool from_is_out = edge->from.z < n;
+    bool to_is_out = edge->to.z < n;
 
     // Cull:
-    if (v1_is_out &&
-        v2_is_out) {
-        edge->from = getVec3Of(-1);
-        edge->to   = getVec3Of(-1);
+    if (from_is_out && to_is_out) {
+        edge->to = edge->from = getVec3Of(-1);
         return;
     }
 
     // Clip:
-    if (v1_is_out ||
-        v2_is_out) {
-        vec3 v;
-        if (v1_is_out) {
-            v = subVec3(edge->from, edge->to);
-            v = scaleVec3(v, (edge->to.z - n) / (edge->to.z - edge->from.z));
-            edge->from = addVec3(edge->to, v);
-        } else {
-            v = subVec3(edge->to, edge->from);
-            v = scaleVec3(v, (edge->from.z - n) / (edge->from.z - edge->to.z));
-            edge->to = addVec3(edge->from, v);
-        }
+    if (from_is_out) {
+        edge->from = scaleAddVec3(
+                subVec3(edge->from, edge->to),
+                (edge->to.z - n) / (edge->to.z - edge->from.z),
+                edge->to);
+    } else if (to_is_out) {
+        edge->to = scaleAddVec3(
+                subVec3(edge->to, edge->from),
+                (edge->from.z - n) / (edge->from.z - edge->to.z),
+                edge->from);
     }
 
     // Project:
@@ -2805,13 +2815,270 @@ void drawLine2D(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
     }
 }
 
+INLINE void setPixel(PixelGrid *canvas, RGBA color, f32 opacity, i32 x, i32 y, f64 z) {
+    if (!inRange(y, canvas->dimensions.height, 0) ||
+    !inRange(x, canvas->dimensions.width, 0))
+        return;
+
+    i32 index = canvas->dimensions.width * y + x;
+    FloatPixel pixel, foreground, background = canvas->float_pixels[index];
+    foreground.depth = z;
+    foreground.opacity = opacity;
+    foreground.color.x = (f32)color.R;
+    foreground.color.y = (f32)color.G;
+    foreground.color.z = (f32)color.B;
+    foreground.color = scaleVec3(foreground.color, foreground.opacity * COLOR_COMPONENT_TO_FLOAT);
+
+    if (foreground.depth > background.depth) {
+        pixel = foreground;
+        foreground = background;
+        background = pixel;
+    }
+
+    opacity = 1.0f - foreground.opacity;
+    pixel.color = scaleAddVec3(background.color, opacity, foreground.color);
+    pixel.opacity = foreground.opacity + background.opacity * opacity;
+    pixel.depth = foreground.depth;
+
+    canvas->float_pixels[index] = pixel;
+    canvas->pixels[index].color.R = (u8)((pixel.color.x > 1 ? 1 : pixel.color.x) * FLOAT_TO_COLOR_COMPONENT);
+    canvas->pixels[index].color.G = (u8)((pixel.color.y > 1 ? 1 : pixel.color.y) * FLOAT_TO_COLOR_COMPONENT);
+    canvas->pixels[index].color.B = (u8)((pixel.color.z > 1 ? 1 : pixel.color.z) * FLOAT_TO_COLOR_COMPONENT);
+}
+
+INLINE f32 fpart(f32 x) {
+    return x - floorf(x);
+}
+
+INLINE f32 rfpart(f32 x) {
+    return 1 - fpart(x);
+}
+
+void drawLineAA2D(PixelGrid *canvas, RGBA color, f32 x1, f32 y1, f32 x2, f32 y2) {
+    if (x1 < 0 &&
+    y1 < 0 &&
+    x2 < 0 &&
+    y2 < 0)
+        return;
+
+    f32 dx = x2 - x1;
+    f32 dy = y2 - y1;
+    f32 tmp, gap, grad;
+    i32 x, y;
+    vec3 first, last;
+    vec2i start, end;
+    if (fabsf(dx) > fabsf(dy)) { // Shallow:
+        if (x2 < x1) { // Left to right:
+            tmp = x2; x2 = x1; x1 = tmp;
+            tmp = y2; y2 = y1; y1 = tmp;
+        }
+
+        grad = dy / dx;
+
+        first.x = roundf(x1);
+        last.x  = roundf(x2);
+
+        first.y = y1 + grad * (first.x - x1);
+        last.y  = y2 + grad * (last.x  - x2);
+
+        start.x = (i32)first.x;
+        start.y = (i32)first.y;
+        end.x   = (i32)last.x;
+        end.y   = (i32)last.y;
+
+        x = start.x;
+        y = start.y;
+        gap = rfpart(x1 + 0.5f);
+        setPixel(canvas, color, rfpart(first.y) * gap, x, y++, 0);
+        setPixel(canvas, color,  fpart(first.y) * gap, x, y,   0);
+
+        x = end.x;
+        y = end.y;
+        gap = fpart(x2 + 0.5f);
+        setPixel(canvas, color,rfpart(last.y) * gap, x, y++, 0);
+        setPixel(canvas, color, fpart(last.y) * gap, x, y,   0);
+
+        gap = first.y + grad;
+        for (x = start.x + 1; x < end.x; x++) {
+            y = (i32)gap;
+            setPixel(canvas, color, rfpart(gap), x, y++, 0);
+            setPixel(canvas, color,  fpart(gap), x, y,    0);
+            gap += grad;
+        }
+    } else { // Steep:
+        if (y2 < y1) { // Bottom up:
+            tmp = x2; x2 = x1; x1 = tmp;
+            tmp = y2; y2 = y1; y1 = tmp;
+        }
+
+        grad = dx / dy;
+
+        first.y = roundf(y1);
+        last.y  = roundf(y2);
+
+        first.x = x1 + grad * (first.y - y1);
+        last.x  = x2 + grad * (last.y  - y2);
+
+        start.y = (i32)first.y;
+        start.x = (i32)first.x;
+
+        end.y = (i32)last.y;
+        end.x = (i32)last.x;
+
+        x = start.x;
+        y = start.y;
+        gap = rfpart(y1 + 0.5f);
+        setPixel(canvas, color, rfpart(first.x) * gap, x++, y, 0);
+        setPixel(canvas, color,  fpart(first.x) * gap, x,   y, 0);
+
+        x = end.x;
+        y = end.y;
+        gap = fpart(y2 + 0.5f);
+        setPixel(canvas, color, rfpart(last.x) * gap, x++, y, 0);
+        setPixel(canvas, color,  fpart(last.x) * gap, x,   y, 0);
+
+        gap = first.x + grad;
+        for (y = start.y + 1; y < end.y; y++) {
+            x = (i32)gap;
+            setPixel(canvas, color, rfpart(gap), x++, y, 0);
+            setPixel(canvas, color,  fpart(gap), x,   y, 0);
+            gap += grad;
+        }
+    }
+}
+
+void drawLine3D(PixelGrid *canvas, RGBA color, vec3 from, vec3 to) {
+    f32 x1 = from.x;
+    f32 y1 = from.y;
+    f32 x2 = to.x;
+    f32 y2 = to.y;
+
+    if (x1 < 0 &&
+    y1 < 0 &&
+    x2 < 0 &&
+    y2 < 0)
+        return;
+
+    f64 z1 = from.z;
+    f64 z2 = to.z;
+    f64 tmp;
+    f32 dx = x2 - x1;
+    f32 dy = y2 - y1;
+    f32 gap, grad;
+    i32 x, y;
+    f64 z, z_curr, z_step;
+    vec3 first, last;
+    vec2i start, end;
+    if (fabsf(dx) > fabsf(dy)) { // Shallow:
+        if (x2 < x1) { // Left to right:
+            tmp = x2; x2 = x1; x1 = (f32)tmp;
+            tmp = y2; y2 = y1; y1 = (f32)tmp;
+            tmp = z2; z2 = z1; z1 = tmp;
+        }
+
+        grad = dy / dx;
+
+        first.x = roundf(x1);
+        last.x  = roundf(x2);
+
+        first.y = y1 + grad * (first.x - x1);
+        last.y  = y2 + grad * (last.x  - x2);
+
+        start.x = (i32)first.x;
+        start.y = (i32)first.y;
+        end.x   = (i32)last.x;
+        end.y   = (i32)last.y;
+
+        x = start.x;
+        y = start.y;
+        gap = rfpart(x1 + 0.5f);
+        setPixel(canvas, color, rfpart(first.y) * gap, x, y++, z1);
+        setPixel(canvas, color,  fpart(first.y) * gap, x, y,   z1);
+
+        x = end.x;
+        y = end.y;
+        gap = fpart(x2 + 0.5f);
+        setPixel(canvas, color,rfpart(last.y) * gap, x, y++, z2);
+        setPixel(canvas, color, fpart(last.y) * gap, x, y,   z2);
+
+        z1 = 1.0 / z1;
+        z2 = 1.0 / z2;
+        z_step = (z2 - z1) / (f64)(end.x - start.x + 1);
+        z_curr = z1 + z_step;
+        gap = first.y + grad;
+        for (x = start.x + 1; x < end.x; x++) {
+            y = (i32)gap;
+            z = 1.0 / z_curr;
+            setPixel(canvas, color, rfpart(gap), x, y++, z);
+            setPixel(canvas, color,  fpart(gap), x, y,   z);
+            gap += grad;
+            z_curr += z_step;
+        }
+    } else { // Steep:
+        if (y2 < y1) { // Bottom up:
+            tmp = x2; x2 = x1; x1 = (f32)tmp;
+            tmp = y2; y2 = y1; y1 = (f32)tmp;
+            tmp = z2; z2 = z1; z1 = tmp;
+        }
+
+        grad = dx / dy;
+
+        first.y = roundf(y1);
+        last.y  = roundf(y2);
+
+        first.x = x1 + grad * (first.y - y1);
+        last.x  = x2 + grad * (last.y  - y2);
+
+        start.y = (i32)first.y;
+        start.x = (i32)first.x;
+
+        end.y = (i32)last.y;
+        end.x = (i32)last.x;
+
+        x = start.x;
+        y = start.y;
+        gap = rfpart(y1 + 0.5f);
+        setPixel(canvas, color, rfpart(first.x) * gap, x++, y, z1);
+        setPixel(canvas, color,  fpart(first.x) * gap, x,   y, z1);
+
+        x = end.x;
+        y = end.y;
+        gap = fpart(y2 + 0.5f);
+        setPixel(canvas, color, rfpart(last.x) * gap, x++, y, z2);
+        setPixel(canvas, color,  fpart(last.x) * gap, x,   y, z2);
+
+        z1 = 1.0 / z1;
+        z2 = 1.0 / z2;
+        z_step = (z2 - z1) / (f64)(end.y - start.y + 1);
+        z_curr = z1 + z_step;
+        gap = first.x + grad;
+        for (y = start.y + 1; y < end.y; y++) {
+            x = (i32)gap;
+            z = 1.0 / z_curr;
+            setPixel(canvas, color, rfpart(gap), x++, y, z);
+            setPixel(canvas, color,  fpart(gap), x,   y, z);
+            gap += grad;
+            z_curr += z_step;
+        }
+    }
+}
+
 void drawEdge(Viewport *viewport, RGBA color, Edge *edge) {
     projectEdge(edge, viewport);
-    drawLine2D(viewport->frame_buffer, color,
-               (i32)edge->from.x,
-               (i32)edge->from.y,
-               (i32)edge->to.x,
-               (i32)edge->to.y);
+    if (viewport->settings.depth_sort)
+        drawLine3D(viewport->frame_buffer, color, edge->from, edge->to);
+    else if (viewport->settings.antialias)
+        drawLineAA2D(viewport->frame_buffer, color,
+                     edge->from.x,
+                     edge->from.y,
+                     edge->to.x,
+                     edge->to.y);
+    else
+        drawLine2D(viewport->frame_buffer, color,
+                   (i32)edge->from.x,
+                   (i32)edge->from.y,
+                   (i32)edge->to.x,
+                   (i32)edge->to.y);
 }
 
 void drawRect(PixelGrid *canvas, RGBA color, Rect *rect) {
@@ -3980,7 +4247,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
 
     initTime(&app->time, app->platform.getTicks, app->platform.ticks_per_second);
     initMouse(&app->controls.mouse);
-    initPixelGrid(&app->window_content, (Pixel*)window_content_memory);
+    initPixelGrid(&app->window_content, window_content_memory);
 
     defaults->title = "";
     defaults->width = 480;

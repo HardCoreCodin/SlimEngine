@@ -1,11 +1,11 @@
-//#include "../SlimEngine/app.h"
-//#include "../SlimEngine/core/time.h"
-//#include "../SlimEngine/scene/xform.h"
-//#include "../SlimEngine/scene/box.h"
-//#include "../SlimEngine/scene/grid.h"
-//#include "../SlimEngine/scene/curve.h"
+#include "../SlimEngine/app.h"
+#include "../SlimEngine/core/time.h"
+#include "../SlimEngine/scene/xform.h"
+#include "../SlimEngine/scene/box.h"
+#include "../SlimEngine/scene/grid.h"
+#include "../SlimEngine/scene/curve.h"
 // Or using the single-header file:
- #include "../SlimEngine.h"
+// #include "../SlimEngine.h"
 
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
     fillPixelGrid(viewport->frame_buffer, Color(Black));

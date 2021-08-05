@@ -88,14 +88,23 @@ void initTime(Time *time, GetTicks getTicks, u64 ticks_per_second) {
     time->timers.update.ticks_before = time->timers.update.ticks_of_last_report = getTicks();
 }
 
-void initPixelGrid(PixelGrid *pixel_grid, Pixel* pixels_memory) {
-    pixel_grid->pixels = pixels_memory;
+void initPixelGrid(PixelGrid *pixel_grid, void* memory) {
+    pixel_grid->pixels = (Pixel*)(memory);
+    pixel_grid->float_pixels = (FloatPixel*)(pixel_grid->pixels + MAX_WIDTH * MAX_HEIGHT);
     updateDimensions(&pixel_grid->dimensions, MAX_WIDTH, MAX_HEIGHT);
 }
 
 void fillPixelGrid(PixelGrid *pixel_grid, RGBA color) {
-    for (u32 i = 0; i < pixel_grid->dimensions.width_times_height; i++)
+    FloatPixel float_pixel;
+    float_pixel.color.x = (f32)color.R * COLOR_COMPONENT_TO_FLOAT;
+    float_pixel.color.y = (f32)color.G * COLOR_COMPONENT_TO_FLOAT;
+    float_pixel.color.z = (f32)color.B * COLOR_COMPONENT_TO_FLOAT;
+    float_pixel.opacity = 0.0f;
+    float_pixel.depth = INFINITY;
+    for (u32 i = 0; i < pixel_grid->dimensions.width_times_height; i++) {
         pixel_grid->pixels[i].color = color;
+        pixel_grid->float_pixels[i] = float_pixel;
+    }
 }
 
 void initXform3(xform3 *xform) {
@@ -222,6 +231,8 @@ void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->hud_line_count = 0;
     settings->hud_lines = null;
     settings->show_hud = false;
+    settings->antialias = false;
+    settings->depth_sort = false;
 }
 
 void initViewport(Viewport *viewport,

@@ -9,10 +9,6 @@
 // Or using the single-header file:
 // #include "../SlimEngine.h"
 
-void setCountersInHUD(HUD *hud, Timer *timer) {
-    printNumberIntoString(timer->average_frames_per_second,      &hud->lines[0].value);
-    printNumberIntoString(timer->average_microseconds_per_frame, &hud->lines[1].value);
-}
 void onButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff = Vec2i(0, 0);
 }
@@ -56,9 +52,17 @@ void setupViewport(Viewport *viewport) {
     HUD *hud = &viewport->hud;
     hud->line_height = 1.2f;
     hud->position = Vec2i(10, 10);
-    setCountersInHUD(hud, &app->time.timers.update);
-    setString(&hud->lines[0].title, "Fps    : ");
-    setString(&hud->lines[1].title, "mic-s/f: ");
+    HUDLine *line = hud->lines;
+    for (u8 i = 0; i < hud->line_count; i++, line++) {
+        setString(&line->alternate_value, "On");
+        setString(&line->value.string, "Off");
+        line->alternate_value_color = Green;
+        line->value_color = DarkGreen;
+        line->use_alternate = i ?
+                &viewport->settings.depth_sort :
+                &viewport->settings.antialias;
+        setString(&line->title, i ? "Z-Sort : " : "AALines: ");
+    }
 }
 void updateViewport(Viewport *viewport, Mouse *mouse) {
     if (mouse->is_captured) {
@@ -91,10 +95,9 @@ void updateAndRender() {
     drawSceneToViewport(scene, viewport);
     drawSelection(scene, viewport, controls);
 
-    if (viewport->settings.show_hud) {
-        setCountersInHUD(&viewport->hud, timer);
+    if (viewport->settings.show_hud)
         drawHUD(viewport->frame_buffer, &viewport->hud);
-    }
+
     f64 now = (f64)app->time.getTicks();
     f64 tps = (f64)app->time.ticks.per_second;
     if ((now - (f64)scene->last_io_ticks) / tps <= 2.0) {
@@ -174,8 +177,12 @@ void onKeyChanged(u8 key, bool is_pressed) {
     if (key == 'D') move->right    = is_pressed;
 
     ViewportSettings *settings = &app->viewport.settings;
-    if (!is_pressed && key == app->controls.key_map.tab)
-        settings->show_hud = !settings->show_hud;
+    if (!is_pressed) {
+        u8 tab = app->controls.key_map.tab;
+        if (key == tab) settings->show_hud = !settings->show_hud;
+        if (key == '1') settings->antialias = !settings->antialias;
+        if (key == '2') settings->depth_sort = !settings->depth_sort;
+    }
 
     Scene *scene = &app->scene;
     Platform *platform = &app->platform;

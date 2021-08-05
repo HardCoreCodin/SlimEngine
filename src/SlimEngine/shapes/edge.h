@@ -9,30 +9,26 @@ void projectEdge(Edge *edge, Viewport *viewport) {
     f32 focal_length = viewport->camera->focal_length;
     f32 n = viewport->settings.near_clipping_plane_distance;
 
-    bool v1_is_out = edge->from.z < n;
-    bool v2_is_out = edge->to.z   < n;
+    bool from_is_out = edge->from.z < n;
+    bool to_is_out = edge->to.z < n;
 
     // Cull:
-    if (v1_is_out &&
-        v2_is_out) {
-        edge->from = getVec3Of(-1);
-        edge->to   = getVec3Of(-1);
+    if (from_is_out && to_is_out) {
+        edge->to = edge->from = getVec3Of(-1);
         return;
     }
 
     // Clip:
-    if (v1_is_out ||
-        v2_is_out) {
-        vec3 v;
-        if (v1_is_out) {
-            v = subVec3(edge->from, edge->to);
-            v = scaleVec3(v, (edge->to.z - n) / (edge->to.z - edge->from.z));
-            edge->from = addVec3(edge->to, v);
-        } else {
-            v = subVec3(edge->to, edge->from);
-            v = scaleVec3(v, (edge->from.z - n) / (edge->from.z - edge->to.z));
-            edge->to = addVec3(edge->from, v);
-        }
+    if (from_is_out) {
+        edge->from = scaleAddVec3(
+                subVec3(edge->from, edge->to),
+                (edge->to.z - n) / (edge->to.z - edge->from.z),
+                edge->to);
+    } else if (to_is_out) {
+        edge->to = scaleAddVec3(
+                subVec3(edge->to, edge->from),
+                (edge->from.z - n) / (edge->from.z - edge->to.z),
+                edge->from);
     }
 
     // Project:
@@ -56,9 +52,18 @@ void projectEdge(Edge *edge, Viewport *viewport) {
 
 void drawEdge(Viewport *viewport, RGBA color, Edge *edge) {
     projectEdge(edge, viewport);
-    drawLine2D(viewport->frame_buffer, color,
-               (i32)edge->from.x,
-               (i32)edge->from.y,
-               (i32)edge->to.x,
-               (i32)edge->to.y);
+    if (viewport->settings.depth_sort)
+        drawLine3D(viewport->frame_buffer, color, edge->from, edge->to);
+    else if (viewport->settings.antialias)
+        drawLineAA2D(viewport->frame_buffer, color,
+                     edge->from.x,
+                     edge->from.y,
+                     edge->to.x,
+                     edge->to.y);
+    else
+        drawLine2D(viewport->frame_buffer, color,
+                   (i32)edge->from.x,
+                   (i32)edge->from.y,
+                   (i32)edge->to.x,
+                   (i32)edge->to.y);
 }
