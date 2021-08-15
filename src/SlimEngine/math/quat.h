@@ -138,6 +138,19 @@ INLINE quat getRotationAroundAxis(vec3 axis, f32 amount) {
     return normQuat(out);
 }
 
+INLINE quat getRotationAroundAxisBySinCon(vec3 axis, vec2 sin_cos) {
+    quat out;
+    out.axis = scaleVec3(axis, sin_cos.y);
+    out.amount = sin_cos.x;
+
+    return normQuat(out);
+}
+
+INLINE quat rotateAroundAxisBySinCos(quat q, vec3 axis, vec2 sin_cos) {
+    quat rotation = getRotationAroundAxisBySinCon(axis, sin_cos);
+    return mulQuat(q, rotation);
+}
+
 INLINE quat rotateAroundAxis(quat q, vec3 axis, f32 amount) {
     quat rotation = getRotationAroundAxis(axis, amount);
     return mulQuat(q, rotation);

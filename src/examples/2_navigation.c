@@ -1,9 +1,9 @@
-//#include "../SlimEngine/app.h"
-//#include "../SlimEngine/core/time.h"
-//#include "../SlimEngine/scene/grid.h"
-//#include "../SlimEngine/viewport/navigation.h"
+#include "../SlimEngine/app.h"
+#include "../SlimEngine/core/time.h"
+#include "../SlimEngine/scene/grid.h"
+#include "../SlimEngine/viewport/navigation.h"
 // Or using the single-header file:
- #include "../SlimEngine.h"
+// #include "../SlimEngine.h"
 
 #include "./_common.h"
 
@@ -43,7 +43,7 @@ void updateAndRender() {
 
     fillPixelGrid(viewport->frame_buffer, Color(Black));
     drawGrid(viewport, Color(scene->primitives->color),
-             &scene->grids[0], &scene->primitives[0]);
+             &scene->grids[0], &scene->primitives[0], 0);
     drawMouseAndKeyboard(viewport, mouse);
 
     resetMouseChanges(mouse);

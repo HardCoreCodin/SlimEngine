@@ -43,14 +43,14 @@ void updateAndRender() {
     fillPixelGrid(viewport->frame_buffer, Color(Black));
 
     Primitive *prim = &scene->primitives[0];
-    drawGrid(viewport, Color(prim->color), scene->grids, prim);
+    drawGrid(viewport, Color(prim->color), scene->grids, prim, 0);
 
     Camera *camera1 = &scene->cameras[0];
     Camera *camera2 = &scene->cameras[1];
     if (viewport->camera == camera1)
-        drawCamera(viewport, Color(Yellow), camera2);
+        drawCamera(viewport, Color(Yellow), camera2, 0);
     else
-        drawCamera(viewport, Color(Cyan  ), camera1);
+        drawCamera(viewport, Color(Cyan  ), camera1, 0);
 
     resetMouseChanges(mouse);
     endFrameTimer(timer);

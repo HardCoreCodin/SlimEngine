@@ -27,22 +27,22 @@ void drawSceneToViewport(Scene *scene, Viewport *viewport) {
         switch (primitive->type) {
             case PrimitiveType_Mesh:
                 drawMesh(viewport, Color(primitive->color),
-                         &scene->meshes[primitive->id], primitive, false);
+                         &scene->meshes[primitive->id], primitive, false, 0);
                 break;
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:
                 drawCurve(viewport, Color(primitive->color),
                           &scene->curves[primitive->id], primitive,
-                          CURVE_STEPS);
+                          CURVE_STEPS, 0);
                 break;
             case PrimitiveType_Box:
                 drawBox(viewport, Color(primitive->color),
                         &scene->boxes[primitive->id], primitive,
-                        BOX__ALL_SIDES);
+                        BOX__ALL_SIDES, 0);
                 break;
             case PrimitiveType_Grid:
                 drawGrid(viewport, Color(primitive->color),
-                         &scene->grids[primitive->id], primitive);
+                         &scene->grids[primitive->id], primitive, 0);
                 break;
             default:
                 break;

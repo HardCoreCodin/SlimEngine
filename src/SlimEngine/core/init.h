@@ -233,6 +233,8 @@ void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->show_hud = false;
     settings->antialias = false;
     settings->depth_sort = false;
+    settings->position.x = 0;
+    settings->position.y = 0;
 }
 
 void initViewport(Viewport *viewport,

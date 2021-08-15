@@ -23,7 +23,7 @@ void dollyCamera(Camera *camera, f32 dolly) {
     camera->transform.position = subVec3(target_position,camera->transform.position);
 }
 
-void orbitCamera(Camera *camera, Navigation *navigation, f32 azimuth, f32 altitude) {
+void orbitCamera(Camera *camera, f32 azimuth, f32 altitude) {
     // Move the camera forward to the position of it's target:
     vec3 movement = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
     camera->transform.position = addVec3(camera->transform.position, movement);
@@ -34,25 +34,21 @@ void orbitCamera(Camera *camera, Navigation *navigation, f32 azimuth, f32 altitu
     // Back the camera away from it's target position using the updated forward direction:
     movement = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
     camera->transform.position = subVec3(camera->transform.position, movement);
-
-    navigation->turned = true;
-    navigation->moved = true;
 }
 
-void panCamera(Camera *camera, Navigation *navigation, f32 right, f32 up) {
+void panCamera(Camera *camera, f32 right, f32 up) {
     vec3 up_movement    = scaleVec3(*camera->transform.up_direction, up);
     vec3 right_movement = scaleVec3(*camera->transform.right_direction, right);
     camera->transform.position = addVec3(camera->transform.position, up_movement);
     camera->transform.position = addVec3(camera->transform.position, right_movement);
-
-    navigation->moved = true;
 }
 
 void panViewport(Viewport *viewport, Mouse *mouse) {
     f32 x = viewport->navigation.settings.speeds.pan * -(f32)mouse->pos_raw_diff.x;
     f32 y = viewport->navigation.settings.speeds.pan * +(f32)mouse->pos_raw_diff.y;
-    panCamera(viewport->camera, &viewport->navigation, x, y);
+    panCamera(viewport->camera, x, y);
 
+    viewport->navigation.moved = true;
     mouse->raw_movement_handled = true;
     mouse->moved = false;
 }
@@ -85,8 +81,10 @@ void orientViewport(Viewport *viewport, Mouse *mouse) {
 void orbitViewport(Viewport *viewport, Mouse *mouse) {
     f32 x = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.x;
     f32 y = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.y;
-    orbitCamera(viewport->camera, &viewport->navigation, x, y);
+    orbitCamera(viewport->camera, x, y);
 
+    viewport->navigation.turned = true;
+    viewport->navigation.moved = true;
     mouse->raw_movement_handled = true;
     mouse->moved = false;
 }

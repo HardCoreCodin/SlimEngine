@@ -197,13 +197,15 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     RayHit *hit = &selection->hit;
     Ray ray, *local_ray = &selection->local_ray;
     Primitive primitive;
+    vec2i mouse_pos = Vec2i(mouse->pos.x - viewport->settings.position.x,
+                            mouse->pos.y - viewport->settings.position.y);
 
     if (mouse->left_button.is_pressed) {
         if (!mouse->left_button.is_handled) { // This is the first frame after the left mouse button went down:
             mouse->left_button.is_handled = true;
 
             // Cast a ray onto the scene to find the closest object behind the hovered pixel:
-            setRayFromCoords(&ray, mouse->pos, viewport);
+            setRayFromCoords(&ray, mouse_pos, viewport);
 
             hit->distance_squared = INFINITY;
             if (rayHitScene(&ray, &selection->local_hit, hit, scene)) {
@@ -244,7 +246,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                     mouse->right_button.is_pressed);
             if (selection->primitive && !any_mouse_button_is_pressed) {
                 // Cast a ray onto the bounding box of the currently selected object:
-                setRayFromCoords(&ray, mouse->pos, viewport);
+                setRayFromCoords(&ray, mouse_pos, viewport);
                 primitive = *selection->primitive;
                 if (primitive.type == PrimitiveType_Mesh)
                     primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
@@ -266,7 +268,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
             if (selection->box_side) {
                 if (selection->primitive) {
                     if (any_mouse_button_is_pressed) {
-                        setRayFromCoords(&ray, mouse->pos, viewport);
+                        setRayFromCoords(&ray, mouse_pos, viewport);
                         if (hitPlane(selection->transformation_plane_origin,
                                      selection->transformation_plane_normal,
                                      &ray.origin,
@@ -313,8 +315,8 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                 position.z = selection->object_distance;
 
                 // Screen -> NDC:
-                position.x = (f32) mouse->pos.x / dimensions->h_width - 1;
-                position.y = (f32) mouse->pos.y / dimensions->h_height - 1;
+                position.x = (f32) mouse_pos.x / dimensions->h_width - 1;
+                position.y = (f32) mouse_pos.y / dimensions->h_height - 1;
                 position.y = -position.y;
 
                 // NDC -> View:
@@ -348,7 +350,7 @@ void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
             primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
 
         initBox(box);
-        drawBox(viewport, Color(Yellow), box, &primitive, BOX__ALL_SIDES);
+        drawBox(viewport, Color(Yellow), box, &primitive, BOX__ALL_SIDES, 1);
         if (selection->box_side) {
             RGBA color = Color(White);
             switch (selection->box_side) {
@@ -357,7 +359,7 @@ void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                 case Front: case Back:   color = Color(Blue);  break;
                 case NoSide: break;
             }
-            drawBox(viewport, color, box, &primitive, selection->box_side);
+            drawBox(viewport, color, box, &primitive, selection->box_side, 1);
         }
     }
 }

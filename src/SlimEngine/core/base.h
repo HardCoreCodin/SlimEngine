@@ -73,6 +73,7 @@ typedef void (*CallbackWithBool)(bool on);
 typedef void (*CallbackWithCharPtr)(char* str);
 
 #define TAU 6.28f
+#define SQRT2_OVER_2 0.70710678118f
 #define SQRT3 1.73205080757f
 #define COLOR_COMPONENT_TO_FLOAT 0.00392156862f
 #define FLOAT_TO_COLOR_COMPONENT 255.0f
@@ -85,7 +86,7 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define BOX__ALL_SIDES (Top | Bottom | Left | Right | Front | Back)
 #define BOX__VERTEX_COUNT 8
 #define BOX__EDGE_COUNT 12
-#define GRID__MAX_SEGMENTS 11
+#define GRID__MAX_SEGMENTS 101
 
 #define IS_VISIBLE ((u8)1)
 #define IS_TRANSLATED ((u8)2)
@@ -133,7 +134,12 @@ INLINE vec2i Vec2i(i32 x, i32 y) {
     out.y = y;
     return out;
 }
-
+INLINE vec2 Vec2(f32 x, f32 y) {
+    vec2 out;
+    out.x = x;
+    out.y = y;
+    return out;
+}
 INLINE vec3 Vec3(f32 x, f32 y, f32 z) {
     vec3 out;
     out.x = x;
@@ -262,6 +268,11 @@ INLINE bool inRange(i32 value, i32 end, i32 start) {
     return value >= start && value < end;
 }
 
+INLINE f32 clampValueToBetween(f32 value, f32 from, f32 to) {
+    f32 mn = value < to ? value : to;
+    return mn > from ? mn : from;
+}
+
 INLINE f32 clampValue(f32 value) {
     f32 mn = value < 1.0f ? value : 1.0f;
     return mn > 0.0f ? mn : 0.0f;
@@ -300,7 +311,13 @@ enum ColorID {
 
     DarkRed,
     DarkGreen,
-    DarkBlue
+    DarkBlue,
+    DarkGrey,
+
+    BrightRed,
+    BrightGreen,
+    BrightBlue,
+    BrightGrey
 };
 
 INLINE RGBA Color(enum ColorID color_id) {
@@ -323,6 +340,16 @@ INLINE RGBA Color(enum ColorID color_id) {
             color.R = MAX_COLOR_VALUE/2;
             color.G = MAX_COLOR_VALUE/2;
             color.B = MAX_COLOR_VALUE/2;
+            break;
+        case DarkGrey:
+            color.R = MAX_COLOR_VALUE/4;
+            color.G = MAX_COLOR_VALUE/4;
+            color.B = MAX_COLOR_VALUE/4;
+            break;
+        case BrightGrey:
+            color.R = MAX_COLOR_VALUE*3/4;
+            color.G = MAX_COLOR_VALUE*3/4;
+            color.B = MAX_COLOR_VALUE*3/4;
             break;
 
         case Red:
@@ -355,6 +382,21 @@ INLINE RGBA Color(enum ColorID color_id) {
             color.R = 0;
             color.G = 0;
             color.B = MAX_COLOR_VALUE/2;
+            break;
+        case BrightRed:
+            color.R = MAX_COLOR_VALUE;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = MAX_COLOR_VALUE/2;
+            break;
+        case BrightGreen:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = MAX_COLOR_VALUE;
+            color.B = MAX_COLOR_VALUE/2;
+            break;
+        case BrightBlue:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = MAX_COLOR_VALUE;
             break;
 
         case Cyan:

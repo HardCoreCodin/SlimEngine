@@ -85,7 +85,7 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define BOX__ALL_SIDES (Top | Bottom | Left | Right | Front | Back)
 #define BOX__VERTEX_COUNT 8
 #define BOX__EDGE_COUNT 12
-#define GRID__MAX_SEGMENTS 11
+#define GRID__MAX_SEGMENTS 101
 
 #define IS_VISIBLE ((u8)1)
 #define IS_TRANSLATED ((u8)2)
@@ -300,7 +300,11 @@ enum ColorID {
 
     DarkRed,
     DarkGreen,
-    DarkBlue
+    DarkBlue,
+
+    BrightRed,
+    BrightGreen,
+    BrightBlue
 };
 
 INLINE RGBA Color(enum ColorID color_id) {
@@ -355,6 +359,22 @@ INLINE RGBA Color(enum ColorID color_id) {
             color.R = 0;
             color.G = 0;
             color.B = MAX_COLOR_VALUE/2;
+            break;
+
+        case BrightRed:
+            color.R = MAX_COLOR_VALUE;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = MAX_COLOR_VALUE/2;
+            break;
+        case BrightGreen:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = MAX_COLOR_VALUE;
+            color.B = MAX_COLOR_VALUE/2;
+            break;
+        case BrightBlue:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = MAX_COLOR_VALUE;
             break;
 
         case Cyan:
