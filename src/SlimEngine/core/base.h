@@ -147,7 +147,29 @@ INLINE vec3 Vec3(f32 x, f32 y, f32 z) {
     out.z = z;
     return out;
 }
-
+INLINE vec3 Vec3fromVec4(vec4 v4) {
+    vec3 out;
+    out.x = v4.x;
+    out.y = v4.y;
+    out.z = v4.z;
+    return out;
+}
+INLINE vec4 Vec4(f32 x, f32 y, f32 z, f32 w) {
+    vec4 out;
+    out.x = x;
+    out.y = y;
+    out.z = z;
+    out.w = w;
+    return out;
+}
+INLINE vec4 Vec4fromVec3(vec3 v3, f32 w) {
+    vec4 out;
+    out.x = v3.x;
+    out.y = v3.y;
+    out.z = v3.z;
+    out.w = w;
+    return out;
+}
 INLINE quat Quat(vec3 axis, f32 amout) {
     quat out;
     out.axis = axis;

@@ -10,8 +10,6 @@
 // Or using the single-header file:
 // #include "../SlimEngine.h"
 
-#define VIEW_SPACE 1
-
 #define ARROW_LINE_WIDTH 5
 #define ASPECT_RATIO (4.0f/3.0f)
 
@@ -25,6 +23,7 @@ typedef struct Arrow {
     Edge body;
 } Arrow;
 
+RGBA sides_color, near_color, far_color, NDC_color, X_color, Y_color, Z_color;
 Arrow arrow1, arrowX, arrowY, arrowZ;
 bool show_secondary_viewport = false;
 PixelGrid secondary_viewport_frame_buffer;
@@ -35,14 +34,24 @@ Grid *main_grid, *projection_plane_grid, *projective_ref_plane_grid, clipped_gri
 Box NDC_box, projected_box, pre_projected_view_frustum_box, transforming_view_frustum_box, view_frustum_box, clipped_box, *main_box, *arrow_box;
 Edge view_space_edge;
 RGBA edge_color;
-mat4 pre_projection_matrix;
 bool draw_locator_grids = false;
 bool show_pre_projection = false;
+bool move_projective_point = true;
+
+typedef enum VIZ {
+    INTRO = 1,
+    VIEW_FRUSTUM,
+    PROJECTION,
+    PROJECTIVE_SPACE,
+    VIEW_FRUSTUM_SLICE
+} VIZ;
+VIZ current_viz = INTRO;
 
 typedef struct Transition {
     bool active;
     f32 t, speed, eased_t;
 } Transition;
+
 f32 smoothstep(f32 from, f32 to, f32 t) {
     t = (t - from) / (to - from);
     return t * t * (3 - 2 * t);
@@ -61,7 +70,7 @@ bool incTransition(Transition *transition, f32 inc, bool reset_when_done) {
     return transition->active;
 }
 
-#define TRANSITION_COUNT 11
+#define TRANSITION_COUNT 14
 
 typedef union Transitions {
     struct {
@@ -75,7 +84,10 @@ typedef union Transitions {
         scale_back,
         shear_up,
         reveal_ref_plane,
-        reveal_projective_point;
+        reveal_projective_point,
+        reveal_normalizing_projective_point,
+        lines_through_NDC,
+        forcal_length_and_plane;
     };
     Transition states[TRANSITION_COUNT];
 } Transitions;
@@ -170,7 +182,12 @@ void updateViewport(Viewport *viewport, Mouse *mouse) {
         if (mouse->moved)         orientViewport(viewport, mouse);
         if (mouse->wheel_scrolled)  zoomViewport(viewport, mouse);
     } else {
-        if (mouse->wheel_scrolled) dollyViewport(viewport, mouse);
+        if (mouse->wheel_scrolled) {
+            if (app->controls.is_pressed.alt)
+                zoomViewport(&secondary_viewport, mouse);
+            else
+                dollyViewport(viewport, mouse);
+        }
         if (mouse->moved) {
             if (mouse->middle_button.is_pressed)  panViewport(viewport, mouse);
             if (mouse->right_button.is_pressed) orbitViewport(viewport, mouse);
@@ -242,20 +259,22 @@ BoxCorners getViewFrustumCorners(Viewport *viewport) {
     return corners;
 }
 
-void setPreProjectionMatrix(Viewport *viewport) {
-    f32 n = viewport->settings.near_clipping_plane_distance;
-    f32 f = viewport->settings.far_clipping_plane_distance;
+void drawFrustum(u8 line_width) {
+    transformBoxVerticesFromObjectToViewSpace(&app->viewport, secondary_camera_prim, &view_frustum_box.vertices, &view_frustum_box.vertices);
+    setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
 
-    pre_projection_matrix = getMat4Identity();
-    pre_projection_matrix.X.x = viewport->camera->focal_length * viewport->frame_buffer->dimensions.height_over_width;
-    pre_projection_matrix.Y.y = viewport->camera->focal_length;
-    pre_projection_matrix.Z.z = f / (f - n);
-    pre_projection_matrix.W.z = -n * pre_projection_matrix.Z.z;
-    pre_projection_matrix.W.w = 0.0f;
-    pre_projection_matrix.Z.w = 1.0f;
-
-//    this.z_axis.z      =     (f + n) * d;
-//    this.translation.z = -2 * f * n  * d;
+    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_top,    line_width);
+    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_bottom, line_width);
+    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_left,   line_width);
+    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_right,  line_width);
+    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_top,     line_width);
+    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_bottom,  line_width);
+    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_left,    line_width);
+    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_right,   line_width);
+    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.left_top,     line_width);
+    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.left_bottom,  line_width);
+    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.right_top,    line_width);
+    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.right_bottom, line_width);
 }
 
 void renderIntro(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
@@ -297,17 +316,6 @@ void renderIntro(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
     setBoxEdgesFromVertices(&projected_box.edges, &projected_box.vertices);
     for (u8 i = 0; i < BOX__EDGE_COUNT; i++)
         drawEdge(viewport, edge_color, projected_box.edges.buffer + i, 1);
-
-    if (show_secondary_viewport) {
-        fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
-
-        drawGrid(&secondary_viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,1);
-        drawGrid(&secondary_viewport, Color(projection_plane_prim->color), projection_plane_grid, projection_plane_prim, 1);
-        drawBox(&secondary_viewport, Color(main_box_prim->color), main_box, main_box_prim, BOX__ALL_SIDES, 2);
-        //        drawArrow(&secondary_viewport, green, &arrow1);
-
-        drawSecondaryViewportToFrameBuffer(viewport->frame_buffer);
-    }
 }
 
 void convertEdgeFromSecondaryToMain(Edge *edge) {
@@ -334,10 +342,10 @@ void updateCameraArrows(xform3 *camera_xform) {
     vec3 U = *camera_xform->up_direction;
     vec3 F = *camera_xform->forward_direction;
     arrowX.body.from =  arrowY.body.from = arrowZ.body.from = P;
-    arrowX.body.to = scaleAddVec3(R,2, P);
-    arrowY.body.to = scaleAddVec3(U,2, P);
-    arrowZ.body.to = scaleAddVec3(F,2, P);
-    arrowX.head.length = arrowZ.head.length = arrowY.head.length = 0.5f;
+    arrowX.body.to = addVec3(R, P);
+    arrowY.body.to = addVec3(U, P);
+    arrowZ.body.to = addVec3(F, P);
+    arrowX.head.length = arrowZ.head.length = arrowY.head.length = 0.25f;
     updateArrow(&arrowX);
     updateArrow(&arrowY);
     updateArrow(&arrowZ);
@@ -378,17 +386,10 @@ void renderViewFrustum(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
     clipped_edge = clipped_grid.edges.uv.v;
     for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, Color(main_grid_prim->color));
 
+    transformBoxVerticesFromObjectToViewSpace(&secondary_viewport, main_box_prim, &main_box->vertices, &clipped_box.vertices);
+    setBoxEdgesFromVertices(&clipped_box.edges, &clipped_box.vertices);
     clipped_edge = clipped_box.edges.buffer;
     for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, Color(main_box_prim->color));
-
-    if (show_secondary_viewport) {
-        fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
-
-        drawGrid(&secondary_viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
-        drawBox(&secondary_viewport, Color(main_box_prim->color), main_box, main_box_prim, BOX__ALL_SIDES, 1);
-
-        drawSecondaryViewportToFrameBuffer(viewport->frame_buffer);
-    }
 }
 
 f32 mulVec3Mat4(vec3 *in, mat4 *M, vec3 *out) {
@@ -410,7 +411,7 @@ void updateProjectionBoxes(Viewport *viewport) {
     setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
 
     for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
-        mulVec3Mat4(view_frustum_box.vertices.buffer + i, &pre_projection_matrix, pre_projected_view_frustum_box.vertices.buffer + i);
+        mulVec3Mat4(view_frustum_box.vertices.buffer + i, &viewport->pre_projection_matrix, pre_projected_view_frustum_box.vertices.buffer + i);
 
     setBoxEdgesFromVertices(&pre_projected_view_frustum_box.edges, &pre_projected_view_frustum_box.vertices);
 }
@@ -436,7 +437,7 @@ RGBA getColorInBetween(RGBA from, RGBA to, f32 t) {
     return in_between;
 }
 
-void drawLocatorGrid(Viewport *viewport, RGBA color, Transition *transition) {
+void drawLocatorGrid(Viewport *viewport, RGBA color, RGBA out_color, Transition *transition) {
     f32 from_w, to_w;
     f32 n = secondary_viewport.settings.near_clipping_plane_distance;
     f32 f = secondary_viewport.settings.far_clipping_plane_distance;
@@ -448,7 +449,6 @@ void drawLocatorGrid(Viewport *viewport, RGBA color, Transition *transition) {
     vec3 start = view_frustum_box.vertices.corners.front_bottom_left;
     vec3 location = start;
     Locator locator;
-    RGBA out_color = color;
     out_color.A /= 8;
     bool is_out;
 
@@ -462,8 +462,8 @@ void drawLocatorGrid(Viewport *viewport, RGBA color, Transition *transition) {
                 edge = locator.edges;
 
                 for (u8 i = 0; i < 3; i++, edge++) {
-                    from_w = mulVec3Mat4(&edge->from, &pre_projection_matrix, &trg_edge.from);
-                    to_w   = mulVec3Mat4(&edge->to,   &pre_projection_matrix, &trg_edge.to);
+                    from_w = mulVec3Mat4(&edge->from, &secondary_viewport.pre_projection_matrix, &trg_edge.from);
+                    to_w   = mulVec3Mat4(&edge->to,   &secondary_viewport.pre_projection_matrix, &trg_edge.to);
 
                     is_out = fabsf(trg_edge.from.x) > from_w ||
                              fabsf(trg_edge.from.y) > from_w ||
@@ -520,7 +520,7 @@ void renderProjection(Viewport *viewport, f32 delta_time) {
 //    drawBox(viewport, Color(Yellow), &projected_view_frustum_box, camera_box_prim, BOX__ALL_SIDES, 1);
     drawBox(viewport, Color(Grey), main_box, main_box_prim, BOX__ALL_SIDES, 0);
 
-    RGBA color;
+    RGBA color, out_color = Color(BrightGrey);
     if (show_pre_projection) {
         drawBox(viewport, Color(Magenta), &pre_projected_view_frustum_box, secondary_camera_prim, BOX__ALL_SIDES, 0);
 
@@ -531,7 +531,7 @@ void renderProjection(Viewport *viewport, f32 delta_time) {
                 drawBox(viewport, color, &transforming_view_frustum_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
                 color.A = LOCATOR_OPACITY;
                 if (draw_locator_grids)
-                    drawLocatorGrid(viewport, color, &transitions.pre_projection);
+                    drawLocatorGrid(viewport, color, out_color, &transitions.pre_projection);
             } else {
                 transitions.projection.active = true;
                 transitions.projection.t = 0;
@@ -545,7 +545,7 @@ void renderProjection(Viewport *viewport, f32 delta_time) {
                 drawBox(viewport, color, &transforming_view_frustum_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
                 color.A = LOCATOR_OPACITY;
                 if (draw_locator_grids)
-                    drawLocatorGrid(viewport, color, &transitions.projection);
+                    drawLocatorGrid(viewport, color, out_color, &transitions.projection);
             }
         }
     }
@@ -557,28 +557,19 @@ void renderProjection(Viewport *viewport, f32 delta_time) {
             drawBox(viewport, color, &transforming_view_frustum_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
             color.A = LOCATOR_OPACITY;
             if (draw_locator_grids)
-                drawLocatorGrid(viewport, color, &transitions.full_projection);
+                drawLocatorGrid(viewport, color, out_color, &transitions.full_projection);
         }
-    }
-
-    if (show_secondary_viewport) {
-        fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
-
-        drawGrid(&secondary_viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
-        drawBox(&secondary_viewport, Color(main_box_prim->color), main_box, main_box_prim, BOX__ALL_SIDES, 1);
-
-        drawSecondaryViewportToFrameBuffer(viewport->frame_buffer);
     }
 }
 
-void drawProjectiveSpace(Viewport *viewport, Transition *transition) {
+void drawProjectiveSpace(Viewport *viewport, Transition *transition, bool colorize) {
     Edge edge;
     f32 step = TAU / (PROJECTION_LINES_COUNT * 2);
     vec2 sin_cos = Vec2(cosf(step), sinf(step));
 
     RGBA color;
     color.A = PROJECTION_LINES_OPACITY;
-    color.G = MAX_COLOR_VALUE / 2;
+    color.R = color.G = color.B = MAX_COLOR_VALUE / 2;
     vec3 x_axis = Vec3(1, 0, 0);
     vec3 y_axis = Vec3(0, 1, 0);
     quat azimuth_rotation;
@@ -591,8 +582,10 @@ void drawProjectiveSpace(Viewport *viewport, Transition *transition) {
         for (i32 x = 0; x < PROJECTION_LINES_COUNT; x++) {
             edge.from = getVec3Of(0);
             edge.to = mulVec3Quat(Vec3(1, 0, 0), mulQuat(altitude_rotation, azimuth_rotation));
-            color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)color.G * edge.to.x);
-            color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)color.G * edge.to.z);
+            if (colorize) {
+                color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)color.G * edge.to.x);
+                color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)color.G * edge.to.z);
+            }
 
             edge.to = scaleVec3(edge.to, 15 * transition->eased_t);
             convertEdgeFromSecondaryToMain(&edge);
@@ -630,7 +623,7 @@ void renderProjectiveSpace(Viewport *viewport, f32 delta_time) {
 
     if (transitions.projective_lines.active) {
         if (incTransition(&transitions.projective_lines, delta_time, false))
-            drawProjectiveSpace(viewport, &transitions.projective_lines);
+            drawProjectiveSpace(viewport, &transitions.projective_lines, true);
     }
 }
 
@@ -649,158 +642,218 @@ void setQuadFromBox(Quad *quad, Box *box) {
     for (u8 i = 0; i < 4; i++) quad->corners[i].y = 0;
 }
 
-void drawFrustum(RGBA near_color, RGBA sides_color, RGBA far_color, u8 line_width) {
-    transformBoxVerticesFromObjectToViewSpace(&app->viewport, secondary_camera_prim, &view_frustum_box.vertices, &view_frustum_box.vertices);
-    setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
-
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_top,    line_width);
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_bottom, line_width);
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_left,   line_width);
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_right,  line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_top,     line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_bottom,  line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_left,    line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_right,   line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.left_top,     line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.left_bottom,  line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.right_top,    line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.right_bottom, line_width);
-}
-
 void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
-    f32 target_distance = viewport->camera->target_distance;
-    viewport->camera->target_distance = lengthVec3(viewport->camera->transform.position);
-    orbitCamera(viewport->camera, delta_time / 30, 0);
-    viewport->camera->target_distance = target_distance;
-
-    viewport->settings.depth_sort = false;
-    drawGrid(viewport, Color(DarkGrey), main_grid, main_grid_prim,0);
-    viewport->settings.depth_sort = true;
-
-    secondary_camera_prim->position = secondary_viewport.camera->transform.position;
-    secondary_camera_prim->rotation = secondary_viewport.camera->transform.rotation;
-    main_camera_prim->position = viewport->camera->transform.position;
-    main_camera_prim->rotation = viewport->camera->transform.rotation;
-    updateProjectionBoxes(&secondary_viewport);
+    rotatePrimitive(main_box_prim, delta_time / -3, 0, 0);
 
     Quad view_frustum_quad, NDC_quad, transforming_quad;
     setQuadFromBox(&view_frustum_quad, &view_frustum_box);
     setQuadFromBox(&NDC_quad, &NDC_box);
     transforming_quad = view_frustum_quad;
 
-    RGBA sides_color = Color(Cyan);
-    RGBA near_color = Color(BrightRed);
-    RGBA far_color = Color(BrightBlue);
-    RGBA NDC_color = Color(Yellow);
+    Edge projective_point_edge;
+    RGBA focal_length_color = Color(BrightGrey);
 
-    if (transitions.full_projection.active) {
-        if (incTransition(&transitions.full_projection, delta_time, true)) {
-            for (u8 i = 0; i < 4; i++) transforming_quad.corners[i] = lerpVec3(view_frustum_quad.corners[i], NDC_quad.corners[i], transitions.full_projection.eased_t);
+    RGBA camera_color = Color(projection_plane_prim->color);
+    RGBA projective_point_color;
+    projective_point_color.G = MAX_COLOR_VALUE / 2;
+    projective_point_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G);
+    projective_point_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G);
 
-            sides_color = getColorInBetween(sides_color, Color(Yellow), transitions.full_projection.eased_t);
-            near_color  = getColorInBetween(near_color, Color(Yellow), transitions.full_projection.eased_t);
-            far_color   = getColorInBetween(far_color, Color(Yellow), transitions.full_projection.eased_t);
+
+    if (transitions.view_frustom_slice.active) {
+        if (incTransition(&transitions.view_frustom_slice, delta_time, false))
+            camera_color.A = Y_color.A = (u8)((f32)camera_color.A * (1.0f - transitions.view_frustom_slice.eased_t));
+    }
+    if (camera_color.A) {
+        sides_color.A = near_color.A = far_color.A = NDC_color.A = camera_color.A;
+        drawBox(viewport, NDC_color, &NDC_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
+        drawFrustum(1);
+        sides_color.A = near_color.A = far_color.A = NDC_color.A = MAX_COLOR_VALUE - camera_color.A;
+    }
+
+    if (transitions.projective_lines.active) {
+        Y_color = Color(Magenta);
+
+        if (incTransition(&transitions.projective_lines, delta_time, false)) {
+            Y_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.projective_lines.eased_t);
+            bool colorize = !(transitions.reveal_projective_point.active || transitions.lift_up.active);
+            drawProjectiveSpace(viewport, &transitions.projective_lines, colorize);
         }
-    } else if (transitions.projective_lines.active) {
-        if (incTransition(&transitions.projective_lines, delta_time, false))
-            drawProjectiveSpace(viewport, &transitions.projective_lines);
 
         if (transitions.reveal_projective_point.active) {
-            RGBA projected_point_color;
-            projected_point_color.G = MAX_COLOR_VALUE / 2;
-            projected_point_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)projected_point_color.G);
-            projected_point_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)projected_point_color.G);
-            static float elapsed = 0;
             if (incTransition(&transitions.reveal_projective_point, delta_time, false))
-                projected_point_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.reveal_projective_point.eased_t);
+                projective_point_color.A = X_color.A = Y_color.A = Z_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.reveal_projective_point.eased_t);
 
-            Locator projected_point;
-            setLocator(&projected_point, getVec3Of(5 * sinf(elapsed)));
-            Edge *edge = projected_point.edges;
+            static float elapsed = 0;
+            elapsed += delta_time;
+
+            Locator projective_point;
+            Edge *edge = projective_point.edges;
+            vec3 location;
+            if (move_projective_point) {
+                location.x = 2 * sinf(elapsed)       - 1;
+                location.z = 2 * sinf(elapsed+1) - 1;
+                location.y = 1;
+                projective_point_edge.to = normVec3(location);
+                projective_point_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G * projective_point_edge.to.x);
+                projective_point_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G * projective_point_edge.to.z);
+                projective_point_edge.to = scaleVec3(location, 5);
+            } else {
+                location = getVec3Of(5 * sinf(elapsed));
+                location.z = -location.z;
+                projective_point_edge.to = getVec3Of(10);
+                projective_point_edge.to.z = -projective_point_edge.to.z;
+            }
+            if (transitions.reveal_normalizing_projective_point.active) {
+                if (incTransition(&transitions.reveal_normalizing_projective_point, delta_time, false))
+                    location = lerpVec3(Vec3(-4, 2, -8), Vec3(-2, 1, -4), transitions.reveal_normalizing_projective_point.eased_t);
+                if (transitions.reveal_normalizing_projective_point.t >= 1)
+                    transitions.reveal_normalizing_projective_point.t = 0;
+
+                projective_point_edge.to = scaleVec3(normVec3(location), 5);
+                projective_point_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G * projective_point_edge.to.x);
+                projective_point_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G * projective_point_edge.to.z);
+                transitions.reveal_normalizing_projective_point.active = true;
+                arrow1.body.from = getVec3Of(0);
+                arrow1.body.to   = location;
+                arrow1.head.length = 0.5f;
+                updateArrow(&arrow1);
+
+                viewport->settings.depth_sort = false;
+                drawArrow(viewport, projective_point_color, &arrow1, 2);
+                viewport->settings.depth_sort = true;
+            }
+
+            setLocator(&projective_point, location);
             for (u8 i = 0; i < 3; i++, edge++) {
                 edge->to   = convertPositionToObjectSpace(edge->to,   main_camera_prim);
                 edge->from = convertPositionToObjectSpace(edge->from, main_camera_prim);
-                drawEdge(viewport, projected_point_color, edge, 3);
+                drawEdge(viewport, projective_point_color, edge, 3);
             }
 
-            projected_point_color.A /= 2;
-            Edge projective_point_edge;
-            projective_point_edge.to   = convertPositionToObjectSpace(getVec3Of(+15), main_camera_prim);
-            projective_point_edge.from = convertPositionToObjectSpace(getVec3Of(-15), main_camera_prim);
-            drawEdge(viewport, projected_point_color, &projective_point_edge, 1);
+            projective_point_color.A /= 2;
+            projective_point_edge.from = invertedVec3(projective_point_edge.to);
+            projective_point_edge.from = convertPositionToObjectSpace(projective_point_edge.from, main_camera_prim);
+            projective_point_edge.to   = convertPositionToObjectSpace(projective_point_edge.to, main_camera_prim);
+            drawEdge(viewport, projective_point_color, &projective_point_edge, 2);
 
-            elapsed += delta_time;
-            if (transitions.reveal_ref_plane.active) {
-                RGBA grid_color = Color(projective_ref_plane_prim->color);
-                if (incTransition(&transitions.reveal_ref_plane, delta_time, false))
-                    grid_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.reveal_ref_plane.eased_t);
 
-                drawGrid(viewport, grid_color, projective_ref_plane_grid, projective_ref_plane_prim,0);
-            }
-        }
-    } else if (transitions.lift_up.active) {
-        RGBA grid_color = Color(projective_ref_plane_prim->color);
-        if (incTransition(&transitions.lift_up, delta_time, false)) {
-            for (u8 i = 0; i < 4; i++) transforming_quad.corners[i].y = transitions.lift_up.eased_t;
+            arrowX.body.to = arrowY.body.to = arrowZ.body.to = getVec3Of(0);
+            arrowX.body.to.x = arrowY.body.to.x = arrowZ.body.to.x = location.x;
+            arrowY.body.to.y = arrowZ.body.to.y = location.y;
 
-            grid_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.lift_up.eased_t);
-        }
+            arrowZ.body.to.z = location.z;
+            arrowX.body.from = getVec3Of(0);
+            arrowY.body.from = arrowX.body.to;
+            arrowZ.body.from = arrowY.body.to;
+            updateArrow(&arrowX);
+            updateArrow(&arrowY);
+            updateArrow(&arrowZ);
+            viewport->settings.depth_sort = false;
+            drawArrow(viewport, X_color, &arrowX, 2);
+            drawArrow(viewport, Y_color, &arrowY, 2);
+            drawArrow(viewport, Z_color, &arrowZ, 2);
+            viewport->settings.depth_sort = true;
 
-        if (transitions.translate_back.active) {
-            if (incTransition(&transitions.translate_back, delta_time, false)) {
-                f32 translation = -transitions.translate_back.eased_t * secondary_viewport.settings.near_clipping_plane_distance;
-                for (u8 i = 0; i < 4; i++) transforming_quad.corners[i].z += translation;
-
-                projective_ref_plane_prim->position.z = projective_ref_plane_prim->scale.z + secondary_viewport.settings.near_clipping_plane_distance + translation;
-                arrowY.body.to.z = translation;
-                updateArrow(&arrowY);
-            }
-
-            if (transitions.scale_back.active) {
-                vec3 scale_target = Vec3(pre_projection_matrix.X.x, 1.0f, pre_projection_matrix.Z.z);
-                vec3 scale = getVec3Of(1);
-                if (incTransition(&transitions.scale_back, delta_time, false)) {
-                    scale = lerpVec3(scale, scale_target, transitions.scale_back.eased_t);
-                    scale.y = 1.0f;
-                    for (u8 i = 0; i < 4; i++) transforming_quad.corners[i] = mulVec3(transforming_quad.corners[i], scale);
-                }
-
-                projective_ref_plane_prim->scale = scaleVec3(scale, 10);
-
-                arrowX.body.to.x = scale.x * 2;
-                updateArrow(&arrowX);
-
-                arrowZ.body.to.z = scale.z * 2;
-                updateArrow(&arrowZ);
-
-                if (transitions.shear_up.active) {
-                    if (incTransition(&transitions.shear_up, delta_time, false)) {
-
-                        arrowZ.body.to.y = transitions.shear_up.eased_t;
-                        updateArrow(&arrowZ);
-                    }
-                }
-            }
+            X_color.A = Y_color.A = Z_color.A = MAX_COLOR_VALUE;
         }
 
-        drawGrid(viewport, grid_color, projective_ref_plane_grid, projective_ref_plane_prim,0);
+        if (transitions.reveal_ref_plane.active) {
+            RGBA grid_color = Color(projective_ref_plane_prim->color);
+            if (incTransition(&transitions.reveal_ref_plane, delta_time, false))
+                grid_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.reveal_ref_plane.eased_t);
+
+            grid_color.A /= 4;
+            drawGrid(viewport, grid_color, projective_ref_plane_grid, projective_ref_plane_prim,0);
+        }
+
+        if (transitions.lift_up.active) {
+            if (incTransition(&transitions.lift_up, delta_time, false))
+                for (u8 i = 0; i < 4; i++)
+                    transforming_quad.corners[i].y = view_frustum_quad.corners[i].y = NDC_quad.corners[i].y = transitions.lift_up.eased_t;
+        }
+    }
+//    else if (transitions.lift_up.active) {
+//        RGBA grid_color = Color(projective_ref_plane_prim->color);
+//        if (incTransition(&transitions.lift_up, delta_time, false)) {
+//            for (u8 i = 0; i < 4; i++) transforming_quad.corners[i].y = transitions.lift_up.eased_t;
+//
+//            grid_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.lift_up.eased_t);
+//        }
+//
+//        if (transitions.translate_back.active) {
+//            if (incTransition(&transitions.translate_back, delta_time, false)) {
+//                f32 translation = -transitions.translate_back.eased_t * secondary_viewport.settings.near_clipping_plane_distance;
+//                for (u8 i = 0; i < 4; i++) transforming_quad.corners[i].z += translation;
+//
+//                projective_ref_plane_prim->position.z = projective_ref_plane_prim->scale.z + secondary_viewport.settings.near_clipping_plane_distance + translation;
+//                arrowY.body.to.z = translation;
+//                updateArrow(&arrowY);
+//            }
+//
+//            if (transitions.scale_back.active) {
+//                vec3 scale_target = Vec3(pre_projection_matrix.X.x, 1.0f, pre_projection_matrix.Z.z);
+//                vec3 scale = getVec3Of(1);
+//                if (incTransition(&transitions.scale_back, delta_time, false)) {
+//                    scale = lerpVec3(scale, scale_target, transitions.scale_back.eased_t);
+//                    scale.y = 1.0f;
+//                    for (u8 i = 0; i < 4; i++) transforming_quad.corners[i] = mulVec3(transforming_quad.corners[i], scale);
+//                }
+//
+//                projective_ref_plane_prim->scale = scaleVec3(scale, 10);
+//
+//                arrowX.body.to.x = scale.x * 2;
+//                updateArrow(&arrowX);
+//
+//                arrowZ.body.to.z = scale.z * 2;
+//                updateArrow(&arrowZ);
+//
+//                if (transitions.shear_up.active) {
+//                    if (incTransition(&transitions.shear_up, delta_time, false)) {
+//
+//                        arrowZ.body.to.y = transitions.shear_up.eased_t;
+//                        updateArrow(&arrowZ);
+//                    }
+//                }
+//            }
+//        }
+//
+//        drawGrid(viewport, grid_color, projective_ref_plane_grid, projective_ref_plane_prim,0);
+//    }
+
+    if (transitions.full_projection.active) {
+        if (incTransition(&transitions.full_projection, delta_time, true)) {
+            for (u8 i = 0; i < 4; i++)
+                transforming_quad.corners[i] = lerpVec3(view_frustum_quad.corners[i], NDC_quad.corners[i], transitions.full_projection.eased_t);
+
+            sides_color = getColorInBetween(sides_color, Color(Yellow), transitions.full_projection.eased_t);
+            near_color  = getColorInBetween(near_color,  Color(Yellow), transitions.full_projection.eased_t);
+            far_color   = getColorInBetween(far_color,   Color(Yellow), transitions.full_projection.eased_t);
+        }
     }
 
-    RGBA camera_color = Color(projection_plane_prim->color);
-    if (transitions.view_frustom_slice.active) {
-        if (incTransition(&transitions.view_frustom_slice, delta_time, false))
-            camera_color.A = (u8)((f32)camera_color.A * (1.0f - transitions.view_frustom_slice.eased_t));
-    }
-    if (camera_color.A) {
-        drawCamera(viewport, camera_color, secondary_viewport.camera, 0);
+    if (transitions.lines_through_NDC.active) {
+        viewport->settings.depth_sort = true;
+        if (incTransition(&transitions.lines_through_NDC, delta_time, false)) {
+            projective_point_edge.from = getVec3Of(0);
+            projective_point_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.lines_through_NDC.eased_t);
+            projective_point_color.G = MAX_COLOR_VALUE / 2;
+            for (u8 i = 0; i < 4; i++) {
+                projective_point_edge.to = normVec3(NDC_quad.corners[i]);
+                projective_point_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G * projective_point_edge.to.x);
+                projective_point_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G * projective_point_edge.to.z);
+                projective_point_edge.to = scaleVec3(projective_point_edge.to, 10);
 
-        sides_color.A = near_color.A = far_color.A = NDC_color.A = camera_color.A;
-        drawBox(viewport, NDC_color, &NDC_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
-        drawFrustum(near_color, sides_color, far_color, 1);
-        sides_color.A = near_color.A = far_color.A = NDC_color.A = MAX_COLOR_VALUE - camera_color.A;
+                projective_point_edge.from = invertedVec3(projective_point_edge.to);
+                projective_point_edge.from = convertPositionToObjectSpace(projective_point_edge.from, main_camera_prim);
+                projective_point_edge.to   = convertPositionToObjectSpace(projective_point_edge.to, main_camera_prim);
+                drawEdge(viewport, projective_point_color, &projective_point_edge, 2);
+            }
+        }
     }
+
+    Edge edge;
     if (NDC_color.A) {
-        Edge edge;
         for (u8 i = 0; i < 4; i++) {
             NDC_quad.corners[i]          = convertPositionToObjectSpace(NDC_quad.corners[i], main_camera_prim);
             transforming_quad.corners[i] = convertPositionToObjectSpace(transforming_quad.corners[i], main_camera_prim);
@@ -816,11 +869,79 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         }
     }
 
-    viewport->settings.depth_sort = false;
-    drawArrow(viewport, Color(BrightRed),   &arrowX, 2);
-    drawArrow(viewport, Color(BrightGreen), &arrowY, 2);
-    drawArrow(viewport, Color(BrightBlue),  &arrowZ, 2);
-    viewport->settings.depth_sort = true;
+    if (transitions.forcal_length_and_plane.active) {
+        viewport->settings.depth_sort = false;
+
+        if (incTransition(&transitions.forcal_length_and_plane, delta_time, false))
+            focal_length_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.forcal_length_and_plane.eased_t);
+
+        Edge focal_length_edge;
+        focal_length_edge.from = focal_length_edge.to = getVec3Of(0);
+        focal_length_edge.to.z = secondary_viewport.camera->focal_length;
+        focal_length_edge.from = convertPositionToObjectSpace(focal_length_edge.from, main_camera_prim);
+        focal_length_edge.to   = convertPositionToObjectSpace(focal_length_edge.to,   main_camera_prim);
+        drawEdge(viewport, focal_length_color, &focal_length_edge, 3);
+
+        vec3 corner = Vec3(secondary_viewport.frame_buffer->dimensions.width_over_height, 1, secondary_viewport.camera->focal_length);
+
+        Quad ref_quad;
+        for (u8 i = 0; i < 4; i++)
+            ref_quad.corners[i] = corner;
+
+        ref_quad.top_left.x    = ref_quad.bottom_left.x  = -ref_quad.top_left.x;
+        ref_quad.bottom_left.y = ref_quad.bottom_right.y = -ref_quad.top_left.y;
+
+        for (u8 i = 0; i < 4; i++)
+            ref_quad.corners[i] = convertPositionToObjectSpace(ref_quad.corners[i], main_camera_prim);
+
+        focal_length_color.R = focal_length_color.G = focal_length_color.B = (u8)((f32)MAX_COLOR_VALUE * 0.5f);
+        for (u8 i = 0; i < 4; i++) {
+            edge.from = ref_quad.corners[i];
+            edge.to   = ref_quad.corners[(i + 1) % 4];
+            drawEdge(viewport, focal_length_color, &edge, 2);
+        }
+
+        X_color.A = focal_length_color.A;
+        edge.from = edge.to = corner;
+        edge.from.x = 0;
+        edge.from.y = edge.to.y = 0;
+        edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+        edge.to = convertPositionToObjectSpace(edge.to, main_camera_prim);
+        drawEdge(viewport, X_color, &edge, 2);
+
+        Y_color.A = focal_length_color.A;
+        edge.from = edge.to = corner;
+        edge.from.x = edge.to.x = 0;
+        edge.from.y = 0;
+        edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+        edge.to = convertPositionToObjectSpace(edge.to, main_camera_prim);
+        drawEdge(viewport, Y_color, &edge, 2);
+
+        viewport->settings.depth_sort = true;
+        drawBox(viewport, Color(DarkGrey), main_box, main_box_prim, BOX__ALL_SIDES, 0);
+        Edge *clipped_edge;
+        transformGridVerticesFromObjectToViewSpace(&secondary_viewport, main_grid_prim, main_grid, &clipped_grid.vertices);
+        setGridEdgesFromVertices(clipped_grid.edges.uv.u, main_grid->u_segments, clipped_grid.vertices.uv.u.from, clipped_grid.vertices.uv.u.to);
+        setGridEdgesFromVertices(clipped_grid.edges.uv.v, main_grid->v_segments, clipped_grid.vertices.uv.v.from, clipped_grid.vertices.uv.v.to);
+        clipped_edge = clipped_grid.edges.uv.u;
+        for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, Color(main_grid_prim->color));
+        clipped_edge = clipped_grid.edges.uv.v;
+        for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, Color(main_grid_prim->color));
+
+        transformBoxVerticesFromObjectToViewSpace(&secondary_viewport, main_box_prim, &main_box->vertices, &clipped_box.vertices);
+        setBoxEdgesFromVertices(&clipped_box.edges, &clipped_box.vertices);
+        clipped_edge = clipped_box.edges.buffer;
+        for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, Color(main_box_prim->color));
+
+        if (show_secondary_viewport) {
+            fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
+
+            drawGrid(&secondary_viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
+            drawBox(&secondary_viewport, Color(main_box_prim->color), main_box, main_box_prim, BOX__ALL_SIDES, 1);
+
+            drawSecondaryViewportToFrameBuffer(viewport->frame_buffer);
+        }
+    }
 }
 
 void updateAndRender() {
@@ -836,18 +957,17 @@ void updateAndRender() {
 
     if (app->controls.is_pressed.ctrl) {
         if (mouse->wheel_scrolled) {
-            f32 z = viewport->navigation.settings.speeds.zoom * mouse->wheel_scroll_amount;
-            active_viewport->settings.near_clipping_plane_distance += z;
+            f32 z = secondary_viewport.navigation.settings.speeds.zoom * mouse->wheel_scroll_amount;
+            secondary_viewport.settings.near_clipping_plane_distance += z;
             mouse->wheel_scroll_handled = true;
         }
     } else if (app->controls.is_pressed.shift) {
         if (mouse->wheel_scrolled) {
-            f32 z = viewport->navigation.settings.speeds.zoom * mouse->wheel_scroll_amount;
-            active_viewport->settings.far_clipping_plane_distance += z;
+            f32 z = secondary_viewport.navigation.settings.speeds.zoom * mouse->wheel_scroll_amount;
+            secondary_viewport.settings.far_clipping_plane_distance += z;
             mouse->wheel_scroll_handled = true;
         }
-    } else if (!app->controls.is_pressed.alt)
-        updateViewport(active_viewport, mouse);
+    } else updateViewport(active_viewport, mouse);
 
     if (active_viewport->navigation.moved ||
         active_viewport->navigation.turned) {
@@ -862,103 +982,77 @@ void updateAndRender() {
         updateArrow(&arrow1);
     }
 
-//    renderIntro(viewport, timer->delta_time, elapsed);
-//    renderProjection(viewport, timer->delta_time);
-    renderViewSpaceFrustumSlice(viewport, timer->delta_time);
-//    renderProjectiveSpace(viewport, timer->delta_time);
-//    renderViewFrustum(viewport, timer->delta_time, elapsed);
+    setPreProjectionMatrix(viewport);
+    setPreProjectionMatrix(&secondary_viewport);
+
+    f32 target_distance = viewport->camera->target_distance;
+    viewport->camera->target_distance = lengthVec3(viewport->camera->transform.position);
+    orbitCamera(viewport->camera, timer->delta_time / 30, 0);
+    viewport->camera->target_distance = target_distance;
+
+    viewport->settings.depth_sort = true;
+    drawGrid(viewport, Color(DarkGrey), main_grid, main_grid_prim,0);
+    //    viewport->settings.depth_sort = true;
+
+    secondary_camera_prim->position = secondary_viewport.camera->transform.position;
+    secondary_camera_prim->rotation = secondary_viewport.camera->transform.rotation;
+    main_camera_prim->position = viewport->camera->transform.position;
+    main_camera_prim->rotation = viewport->camera->transform.rotation;
+    updateProjectionBoxes(&secondary_viewport);
+
+    sides_color = Color(Cyan);
+    near_color = Color(BrightRed);
+    far_color = Color(BrightBlue);
+    NDC_color = Color(Yellow);
+
+    X_color = Color(BrightRed);
+    Y_color = Color(BrightGreen);
+    Z_color = Color(BrightBlue);
+
+    edge_color = Color(projection_plane_prim->color);
+    edge_color.A = MAX_COLOR_VALUE / 2;
+    if (current_viz != VIEW_FRUSTUM_SLICE)
+        drawCamera(viewport, edge_color, secondary_viewport.camera, 0);
+
+    switch (current_viz) {
+        case INTRO: renderIntro(viewport, timer->delta_time, elapsed); break;
+        case VIEW_FRUSTUM: renderViewFrustum(viewport, timer->delta_time, elapsed); break;
+        case PROJECTION: renderProjection(viewport, timer->delta_time); break;
+        case PROJECTIVE_SPACE: current_viz = VIEW_FRUSTUM; renderProjectiveSpace(viewport, timer->delta_time); break;
+        default: renderViewSpaceFrustumSlice(viewport, timer->delta_time); break;
+    }
+
+    viewport->settings.depth_sort = false;
+    updateCameraArrows(&secondary_viewport.camera->transform);
+    drawArrow(viewport, X_color, &arrowX, 2);
+    drawArrow(viewport, Y_color, &arrowY, 2);
+    drawArrow(viewport, Z_color, &arrowZ, 2);
+    viewport->settings.depth_sort = true;
+
+    if (show_secondary_viewport) {
+        fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
+
+        drawGrid(&secondary_viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
+        drawBox(&secondary_viewport, Color(main_box_prim->color), main_box, main_box_prim, BOX__ALL_SIDES, 1);
+
+        drawSecondaryViewportToFrameBuffer(viewport->frame_buffer);
+    }
 
     active_viewport->navigation.moved  = false;
     active_viewport->navigation.turned = false;
     resetMouseChanges(mouse);
     endFrameTimer(timer);
 }
-void onKeyChanged(u8 key, bool is_pressed) {
-    NavigationMove *move = &active_viewport->navigation.move;
-    NavigationTurn *turn = &active_viewport->navigation.turn;
-    if (key == 'Q') turn->left     = is_pressed;
-    if (key == 'E') turn->right    = is_pressed;
-    if (key == 'R') move->up       = is_pressed;
-    if (key == 'F') move->down     = is_pressed;
-    if (key == 'W') move->forward  = is_pressed;
-    if (key == 'S') move->backward = is_pressed;
-    if (key == 'A') move->left     = is_pressed;
-    if (key == 'D') move->right    = is_pressed;
 
-    if (!is_pressed) {
-        if (key == app->controls.key_map.tab) show_secondary_viewport = !show_secondary_viewport;
-        if (key == '2') {
-            transitions.pre_projection.active = true;
-            transitions.pre_projection.t = 0;
-            transitions.view_frustom_slice.active = true;
-            transitions.view_frustom_slice.t = 0;
-        }
-        if (key == '1') {
-            transitions.full_projection.active = true;
-            transitions.full_projection.t = 0;
-        }
-        if (key == '4') {
-//            transitions.lift_up.active = true;
-//            transitions.lift_up.t = 0;
-//            transitions.translate_back.active = true;
-//            transitions.translate_back.t = 0;
-            transitions.reveal_projective_point.active = true;
-            transitions.reveal_projective_point.t = 0;
-            draw_locator_grids = !draw_locator_grids;
-        }
-        if (key == '3') {
-            transitions.projective_lines.active = true;
-            transitions.projective_lines.t = 0;
-            show_pre_projection = !show_pre_projection;
-        }
-        if (key == '5') {
-            transitions.scale_back.active = true;
-            transitions.scale_back.t = 0;
-            transitions.reveal_ref_plane.active = true;
-            transitions.reveal_ref_plane.t = 0;
-        }
-        if (key == '6') {
-            transitions.shear_up.active = true;
-            transitions.shear_up.t = 0;
-        }
-    }
-}
-
-void setupViewport(Viewport *viewport) {
-    active_viewport = viewport;
-    viewport->settings.antialias = viewport->settings.depth_sort = true;
-    initPixelGrid(&secondary_viewport_frame_buffer, allocateAppMemory(RENDER_SIZE));
-    initViewport(&secondary_viewport,
-                 &viewport->settings,
-                 &viewport->navigation.settings,
-                 app->scene.cameras + 1,
-                 &secondary_viewport_frame_buffer);
-    updateDimensions(&secondary_viewport_frame_buffer.dimensions, 200,150);
-    secondary_viewport.settings.position.x = 20;
-    secondary_viewport.settings.position.y = 20;
-    secondary_viewport.settings.far_clipping_plane_distance = 20;
-    secondary_viewport.settings.near_clipping_plane_distance = 4;
-
+void setupViewportCore(Viewport *viewport) {
     Scene *scene = &app->scene;
 
-    arrow_box_prim = scene->primitives;
-    main_box_prim = arrow_box_prim + 1;
-    main_grid_prim = main_box_prim + 1;
-    projection_plane_prim = main_grid_prim + 1;
-    projective_ref_plane_prim = projection_plane_prim + 1;
-    main_camera_prim = projective_ref_plane_prim + 1;
-    secondary_camera_prim = main_camera_prim + 1;
-
-    main_grid = scene->grids;
-    projection_plane_grid = main_grid + 1;
-    projective_ref_plane_grid = projection_plane_grid + 1;
-
-    main_box = scene->boxes;
-    arrow_box = main_box + 1;
+    for (u32 i = 0; i < scene->settings.cameras; i++) initCamera(scene->cameras + i);
+    for (u32 i = 0; i < scene->settings.primitives; i++) { initPrimitive(scene->primitives + i); scene->primitives[i].id = i; }
+    for (u32 i = 0; i < scene->settings.boxes; i++) initBox(scene->boxes + i);
+    for (u32 i = 0; i < scene->settings.grids; i++) initGrid(scene->grids + i, 3, 3);
 
     main_box_prim->color = Yellow;
-    main_box_prim->type = arrow_box_prim->type = PrimitiveType_Box;
-    main_grid_prim->type = projection_plane_prim->type = projective_ref_plane_prim->type = PrimitiveType_Grid;
     main_grid_prim->color = White;
     projection_plane_prim->color = Cyan;
 
@@ -966,47 +1060,55 @@ void setupViewport(Viewport *viewport) {
     camera_xform->position = Vec3(0, 13, -30);
     rotateXform3(camera_xform, 0, -0.15f, 0);
 
+    draw_locator_grids = false;
+    show_pre_projection = false;
+    move_projective_point = true;
+
     camera_xform = &scene->cameras[1].transform;
-#ifndef VIEW_SPACE
-    rotatePrimitive(main_grid_prim, 0.5f, 0, 0);
-    camera_xform->position = Vec3(0, 9, -10);
-    rotateXform3(camera_xform, 0, -0.2f, 0);
 
-    initGrid(main_grid,11, 11);
-    main_grid_prim->scale    = Vec3(5, 1, 5);
-    main_grid_prim->position = Vec3(0, 0, 5);
+    if (current_viz == VIEW_FRUSTUM_SLICE) {
+        //    camera_xform->position = Vec3(0, 0.05f, 0.05f);
 
-    vec2 sin_cos = Vec2(SQRT2_OVER_2, SQRT2_OVER_2);
-    vec3 x_axis = Vec3(1, 0, 0);
+        initGrid(main_grid,41, 41);
+        main_grid_prim->scale    = Vec3(20, 1, 20);
+        //    main_grid_prim->position = Vec3(0, 0, 10);
 
-    projection_plane_prim->id = 1;
-    projection_plane_prim->scale = Vec3(6, 1, 4);
-    projection_plane_prim->position = scaleAddVec3(*camera_xform->forward_direction,
-                                                   secondary_viewport.settings.near_clipping_plane_distance,
-                                                   camera_xform->position);
-    initGrid(projection_plane_grid, 2, 2);
-    projection_plane_prim->rotation = rotateAroundAxisBySinCos(camera_xform->rotation, x_axis, sin_cos);
+        initGrid(projective_ref_plane_grid,41, 41);
+        projective_ref_plane_prim->color = Magenta;
+        projective_ref_plane_prim->scale    = Vec3(20, 1, 20);
+        projective_ref_plane_prim->position = Vec3(0, 1, 0);
 
-    projective_ref_plane_prim->id = 2;
-    //    projective_ref_plane_prim->scale = Vec3(10, 1, 10);
-    projective_ref_plane_prim->position = scaleAddVec3(*camera_xform->forward_direction, 1, camera_xform->position);
-    initGrid(projective_ref_plane_grid, 11, 11);
-    projective_ref_plane_prim->rotation = rotateAroundAxisBySinCos(camera_xform->rotation, x_axis, sin_cos);
-#else
-//    camera_xform->position = Vec3(0, 0.05f, 0.05f);
+        main_box_prim->position = Vec3(0, 0, 7);
+        rotatePrimitive(main_box_prim, 0.23f, 0.34f, 0);
+    } else {
+        rotatePrimitive(main_grid_prim, 0.5f, 0, 0);
+        camera_xform->position = Vec3(0, 9, -10);
+        rotateXform3(camera_xform, 0, -0.2f, 0);
 
-    initGrid(main_grid,41, 41);
-    main_grid_prim->scale    = Vec3(20, 1, 20);
-//    main_grid_prim->position = Vec3(0, 0, 10);
+        initGrid(main_grid,11, 11);
+        main_grid_prim->scale    = Vec3(5, 1, 5);
+        main_grid_prim->position = Vec3(0, 0, 5);
 
-    initGrid(projective_ref_plane_grid,41, 41);
-    projective_ref_plane_prim->color = Magenta;
-    projective_ref_plane_prim->scale    = Vec3(20, 1, 20);
-    projective_ref_plane_prim->position = Vec3(0, 1, 0);
-#endif
+        vec2 sin_cos = Vec2(SQRT2_OVER_2, SQRT2_OVER_2);
+        vec3 x_axis = Vec3(1, 0, 0);
 
-    main_box_prim->position = Vec3(0, 3, 5);
-    main_box_prim->scale = getVec3Of(2);
+        projection_plane_prim->id = 1;
+        projection_plane_prim->scale = Vec3(6, 1, 4);
+        projection_plane_prim->position = scaleAddVec3(*camera_xform->forward_direction,
+                                                       secondary_viewport.settings.near_clipping_plane_distance,
+                                                       camera_xform->position);
+        initGrid(projection_plane_grid, 2, 2);
+        projection_plane_prim->rotation = rotateAroundAxisBySinCos(camera_xform->rotation, x_axis, sin_cos);
+
+        projective_ref_plane_prim->id = 2;
+        //    projective_ref_plane_prim->scale = Vec3(10, 1, 10);
+        projective_ref_plane_prim->position = scaleAddVec3(*camera_xform->forward_direction, 1, camera_xform->position);
+        initGrid(projective_ref_plane_grid, 11, 11);
+        projective_ref_plane_prim->rotation = rotateAroundAxisBySinCos(camera_xform->rotation, x_axis, sin_cos);
+
+        main_box_prim->position = Vec3(0, 3, 5);
+        main_box_prim->scale = getVec3Of(2);
+    }
 
     arrow1.body.from = Vec3(2, 0, 3);
     arrow1.body.to = addVec3(arrow1.body.from, getVec3Of(10));
@@ -1034,12 +1136,123 @@ void setupViewport(Viewport *viewport) {
         transitions.states[i].speed = i == 2 ? 0.25f : (i == 3 ? PROJECTION_LINE_INC_SPEED : 0.5f);
     }
     viewport->camera->target_distance = lengthVec3(viewport->camera->transform.position);
+}
 
-    secondary_camera_prim->position = secondary_viewport.camera->transform.position;
-    secondary_camera_prim->rotation = secondary_viewport.camera->transform.rotation;
-    main_camera_prim->position = viewport->camera->transform.position;
-    main_camera_prim->rotation = viewport->camera->transform.rotation;
-    updateProjectionBoxes(&secondary_viewport);
+void onKeyChanged(u8 key, bool is_pressed) {
+    NavigationMove *move = &active_viewport->navigation.move;
+    NavigationTurn *turn = &active_viewport->navigation.turn;
+    if (key == 'Q') turn->left     = is_pressed;
+    if (key == 'E') turn->right    = is_pressed;
+    if (key == 'R') move->up       = is_pressed;
+    if (key == 'F') move->down     = is_pressed;
+    if (key == 'W') move->forward  = is_pressed;
+    if (key == 'S') move->backward = is_pressed;
+    if (key == 'A') move->left     = is_pressed;
+    if (key == 'D') move->right    = is_pressed;
+
+    if (!is_pressed) {
+        if (key == app->controls.key_map.space) {
+            switch (current_viz) {
+                case INTRO: current_viz = VIEW_FRUSTUM; break;
+                case VIEW_FRUSTUM: current_viz = PROJECTION; break;
+                case PROJECTION: current_viz = PROJECTIVE_SPACE;  break;
+                case PROJECTIVE_SPACE: current_viz = VIEW_FRUSTUM_SLICE;  break;
+                default: current_viz = INTRO;  break;
+            }
+            setupViewportCore(&app->viewport);
+        }
+
+        if (key == app->controls.key_map.tab) show_secondary_viewport = !show_secondary_viewport;
+        if (key == '2') {
+            transitions.pre_projection.active = true;
+            transitions.pre_projection.t = 0;
+            transitions.view_frustom_slice.active = true;
+            transitions.view_frustom_slice.t = 0;
+        }
+        if (key == '1') {
+            transitions.full_projection.active = true;
+            transitions.full_projection.t = 0;
+        }
+        if (key == '4') {
+//            transitions.translate_back.active = true;
+//            transitions.translate_back.t = 0;
+            transitions.reveal_projective_point.active = true;
+            transitions.reveal_projective_point.t = 0;
+            move_projective_point = !move_projective_point;
+            draw_locator_grids = !draw_locator_grids;
+        }
+        if (key == '3') {
+            transitions.projective_lines.active = true;
+            transitions.projective_lines.t = 0;
+            show_pre_projection = !show_pre_projection;
+        }
+        if (key == '5') {
+//            transitions.scale_back.active = true;
+//            transitions.scale_back.t = 0;
+            transitions.reveal_ref_plane.active = true;
+            if (transitions.reveal_projective_point.active && move_projective_point) {
+                transitions.reveal_normalizing_projective_point.active = true;
+                transitions.reveal_normalizing_projective_point.t = 0;
+            } else
+                transitions.reveal_ref_plane.t = 0;
+        }
+        if (key == '6') {
+            transitions.reveal_projective_point.active = false;
+            transitions.lift_up.active = true;
+            transitions.lift_up.t = 0;
+//            transitions.shear_up.active = true;
+//            transitions.shear_up.t = 0;
+        }
+        if (key == '7') {
+            transitions.lines_through_NDC.active = true;
+            transitions.lines_through_NDC.t = 0;
+        }
+        if (key == '8') {
+//            alpha = !alpha;
+        }
+        if (key == 'Z') {
+            transitions.forcal_length_and_plane.active = !transitions.forcal_length_and_plane.active;
+            transitions.forcal_length_and_plane.t = 0;
+        }
+    }
+}
+
+void setupViewport(Viewport *viewport) {
+    active_viewport = viewport;
+    viewport->settings.antialias = viewport->settings.depth_sort = true;
+    initPixelGrid(&secondary_viewport_frame_buffer, allocateAppMemory(RENDER_SIZE));
+    initViewport(&secondary_viewport,
+                 &viewport->settings,
+                 &viewport->navigation.settings,
+                 app->scene.cameras + 1,
+                 &secondary_viewport_frame_buffer);
+    updateDimensions(&secondary_viewport_frame_buffer.dimensions, 600,400);
+    secondary_viewport.settings.position.x = 20;
+    secondary_viewport.settings.position.y = 20;
+    secondary_viewport.settings.far_clipping_plane_distance = 20;
+    secondary_viewport.settings.near_clipping_plane_distance = 4;
+
+    Scene *scene = &app->scene;
+
+    arrow_box_prim = scene->primitives;
+    main_box_prim = arrow_box_prim + 1;
+    main_grid_prim = main_box_prim + 1;
+    projection_plane_prim = main_grid_prim + 1;
+    projective_ref_plane_prim = projection_plane_prim + 1;
+    main_camera_prim = projective_ref_plane_prim + 1;
+    secondary_camera_prim = main_camera_prim + 1;
+
+    main_grid = scene->grids;
+    projection_plane_grid = main_grid + 1;
+    projective_ref_plane_grid = projection_plane_grid + 1;
+
+    main_box = scene->boxes;
+    arrow_box = main_box + 1;
+
+    main_box_prim->type = arrow_box_prim->type = PrimitiveType_Box;
+    main_grid_prim->type = projection_plane_prim->type = projective_ref_plane_prim->type = PrimitiveType_Grid;
+
+    setupViewportCore(viewport);
 }
 
 void initApp(Defaults *defaults) {

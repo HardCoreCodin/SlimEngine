@@ -228,6 +228,8 @@ typedef struct Viewport {
     PixelGrid *frame_buffer;
     Box default_box;
     vec2i position;
+    mat4 pre_projection_matrix,
+         pre_projection_matrix_inverted;
 } Viewport;
 
 typedef struct Ray {

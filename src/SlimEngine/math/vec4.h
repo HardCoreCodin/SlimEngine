@@ -82,6 +82,16 @@ INLINE vec4 scaleVec4(vec4 a, f32 factor) {
 
     return out;
 }
+INLINE vec4 scaleAddVec4(vec4 v, f32 factor, vec4 to_be_added) {
+    vec4 out;
+
+    out.x = fast_mul_add(v.x, factor, to_be_added.x);
+    out.y = fast_mul_add(v.y, factor, to_be_added.y);
+    out.z = fast_mul_add(v.z, factor, to_be_added.z);
+    out.w = fast_mul_add(v.w, factor, to_be_added.w);
+
+    return out;
+}
 
 INLINE vec4 mulVec4Mat4(vec4 in, mat4 m) {
     vec4 out;

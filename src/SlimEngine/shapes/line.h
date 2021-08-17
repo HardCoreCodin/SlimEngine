@@ -105,7 +105,7 @@ void drawLine2D(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
         }
     }
 }
-
+bool alpha = true;
 INLINE void setPixel(PixelGrid *canvas, RGBA color, f32 opacity, i32 x, i32 y, f64 z) {
     if (!inRange(y, canvas->dimensions.height, 0) ||
         !inRange(x, canvas->dimensions.width, 0))
@@ -114,7 +114,7 @@ INLINE void setPixel(PixelGrid *canvas, RGBA color, f32 opacity, i32 x, i32 y, f
     i32 index = canvas->dimensions.width * y + x;
     FloatPixel pixel, foreground, background = canvas->float_pixels[index];
     foreground.depth = z;
-    foreground.opacity = opacity;
+    foreground.opacity = opacity;// / (z > 10 ? (f32)z*0.05f : 1);
     foreground.color.x = (f32)color.R;
     foreground.color.y = (f32)color.G;
     foreground.color.z = (f32)color.B;
@@ -126,8 +126,18 @@ INLINE void setPixel(PixelGrid *canvas, RGBA color, f32 opacity, i32 x, i32 y, f
         background = pixel;
     }
 
+    if (alpha) {
+        background.color = mulVec3(background.color, background.color);
+        foreground.color = mulVec3(foreground.color, foreground.color);
+    }
+
     opacity = 1.0f - foreground.opacity;
     pixel.color = scaleAddVec3(background.color, opacity, foreground.color);
+    if (alpha) {
+        pixel.color.x = sqrtf(pixel.color.x);
+        pixel.color.y = sqrtf(pixel.color.y);
+        pixel.color.z = sqrtf(pixel.color.z);
+    }
     pixel.opacity = foreground.opacity + background.opacity * opacity;
     pixel.depth = foreground.depth;
 
@@ -302,14 +312,14 @@ void drawLine3D(PixelGrid *canvas, RGBA color, vec3 from, vec3 to, u8 line_width
         for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, z1);
         setPixel(canvas, color, fpart(last.y) * gap * opacity, x, y,   z2);
 
-        z1 = 1.0 / z1;
-        z2 = 1.0 / z2;
+//        z1 = 1.0 / z1;
+//        z2 = 1.0 / z2;
         z_step = (z2 - z1) / (f64)(end.x - start.x + 1);
         z_curr = z1 + z_step;
         gap = first.y + grad;
         for (x = start.x + 1; x < end.x; x++) {
             y = (i32)gap;
-            z = 1.0 / z_curr;
+            z = z_curr;
             setPixel(canvas, color, rfpart(gap) * opacity, x, y++, z);
             for (u8 i = 0; i < line_width; i++) setPixel(canvas, color,opacity, x, y++,z);
             setPixel(canvas, color,  fpart(gap) * opacity, x, y,   z);

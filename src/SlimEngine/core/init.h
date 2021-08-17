@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./types.h"
+#include "../math/mat4.h"
 
 void initNumberString(NumberString *number_string) {
     number_string->string.char_ptr = number_string->_buffer;
@@ -237,6 +238,25 @@ void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->position.y = 0;
 }
 
+void setPreProjectionMatrix(Viewport *viewport) {
+    f32 n = viewport->settings.near_clipping_plane_distance;
+    f32 f = viewport->settings.far_clipping_plane_distance;
+
+    viewport->pre_projection_matrix.X.y = viewport->pre_projection_matrix.X.z = viewport->pre_projection_matrix.X.w = 0;
+    viewport->pre_projection_matrix.Y.x = viewport->pre_projection_matrix.Y.z = viewport->pre_projection_matrix.Y.w = 0;
+    viewport->pre_projection_matrix.W.x = viewport->pre_projection_matrix.W.y = viewport->pre_projection_matrix.W.w = 0;
+    viewport->pre_projection_matrix.Z.x = viewport->pre_projection_matrix.Z.y = 0;
+    viewport->pre_projection_matrix.X.x = viewport->camera->focal_length * viewport->frame_buffer->dimensions.height_over_width;
+    viewport->pre_projection_matrix.Y.y = viewport->camera->focal_length;
+    viewport->pre_projection_matrix.Z.z = f / (f - n);
+    viewport->pre_projection_matrix.W.z = -n * viewport->pre_projection_matrix.Z.z;
+    viewport->pre_projection_matrix.Z.w = 1.0f;
+
+    viewport->pre_projection_matrix_inverted = invMat4(viewport->pre_projection_matrix);
+    //    this.z_axis.z      =     (f + n) * d;
+    //    this.translation.z = -2 * f * n  * d;
+}
+
 void initViewport(Viewport *viewport,
                   ViewportSettings *viewport_settings,
                   NavigationSettings *navigation_settings,
@@ -248,6 +268,7 @@ void initViewport(Viewport *viewport,
     initBox(&viewport->default_box);
     initHUD(&viewport->hud, viewport_settings->hud_lines, viewport_settings->hud_line_count, 1, viewport_settings->hud_default_color, 0, 0);
     initNavigation(&viewport->navigation, navigation_settings);
+    setPreProjectionMatrix(viewport);
 }
 
 void setDefaultSceneSettings(SceneSettings *settings) {
