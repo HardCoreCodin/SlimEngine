@@ -215,3 +215,7 @@ INLINE vec3 reflectVec3(vec3 V, vec3 N) {
          out = addVec3(out, V);
     return out;
 }
+
+INLINE vec3 lerpVec3(vec3 from, vec3 to, f32 by) {
+    return scaleAddVec3(subVec3(to, from), by, from);
+}

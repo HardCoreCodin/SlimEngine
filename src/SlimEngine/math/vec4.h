@@ -129,3 +129,9 @@ INLINE f32 lengthVec4(vec4 v) {
 INLINE vec4 norm4(vec4 v) {
     return scaleVec4(v, 1.0f / lengthVec4(v));
 }
+
+INLINE f32 mulVec3Mat4(vec3 in, f32 w, mat4 M, vec3 *out) {
+    vec4 v4 = mulVec4Mat4(Vec4fromVec3(in, w), M);
+    *out = Vec3fromVec4(v4);
+    return v4.w;
+}

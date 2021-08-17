@@ -177,6 +177,11 @@ INLINE quat Quat(vec3 axis, f32 amout) {
     return out;
 }
 
+f32 smoothstep(f32 from, f32 to, f32 t) {
+    t = (t - from) / (to - from);
+    return t * t * (3 - 2 * t);
+}
+
 #define Kilobytes(value) ((value)*1024LL)
 #define Megabytes(value) (Kilobytes(value)*1024LL)
 #define Gigabytes(value) (Megabytes(value)*1024LL)

@@ -1,154 +1,4 @@
-#include "../SlimEngine/app.h"
-#include "../SlimEngine/core/time.h"
-#include "../SlimEngine/math/mat4.h"
-#include "../SlimEngine/math/vec4.h"
-#include "../SlimEngine/scene/grid.h"
-#include "../SlimEngine/scene/xform.h"
-#include "../SlimEngine/viewport/navigation.h"
-#include "../SlimEngine/viewport/manipulation.h"
-//#include "../SlimEngine/viewport/hud.h"
-// Or using the single-header file:
-// #include "../SlimEngine.h"
-
-#define ARROW_LINE_WIDTH 5
-#define ASPECT_RATIO (4.0f/3.0f)
-
-typedef struct ArrowHead {
-    Edge left, right;
-    f32 length;
-} ArrowHead;
-
-typedef struct Arrow {
-    ArrowHead head;
-    Edge body;
-} Arrow;
-
-RGBA sides_color, near_color, far_color, NDC_color, X_color, Y_color, Z_color;
-Arrow arrow1, arrowX, arrowY, arrowZ;
-bool show_secondary_viewport = false;
-PixelGrid secondary_viewport_frame_buffer;
-Viewport secondary_viewport, *active_viewport;
-
-Primitive *arrow_box_prim, *main_grid_prim, *projection_plane_prim, *projective_ref_plane_prim, *main_camera_prim, *secondary_camera_prim, *main_box_prim;
-Grid *main_grid, *projection_plane_grid, *projective_ref_plane_grid, clipped_grid;
-Box NDC_box, projected_box, pre_projected_view_frustum_box, transforming_view_frustum_box, view_frustum_box, clipped_box, *main_box, *arrow_box;
-Edge view_space_edge;
-RGBA edge_color;
-bool draw_locator_grids = false;
-bool show_pre_projection = false;
-bool move_projective_point = true;
-
-typedef enum VIZ {
-    INTRO = 1,
-    VIEW_FRUSTUM,
-    PROJECTION,
-    PROJECTIVE_SPACE,
-    VIEW_FRUSTUM_SLICE
-} VIZ;
-VIZ current_viz = INTRO;
-
-typedef struct Transition {
-    bool active;
-    f32 t, speed, eased_t;
-} Transition;
-
-f32 smoothstep(f32 from, f32 to, f32 t) {
-    t = (t - from) / (to - from);
-    return t * t * (3 - 2 * t);
-}
-
-bool incTransition(Transition *transition, f32 inc, bool reset_when_done) {
-    transition->t += inc * transition->speed;
-    if (transition->t > 1) {
-        if (reset_when_done) {
-            transition->t = 0;
-            transition->active = false;
-        } else transition->t = transition->eased_t = 1;
-    } else
-        transition->eased_t = smoothstep(0, 1, transition->t);
-
-    return transition->active;
-}
-
-#define TRANSITION_COUNT 14
-
-typedef union Transitions {
-    struct {
-        Transition pre_projection,
-        projection,
-        full_projection,
-        projective_lines,
-        view_frustom_slice,
-        lift_up,
-        translate_back,
-        scale_back,
-        shear_up,
-        reveal_ref_plane,
-        reveal_projective_point,
-        reveal_normalizing_projective_point,
-        lines_through_NDC,
-        forcal_length_and_plane;
-    };
-    Transition states[TRANSITION_COUNT];
-} Transitions;
-Transitions transitions;
-
-typedef union Locator {
-    struct {
-        Edge X, Y, Z;
-    };
-    Edge edges[3];
-} Locator;
-
-#define PROJECTION_LINES_COUNT 36
-#define PROJECTION_LINES_OPACITY (MAX_COLOR_VALUE / 8)
-#define PROJECTION_LINE_INC_SPEED 0.3f
-
-#define LOCATOR_GRID_SIZE_X 41
-#define LOCATOR_GRID_SIZE_Y 31
-#define LOCATOR_GRID_SIZE_Z 21
-#define LOCATOR_OPACITY (MAX_COLOR_VALUE / 8)
-#define LOCATOR_SIZE 0.2f
-
-void setLocator(Locator *locator, vec3 location) {
-    for (u8 i = 0; i < 3; i++) locator->edges[i].from = locator->edges[i].to = location;
-
-    locator->X.from.x -= LOCATOR_SIZE;
-    locator->X.to.x   += LOCATOR_SIZE;
-    locator->Y.from.y -= LOCATOR_SIZE;
-    locator->Y.to.y   += LOCATOR_SIZE;
-    locator->Z.from.z -= LOCATOR_SIZE;
-    locator->Z.to.z   += LOCATOR_SIZE;
-}
-
-void updateArrow(Arrow *arrow) {
-    vec3 direction = scaleVec3(normVec3(subVec3(arrow->body.from, arrow->body.to)), arrow->head.length);
-    arrow->head.left.to = arrow->head.right.to = arrow->body.to;
-    arrow->head.left.from = arrow->head.right.from = addVec3(arrow->body.to, direction);
-    direction = crossVec3(direction, crossVec3(direction, direction.x || direction.z ? Vec3(0, 1, 0) : Vec3(1, 0, 0)));
-    arrow->head.left.from = addVec3(arrow->head.left.from, direction);
-    arrow->head.right.from = subVec3(arrow->head.right.from, direction);
-}
-
-void transformEdge(Edge *in_edge, Edge *out_edge, xform3 *xform) {
-    out_edge->from = subVec3(in_edge->from, xform->position);
-    out_edge->from = mulVec3Quat(out_edge->from, xform->rotation_inverted);
-    out_edge->to = subVec3(in_edge->to, xform->position);
-    out_edge->to = mulVec3Quat(out_edge->to, xform->rotation_inverted);
-}
-
-void drawArrow(Viewport *viewport, RGBA color, Arrow *arrow, u8 line_width) {
-    xform3 *xform = &viewport->camera->transform;
-    Edge edge;
-    transformEdge(&arrow->body, &edge, xform);
-    drawEdge(viewport, color, &edge, line_width);
-
-    transformEdge(&arrow->head.left, &edge, xform);
-    drawEdge(viewport, color, &edge, line_width);
-
-    transformEdge(&arrow->head.right, &edge, xform);
-    drawEdge(viewport, color, &edge, line_width);
-}
+#include "./projective_base.h"
 
 void onButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff = Vec2i(0, 0);
@@ -195,101 +45,12 @@ void updateViewport(Viewport *viewport, Mouse *mouse) {
     }
 }
 
-void drawSecondaryViewportToFrameBuffer(PixelGrid *frame_buffer) {
-    Pixel *trg_pixels = frame_buffer->pixels;
-    Pixel *src_pixels = secondary_viewport_frame_buffer.pixels;
-    Dimensions *trg_dim = &frame_buffer->dimensions;
-    Dimensions *src_dim = &secondary_viewport_frame_buffer.dimensions;
-    i32 trg_index, src_index = 0;
-    for (i32 y = 0; y < src_dim->height; y++) {
-        for (i32 x = 0; x < src_dim->width; x++) {
-            trg_index = secondary_viewport.settings.position.y + y;
-            trg_index *= trg_dim->width;
-            trg_index += secondary_viewport.settings.position.x + x;
-            trg_pixels[trg_index] = src_pixels[src_index++];
-        }
-    }
-    i32 x1 = secondary_viewport.settings.position.x;
-    i32 x2 = secondary_viewport.frame_buffer->dimensions.width + x1;
-    i32 y1 = secondary_viewport.settings.position.y;
-    i32 y2 = secondary_viewport.frame_buffer->dimensions.height + y1;
-
-    edge_color = Color(White);
-
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y1-1);
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y1+0);
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y1+1);
-
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y2-1);
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y2+0);
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y2+1);
-
-
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x1-1);
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x1+0);
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x1+1);
-
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x2-1);
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x2+0);
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x2+1);
-}
-
-BoxCorners getViewFrustumCorners(Viewport *viewport) {
-    BoxCorners corners;
-    corners.back_top_right.z = viewport->settings.near_clipping_plane_distance;
-    corners.back_top_right.y = viewport->settings.near_clipping_plane_distance / viewport->camera->focal_length;
-    corners.back_top_right.x = ASPECT_RATIO * corners.back_top_right.y;
-    corners.back_top_left = corners.back_top_right;
-    corners.back_top_left.x *= -1;
-    corners.back_bottom_left = corners.back_top_left;
-    corners.back_bottom_left.y *= -1;
-    corners.back_bottom_right = corners.back_top_right;
-    corners.back_bottom_right.y *= -1;
-
-    corners.front_top_right.z = viewport->settings.far_clipping_plane_distance;
-    corners.front_top_right.y = viewport->settings.far_clipping_plane_distance / viewport->camera->focal_length;
-    corners.front_top_right.x = ASPECT_RATIO * corners.front_top_right.y;
-    corners.front_top_left = corners.front_top_right;
-    corners.front_top_left.x *= -1;
-    corners.front_bottom_left = corners.front_top_left;
-    corners.front_bottom_left.y *= -1;
-    corners.front_bottom_right = corners.front_top_right;
-    corners.front_bottom_right.y *= -1;
-
-    return corners;
-}
-
-void drawFrustum(u8 line_width) {
-    transformBoxVerticesFromObjectToViewSpace(&app->viewport, secondary_camera_prim, &view_frustum_box.vertices, &view_frustum_box.vertices);
-    setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
-
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_top,    line_width);
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_bottom, line_width);
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_left,   line_width);
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_right,  line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_top,     line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_bottom,  line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_left,    line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_right,   line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.left_top,     line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.left_bottom,  line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.right_top,    line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.right_bottom, line_width);
-}
-
 void renderIntro(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
-    f32 opacity = fabsf(sinf(elapsed_time * 1.7f));
-    RGBA green = Color(Green);
-    green.A = (u8)(opacity * FLOAT_TO_COLOR_COMPONENT);
-
     rotatePrimitive(main_box_prim, delta_time / -3, 0, 0);
-    orbitCamera(viewport->camera, delta_time / 20, 0);
-    drawCamera(viewport, Color(projection_plane_prim->color), app->scene.cameras + 1, 1);
 
     drawGrid(viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
     drawGrid(viewport, Color(projection_plane_prim->color), projection_plane_grid, projection_plane_prim, 0);
-    drawBox(viewport, Color(main_box_prim->color), main_box, main_box_prim, BOX__ALL_SIDES, 1);
-    //    drawArrow(viewport, green, &arrow1);
+    drawBox(viewport,  Color(main_box_prim->color), main_box, main_box_prim, BOX__ALL_SIDES, 1);
 
     edge_color = Color(Magenta);
     edge_color.A = MAX_COLOR_VALUE / 2;
@@ -318,62 +79,16 @@ void renderIntro(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
         drawEdge(viewport, edge_color, projected_box.edges.buffer + i, 1);
 }
 
-void convertEdgeFromSecondaryToMain(Edge *edge) {
-    edge->from = convertPositionToWorldSpace(edge->from, secondary_camera_prim);
-    edge->to   = convertPositionToWorldSpace(edge->to,   secondary_camera_prim);
-    edge->from = convertPositionToObjectSpace(edge->from, main_camera_prim);
-    edge->to   = convertPositionToObjectSpace(edge->to,   main_camera_prim);
-}
-
-void drawClippedEdge(Viewport *viewport, Edge *clipped_edge, RGBA color) {
-    if (!cullAndClipEdge(clipped_edge, &secondary_viewport))
-        return;
-
-    convertEdgeFromSecondaryToMain(clipped_edge);
-    projectEdge(clipped_edge, viewport);
-    clipped_edge->from.z -= 0.1f;
-    clipped_edge->to.z -= 0.1f;
-    drawLine3D(viewport->frame_buffer, color, clipped_edge->from, clipped_edge->to, 1);
-}
-
-void updateCameraArrows(xform3 *camera_xform) {
-    vec3 P = camera_xform->position;
-    vec3 R = *camera_xform->right_direction;
-    vec3 U = *camera_xform->up_direction;
-    vec3 F = *camera_xform->forward_direction;
-    arrowX.body.from =  arrowY.body.from = arrowZ.body.from = P;
-    arrowX.body.to = addVec3(R, P);
-    arrowY.body.to = addVec3(U, P);
-    arrowZ.body.to = addVec3(F, P);
-    arrowX.head.length = arrowZ.head.length = arrowY.head.length = 0.25f;
-    updateArrow(&arrowX);
-    updateArrow(&arrowY);
-    updateArrow(&arrowZ);
-}
-
 void renderViewFrustum(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
-    edge_color = Color(projection_plane_prim->color);
-    edge_color.A = MAX_COLOR_VALUE / 2;
-
-    f32 target_distance = viewport->camera->target_distance;
-//    viewport->camera->target_distance = 30;
-//    orbitCamera(viewport->camera, delta_time / 20, 0);
-    drawCamera(viewport, edge_color, secondary_viewport.camera, 0);
-//    viewport->camera->target_distance = target_distance;
-    edge_color.A = MAX_COLOR_VALUE;
-
     drawArrow(viewport, Color(BrightRed),   &arrowX, 2);
     drawArrow(viewport, Color(BrightGreen), &arrowY, 2);
     drawArrow(viewport, Color(BrightBlue),  &arrowZ, 2);
 
     view_frustum_box.vertices.corners = getViewFrustumCorners(&secondary_viewport);
     setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
-
-//    drawBox(viewport, Color(White), &NDC_box, camera_box_prim, BOX__ALL_SIDES, 1);
-
     drawGrid(viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
 
-    drawBox(viewport, edge_color, &view_frustum_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
+    drawBox(viewport, Color(projection_plane_prim->color), &view_frustum_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
     drawBox(viewport, Color(Grey), main_box, main_box_prim, BOX__ALL_SIDES, 0);
 
     transformGridVerticesFromObjectToViewSpace(&secondary_viewport, main_grid_prim, main_grid, &clipped_grid.vertices);
@@ -392,132 +107,13 @@ void renderViewFrustum(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
     for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, Color(main_box_prim->color));
 }
 
-f32 mulVec3Mat4(vec3 *in, mat4 *M, vec3 *out) {
-    vec4 v4;
-    v4.x = in->x;
-    v4.y = in->y;
-    v4.z = in->z;
-    v4.w = 1;
-    v4 = mulVec4Mat4(v4, *M);
-    out->x = v4.x;
-    out->y = v4.y;
-    out->z = v4.z;
-    return v4.w;
-}
-
-void updateProjectionBoxes(Viewport *viewport) {
-    setPreProjectionMatrix(viewport);
-    view_frustum_box.vertices.corners = getViewFrustumCorners(viewport);
-    setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
-
-    for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
-        mulVec3Mat4(view_frustum_box.vertices.buffer + i, &viewport->pre_projection_matrix, pre_projected_view_frustum_box.vertices.buffer + i);
-
-    setBoxEdgesFromVertices(&pre_projected_view_frustum_box.edges, &pre_projected_view_frustum_box.vertices);
-}
-
-INLINE vec3 lerpVec3(vec3 from, vec3 to, f32 by) {
-    return scaleAddVec3(subVec3(to, from), by, from);
-}
-
-void transitionBox(Transition *transition, Box *from_box, Box *to_box) {
-    for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
-        transforming_view_frustum_box.vertices.buffer[i] = lerpVec3(from_box->vertices.buffer[i], to_box->vertices.buffer[i], transition->eased_t);
-
-    setBoxEdgesFromVertices(&transforming_view_frustum_box.edges, &transforming_view_frustum_box.vertices);
-}
-
-RGBA getColorInBetween(RGBA from, RGBA to, f32 t) {
-    vec3 float_color = lerpVec3(Vec3((f32)from.R, (f32)from.G, (f32)from.B), Vec3((f32)to.R, (f32)to.G, (f32)to.B), t);
-    RGBA in_between;
-    in_between.R = (u8)clampValueToBetween(float_color.x, 0, (f32)MAX_COLOR_VALUE);
-    in_between.G = (u8)clampValueToBetween(float_color.y, 0, (f32)MAX_COLOR_VALUE);
-    in_between.B = (u8)clampValueToBetween(float_color.z, 0, (f32)MAX_COLOR_VALUE);
-    in_between.A = to.A;
-    return in_between;
-}
-
-void drawLocatorGrid(Viewport *viewport, RGBA color, RGBA out_color, Transition *transition) {
-    f32 from_w, to_w;
-    f32 n = secondary_viewport.settings.near_clipping_plane_distance;
-    f32 f = secondary_viewport.settings.far_clipping_plane_distance;
-
-    Edge trg_edge, *edge;
-    f32 x_step = (view_frustum_box.vertices.corners.front_bottom_right.x * 2.0f) / ((f32)LOCATOR_GRID_SIZE_X);
-    f32 y_step = (view_frustum_box.vertices.corners.front_top_right.y    * 2.0f) / ((f32)LOCATOR_GRID_SIZE_Y);
-    f32 z_step = (n - f) / ((f32)LOCATOR_GRID_SIZE_Z);
-    vec3 start = view_frustum_box.vertices.corners.front_bottom_left;
-    vec3 location = start;
-    Locator locator;
-    out_color.A /= 8;
-    bool is_out;
-
-    for (i32 z = 0; z < LOCATOR_GRID_SIZE_Z; z++) {
-        location.y = start.y;
-        for (i32 y = 0; y < LOCATOR_GRID_SIZE_Y; y++) {
-            location.x = start.x;
-            for (i32 x = 0; x < LOCATOR_GRID_SIZE_X; x++) {
-                setLocator(&locator, location);
-
-                edge = locator.edges;
-
-                for (u8 i = 0; i < 3; i++, edge++) {
-                    from_w = mulVec3Mat4(&edge->from, &secondary_viewport.pre_projection_matrix, &trg_edge.from);
-                    to_w   = mulVec3Mat4(&edge->to,   &secondary_viewport.pre_projection_matrix, &trg_edge.to);
-
-                    is_out = fabsf(trg_edge.from.x) > from_w ||
-                             fabsf(trg_edge.from.y) > from_w ||
-                             fabsf(trg_edge.from.z) > from_w ||
-                             fabsf(trg_edge.to.x) > from_w ||
-                             fabsf(trg_edge.to.y) > from_w ||
-                             fabsf(trg_edge.to.z) > from_w;
-
-                    if (transition == &transitions.projection) *edge = trg_edge;
-                    if (transition != &transitions.pre_projection) {
-                        trg_edge.from = scaleVec3(trg_edge.from, 1.0f / from_w);
-                        trg_edge.to   = scaleVec3(trg_edge.to,   1.0f / to_w);
-                    }
-
-                    edge->from = lerpVec3(edge->from, trg_edge.from, transition->eased_t);
-                    edge->to   = lerpVec3(edge->to,   trg_edge.to,   transition->eased_t);
-
-                    convertEdgeFromSecondaryToMain(edge);
-                    drawEdge(viewport, is_out ? out_color : color, edge, 4);
-                }
-                location.x += x_step;
-            }
-            location.y += y_step;
-        }
-        location.z += z_step;
-    }
-}
-
-
 void renderProjection(Viewport *viewport, f32 delta_time) {
-    secondary_camera_prim->position = secondary_viewport.camera->transform.position;
-    secondary_camera_prim->rotation = secondary_viewport.camera->transform.rotation;
-    main_camera_prim->position = viewport->camera->transform.position;
-    main_camera_prim->rotation = viewport->camera->transform.rotation;
-    updateProjectionBoxes(&secondary_viewport);
-
-    edge_color = Color(projection_plane_prim->color);
-    edge_color.A = MAX_COLOR_VALUE / 2;
-
-    f32 target_distance = viewport->camera->target_distance;
-    viewport->camera->target_distance = lengthVec3(viewport->camera->transform.position);
-    orbitCamera(viewport->camera, delta_time / 30, 0);
-    drawCamera(viewport, edge_color, secondary_viewport.camera, 0);
-    viewport->camera->target_distance = target_distance;
-    edge_color.A = MAX_COLOR_VALUE;
-
     drawArrow(viewport, Color(BrightRed),   &arrowX, 2);
     drawArrow(viewport, Color(BrightGreen), &arrowY, 2);
     drawArrow(viewport, Color(BrightBlue),  &arrowZ, 2);
 
-    drawGrid(viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
     drawBox(viewport, Color(Yellow), &NDC_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
-    drawBox(viewport, edge_color, &view_frustum_box, secondary_camera_prim, BOX__ALL_SIDES, 0);
-//    drawBox(viewport, Color(Yellow), &projected_view_frustum_box, camera_box_prim, BOX__ALL_SIDES, 1);
+    drawBox(viewport, Color(projection_plane_prim->color), &view_frustum_box, secondary_camera_prim, BOX__ALL_SIDES, 0);
     drawBox(viewport, Color(Grey), main_box, main_box_prim, BOX__ALL_SIDES, 0);
 
     RGBA color, out_color = Color(BrightGrey);
@@ -562,84 +158,14 @@ void renderProjection(Viewport *viewport, f32 delta_time) {
     }
 }
 
-void drawProjectiveSpace(Viewport *viewport, Transition *transition, bool colorize) {
-    Edge edge;
-    f32 step = TAU / (PROJECTION_LINES_COUNT * 2);
-    vec2 sin_cos = Vec2(cosf(step), sinf(step));
-
-    RGBA color;
-    color.A = PROJECTION_LINES_OPACITY;
-    color.R = color.G = color.B = MAX_COLOR_VALUE / 2;
-    vec3 x_axis = Vec3(1, 0, 0);
-    vec3 y_axis = Vec3(0, 1, 0);
-    quat azimuth_rotation;
-    quat altitude_rotation = getIdentityQuaternion();
-    quat altitude_rotation_step = getRotationAroundAxisBySinCon(x_axis, sin_cos);
-    quat azimuth_rotation_step  = getRotationAroundAxisBySinCon(y_axis, sin_cos);
-
-    for (i32 z = 0; z < PROJECTION_LINES_COUNT; z++) {
-        azimuth_rotation = getIdentityQuaternion();
-        for (i32 x = 0; x < PROJECTION_LINES_COUNT; x++) {
-            edge.from = getVec3Of(0);
-            edge.to = mulVec3Quat(Vec3(1, 0, 0), mulQuat(altitude_rotation, azimuth_rotation));
-            if (colorize) {
-                color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)color.G * edge.to.x);
-                color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)color.G * edge.to.z);
-            }
-
-            edge.to = scaleVec3(edge.to, 15 * transition->eased_t);
-            convertEdgeFromSecondaryToMain(&edge);
-
-            drawEdge(viewport, color, &edge, 0);
-
-            azimuth_rotation = mulQuat(azimuth_rotation, azimuth_rotation_step);
-        }
-        altitude_rotation = mulQuat(altitude_rotation, altitude_rotation_step);
-    }
-}
-
 void renderProjectiveSpace(Viewport *viewport, f32 delta_time) {
-    secondary_camera_prim->position = secondary_viewport.camera->transform.position;
-    secondary_camera_prim->rotation = secondary_viewport.camera->transform.rotation;
-    main_camera_prim->position = viewport->camera->transform.position;
-    main_camera_prim->rotation = viewport->camera->transform.rotation;
-
-    edge_color = Color(projection_plane_prim->color);
-    edge_color.A = MAX_COLOR_VALUE / 2;
-
-    f32 target_distance = viewport->camera->target_distance;
-    viewport->camera->target_distance = lengthVec3(viewport->camera->transform.position);
-    orbitCamera(viewport->camera, delta_time / 30, 0);
-    drawCamera(viewport, edge_color, secondary_viewport.camera, 0);
-    viewport->camera->target_distance = target_distance;
-
-    drawArrow(viewport, Color(BrightRed),   &arrowX, 2);
-    drawArrow(viewport, Color(BrightGreen), &arrowY, 2);
-    drawArrow(viewport, Color(BrightBlue),  &arrowZ, 2);
-
     drawGrid(viewport, Color(Magenta), projective_ref_plane_grid, projective_ref_plane_prim,0);
-    drawGrid(viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
     drawBox(viewport, Color(Grey), main_box, main_box_prim, BOX__ALL_SIDES, 0);
 
     if (transitions.projective_lines.active) {
         if (incTransition(&transitions.projective_lines, delta_time, false))
             drawProjectiveSpace(viewport, &transitions.projective_lines, true);
     }
-}
-
-typedef union Quad {
-    struct {
-        vec3 top_left, top_right, bottom_right, bottom_left;
-    };
-    vec3 corners[4];
-} Quad;
-
-void setQuadFromBox(Quad *quad, Box *box) {
-    quad->top_left     = box->vertices.corners.back_bottom_left;
-    quad->top_right    = box->vertices.corners.back_bottom_right;
-    quad->bottom_left  = box->vertices.corners.front_bottom_left;
-    quad->bottom_right = box->vertices.corners.front_bottom_right;
-    for (u8 i = 0; i < 4; i++) quad->corners[i].y = 0;
 }
 
 void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
@@ -652,8 +178,6 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
 
     Edge projective_point_edge;
     RGBA focal_length_color = Color(BrightGrey);
-
-    RGBA camera_color = Color(projection_plane_prim->color);
     RGBA projective_point_color;
     projective_point_color.G = MAX_COLOR_VALUE / 2;
     projective_point_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G);
@@ -942,6 +466,13 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             drawSecondaryViewportToFrameBuffer(viewport->frame_buffer);
         }
     }
+
+    viewport->settings.depth_sort = false;
+    updateCameraArrows(&secondary_viewport.camera->transform);
+    drawArrow(viewport, X_color, &arrowX, 2);
+    drawArrow(viewport, Y_color, &arrowY, 2);
+    drawArrow(viewport, Z_color, &arrowZ, 2);
+    viewport->settings.depth_sort = true;
 }
 
 void updateAndRender() {
@@ -992,7 +523,6 @@ void updateAndRender() {
 
     viewport->settings.depth_sort = true;
     drawGrid(viewport, Color(DarkGrey), main_grid, main_grid_prim,0);
-    //    viewport->settings.depth_sort = true;
 
     secondary_camera_prim->position = secondary_viewport.camera->transform.position;
     secondary_camera_prim->rotation = secondary_viewport.camera->transform.rotation;
@@ -1009,25 +539,16 @@ void updateAndRender() {
     Y_color = Color(BrightGreen);
     Z_color = Color(BrightBlue);
 
-    edge_color = Color(projection_plane_prim->color);
-    edge_color.A = MAX_COLOR_VALUE / 2;
     if (current_viz != VIEW_FRUSTUM_SLICE)
-        drawCamera(viewport, edge_color, secondary_viewport.camera, 0);
+        drawCamera(viewport, camera_color, secondary_viewport.camera, 0);
 
     switch (current_viz) {
-        case INTRO: renderIntro(viewport, timer->delta_time, elapsed); break;
-        case VIEW_FRUSTUM: renderViewFrustum(viewport, timer->delta_time, elapsed); break;
-        case PROJECTION: renderProjection(viewport, timer->delta_time); break;
-        case PROJECTIVE_SPACE: current_viz = VIEW_FRUSTUM; renderProjectiveSpace(viewport, timer->delta_time); break;
-        default: renderViewSpaceFrustumSlice(viewport, timer->delta_time); break;
+        case INTRO:              renderIntro(viewport, timer->delta_time, elapsed); break;
+        case VIEW_FRUSTUM:       renderViewFrustum(viewport, timer->delta_time, elapsed); break;
+        case PROJECTION:         renderProjection(viewport, timer->delta_time); break;
+        case PROJECTIVE_SPACE:   renderProjectiveSpace(viewport, timer->delta_time); break;
+        case VIEW_FRUSTUM_SLICE: renderViewSpaceFrustumSlice(viewport, timer->delta_time); break;
     }
-
-    viewport->settings.depth_sort = false;
-    updateCameraArrows(&secondary_viewport.camera->transform);
-    drawArrow(viewport, X_color, &arrowX, 2);
-    drawArrow(viewport, Y_color, &arrowY, 2);
-    drawArrow(viewport, Z_color, &arrowZ, 2);
-    viewport->settings.depth_sort = true;
 
     if (show_secondary_viewport) {
         fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
@@ -1055,6 +576,8 @@ void setupViewportCore(Viewport *viewport) {
     main_box_prim->color = Yellow;
     main_grid_prim->color = White;
     projection_plane_prim->color = Cyan;
+    camera_color = Color(projection_plane_prim->color);
+    camera_color.A = MAX_COLOR_VALUE / 2;
 
     xform3 *camera_xform = &scene->cameras[0].transform;
     camera_xform->position = Vec3(0, 13, -30);
@@ -1152,13 +675,7 @@ void onKeyChanged(u8 key, bool is_pressed) {
 
     if (!is_pressed) {
         if (key == app->controls.key_map.space) {
-            switch (current_viz) {
-                case INTRO: current_viz = VIEW_FRUSTUM; break;
-                case VIEW_FRUSTUM: current_viz = PROJECTION; break;
-                case PROJECTION: current_viz = PROJECTIVE_SPACE;  break;
-                case PROJECTIVE_SPACE: current_viz = VIEW_FRUSTUM_SLICE;  break;
-                default: current_viz = INTRO;  break;
-            }
+            current_viz = (VIZ)(((u8)(current_viz) + 1) % (u8)VIS_COUNT);
             setupViewportCore(&app->viewport);
         }
 
@@ -1256,7 +773,6 @@ void setupViewport(Viewport *viewport) {
 }
 
 void initApp(Defaults *defaults) {
-//    app->on.sceneReady    = setupScene;
     app->on.viewportReady = setupViewport;
     app->on.windowRedraw  = updateAndRender;
     app->on.keyChanged               = onKeyChanged;
