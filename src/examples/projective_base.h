@@ -232,22 +232,22 @@ BoxCorners getViewFrustumCorners(Viewport *viewport) {
     return corners;
 }
 
-void drawFrustum(u8 line_width) {
-    transformBoxVerticesFromObjectToViewSpace(&app->viewport, secondary_camera_prim, &view_frustum_box.vertices, &view_frustum_box.vertices);
-    setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
+void drawFrustum(Viewport *viewport, Box *view_frustum, RGBA near_col, RGBA far_col, RGBA side_col, u8 line_width) {
+    transformBoxVerticesFromObjectToViewSpace(viewport, secondary_camera_prim, &view_frustum->vertices, &view_frustum->vertices);
+    setBoxEdgesFromVertices(&view_frustum->edges, &view_frustum->vertices);
 
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_top,    line_width);
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_bottom, line_width);
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_left,   line_width);
-    drawEdge(&app->viewport, far_color,   &view_frustum_box.edges.sides.front_right,  line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_top,     line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_bottom,  line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_left,    line_width);
-    drawEdge(&app->viewport, near_color,  &view_frustum_box.edges.sides.back_right,   line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.left_top,     line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.left_bottom,  line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.right_top,    line_width);
-    drawEdge(&app->viewport, sides_color, &view_frustum_box.edges.sides.right_bottom, line_width);
+    drawEdge(viewport, far_col,  &view_frustum->edges.sides.front_top,    line_width);
+    drawEdge(viewport, far_col,  &view_frustum->edges.sides.front_bottom, line_width);
+    drawEdge(viewport, far_col,  &view_frustum->edges.sides.front_left,   line_width);
+    drawEdge(viewport, far_col,  &view_frustum->edges.sides.front_right,  line_width);
+    drawEdge(viewport, near_col, &view_frustum->edges.sides.back_top,     line_width);
+    drawEdge(viewport, near_col, &view_frustum->edges.sides.back_bottom,  line_width);
+    drawEdge(viewport, near_col, &view_frustum->edges.sides.back_left,    line_width);
+    drawEdge(viewport, near_col, &view_frustum->edges.sides.back_right,   line_width);
+    drawEdge(viewport, side_col, &view_frustum->edges.sides.left_top,     line_width);
+    drawEdge(viewport, side_col, &view_frustum->edges.sides.left_bottom,  line_width);
+    drawEdge(viewport, side_col, &view_frustum->edges.sides.right_top,    line_width);
+    drawEdge(viewport, side_col, &view_frustum->edges.sides.right_bottom, line_width);
 }
 
 void convertEdgeFromSecondaryToMain(Edge *edge) {
@@ -384,7 +384,7 @@ void drawProjectiveSpace(Viewport *viewport, Transition *transition, bool colori
             edge.to = scaleVec3(edge.to, 15 * transition->eased_t);
             convertEdgeFromSecondaryToMain(&edge);
 
-            drawEdge(viewport, color, &edge, 0);
+            drawEdge(viewport, color, &edge, 1);
 
             azimuth_rotation = mulQuat(azimuth_rotation, azimuth_rotation_step);
         }
