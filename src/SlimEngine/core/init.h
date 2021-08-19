@@ -89,10 +89,10 @@ void initTime(Time *time, GetTicks getTicks, u64 ticks_per_second) {
     time->timers.update.ticks_before = time->timers.update.ticks_of_last_report = getTicks();
 }
 
-void initPixelGrid(PixelGrid *pixel_grid, void* memory) {
+void initPixelGrid(PixelGrid *pixel_grid, void* memory, u32 max_width, u32 max_height) {
     pixel_grid->pixels = (Pixel*)(memory);
-    pixel_grid->float_pixels = (FloatPixel*)(pixel_grid->pixels + MAX_WIDTH * MAX_HEIGHT);
-    updateDimensions(&pixel_grid->dimensions, MAX_WIDTH, MAX_HEIGHT);
+    pixel_grid->float_pixels = (FloatPixel*)(pixel_grid->pixels + max_width * max_height);
+    updateDimensions(&pixel_grid->dimensions, max_width, max_height);
 }
 
 void fillPixelGrid(PixelGrid *pixel_grid, RGBA color) {

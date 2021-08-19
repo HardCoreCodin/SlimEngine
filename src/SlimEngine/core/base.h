@@ -113,10 +113,12 @@ typedef void (*CallbackWithCharPtr)(char* str);
 typedef struct u8_3 { u8 x, y, z; } u8_3;
 typedef struct vec2  { f32 x, y; } vec2;
 typedef struct vec2i { i32 x, y; } vec2i;
-typedef struct vec3 { f32 x, y, z;     } vec3;
+//typedef struct vec3 { f32 x, y, z;     } vec3;
+typedef union vec3 { struct {f32 x, y, z; }; f32 components[3]; } vec3;
 typedef struct vec4 { f32 x, y, z, w;  } vec4;
 typedef struct mat2 { vec2 X, Y;       } mat2;
-typedef struct mat3 { vec3 X, Y, Z;    } mat3;
+//typedef struct mat3 { vec3 X, Y, Z;    } mat3;
+typedef union mat3 { struct {vec3 X, Y, Z; }; vec3 axis[3];   } mat3;
 typedef struct mat4 { vec4 X, Y, Z, W; } mat4;
 typedef struct AABB { vec3 min, max;   } AABB;
 typedef struct quat { vec3 axis; f32 amount; } quat;
@@ -126,7 +128,12 @@ typedef struct RGBA { u8 B, G, R, A; } RGBA;
 typedef struct FloatPixel { vec3 color; f32 opacity; f64 depth; } FloatPixel;
 typedef union Pixel { RGBA color; u32 value; } Pixel;
 
-#define RENDER_SIZE ((sizeof(Pixel) + sizeof(FloatPixel) + (sizeof(f64))) * MAX_WIDTH * MAX_HEIGHT)
+#define PIXEL_SIZE (sizeof(Pixel) + sizeof(FloatPixel) + (sizeof(f64)))
+#define RENDER_SIZE (PIXEL_SIZE * MAX_WIDTH * MAX_HEIGHT)
+//
+//INLINE Max() {
+//
+//}
 
 INLINE vec2i Vec2i(i32 x, i32 y) {
     vec2i out;
@@ -446,13 +453,42 @@ INLINE RGBA Color(enum ColorID color_id) {
     return color;
 }
 
+RGBA getColorInBetween(RGBA from, RGBA to, f32 t) {
+    vec3 float_color = Vec3(
+            fast_mul_add((f32)to.R - (f32)from.R, t, (f32)from.R),
+            fast_mul_add((f32)to.G - (f32)from.G, t, (f32)from.G),
+            fast_mul_add((f32)to.B - (f32)from.B, t, (f32)from.B));
+    RGBA in_between;
+    in_between.R = (u8)clampValueToBetween(float_color.x, 0, (f32)MAX_COLOR_VALUE);
+    in_between.G = (u8)clampValueToBetween(float_color.y, 0, (f32)MAX_COLOR_VALUE);
+    in_between.B = (u8)clampValueToBetween(float_color.z, 0, (f32)MAX_COLOR_VALUE);
+    in_between.A = to.A;
+    return in_between;
+}
+
+void copyPixels(PixelGrid *src, PixelGrid *trg, i32 width, i32 height, i32 trg_x, i32 trg_y) {
+    Pixel *trg_pixels = trg->pixels;
+    Pixel *src_pixels = src->pixels;
+    Dimensions *trg_dim = &trg->dimensions;
+    Dimensions *src_dim = &src->dimensions;
+    i32 trg_index;
+    for (i32 y = 0; y < height; y++) {
+        for (i32 x = 0; x < width; x++) {
+            trg_index = y + trg_y;
+            trg_index *= trg_dim->width;
+            trg_index += x + trg_x;
+            trg_pixels[trg_index] = src_pixels[src_dim->width * y + x];
+        }
+    }
+}
+
 typedef struct String {
     u32 length;
     char *char_ptr;
 } String;
 
 typedef struct NumberString {
-    char _buffer[12];
+    char _buffer[13];
     String string;
 } NumberString;
 

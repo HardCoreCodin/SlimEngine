@@ -188,7 +188,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
 
     initTime(&app->time, app->platform.getTicks, app->platform.ticks_per_second);
     initMouse(&app->controls.mouse);
-    initPixelGrid(&app->window_content, window_content_memory);
+    initPixelGrid(&app->window_content, window_content_memory, MAX_WIDTH, MAX_HEIGHT);
 
     defaults->title = "";
     defaults->width = 480;

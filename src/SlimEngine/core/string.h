@@ -43,6 +43,7 @@ void mergeString(String *string, char* first, char* second, u32 offset) {
 void printNumberIntoString(i32 number, NumberString *number_string) {
     initNumberString(number_string);
     char *buffer = number_string->_buffer;
+    buffer[12] = 0;
 
     bool is_negative = number < 0;
     if (is_negative) number = -number;
@@ -74,4 +75,52 @@ void printNumberIntoString(i32 number, NumberString *number_string) {
         number_string->string.length = 1;
         number_string->string.char_ptr = buffer + 11;
     }
+}
+
+void printFloatIntoString(f32 number, NumberString *number_string, u8 float_digits_count) {
+    f32 factor = 1;
+    for (u8 i = 0; i < float_digits_count; i++) factor *= 10;
+    i32 int_num = (i32)(number * factor);
+    if (int_num == 0) {
+        printNumberIntoString((i32)factor, number_string);
+        number_string->string.length++;
+        number_string->string.char_ptr[0] = '.';
+        number_string->string.char_ptr--;
+        number_string->string.char_ptr[0] = '0';
+        return;
+    }
+
+    bool is_negative = number < 0;
+    bool is_fraction = is_negative ? number > -1 : number < 1;
+
+    printNumberIntoString(int_num, number_string);
+
+    if (is_fraction) {
+        u32 len = number_string->string.length;
+        number_string->string.length++;
+        number_string->string.char_ptr--;
+        if (is_negative) {
+            number_string->string.char_ptr[0] = '-';
+            number_string->string.char_ptr[1] = '0';
+        } else {
+            number_string->string.char_ptr[0] = '0';
+        }
+        if (len < float_digits_count) {
+            for (u32 i = 0; i < (float_digits_count - len); i++) {
+                number_string->string.length++;
+                number_string->string.char_ptr--;
+                number_string->string.char_ptr[0] = '0';
+            }
+        }
+    }
+//    if (number_string->string.length <= float_digits_count) return;
+    char tmp[13];
+    tmp[number_string->string.length + 1] = 0;
+    for (u8 i = 0; i < (u8)number_string->string.length; i++) {
+        u8 char_count_from_right_to_left = (u8)number_string->string.length - i - 1;
+        if (char_count_from_right_to_left >= float_digits_count) tmp[i] = number_string->string.char_ptr[i];
+        else                                                     tmp[i + 1] = number_string->string.char_ptr[i];
+    }
+    tmp[number_string->string.length - float_digits_count] = '.';
+    copyToString(&number_string->string, tmp, 0);
 }
