@@ -12,10 +12,17 @@
 RGBA sides_color,
      near_color,
      far_color,
+     focal_length_color,
+     default_near_color,
+     default_far_color,
+     aspect_ratio_color,
+     default_aspect_ratio_color,
+     default_focal_length_color,
      NDC_color,
      X_color,
      Y_color,
-     Z_color;
+     Z_color,
+     W_color;
 
 PixelGrid secondary_viewport_frame_buffer;
 Viewport secondary_viewport, *active_viewport;
@@ -33,13 +40,15 @@ Primitive *secondary_camera_prim,
 Grid *main_grid,
      *projection_plane_grid,
      *projective_ref_plane_grid,
-     clipped_grid;
+     clipped_grid,
+     transformed_grid;
 
 Box NDC_box,
     projected_box,
     pre_projected_view_frustum_box,
     transforming_view_frustum_box,
     view_frustum_box,
+//    scaled_view_frustum_box,
     clipped_box,
     *main_box;
 
@@ -102,6 +111,25 @@ void drawSecondaryViewportToFrameBuffer(PixelGrid *frame_buffer) {
     drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x2+1);
 }
 
+INLINE vec3 vec3wUp(vec4 v) {
+    return Vec3(v.x, v.w, v.z);
+}
+
+void transformGridVertices(Grid *grid, mat4 matrix, GridVertices *transformed_vertices) {
+    for (u8 side = 0; side < 2; side++) {
+        for (u8 axis = 0; axis < 2; axis++) {
+            u8 segment_count = axis ? grid->v_segments : grid->u_segments;
+            for (u8 segment = 0; segment < segment_count; segment++)
+                mulVec3Mat4(grid->vertices.buffer[axis][side][segment], 1.0f, matrix, &transformed_vertices->buffer[axis][side][segment]);
+        }
+    }
+}
+
+void transformBoxVertices(Box *box, mat4 matrix, BoxVertices *transformed_vertices) {
+    for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
+        mulVec3Mat4(box->vertices.buffer[i], 1.0f, matrix, &transformed_vertices->buffer[i]);
+}
+
 BoxCorners getViewFrustumCorners(Viewport *viewport) {
     BoxCorners corners;
     corners.back_top_right.z = viewport->settings.near_clipping_plane_distance;
@@ -158,9 +186,6 @@ void drawLocalEdge(Edge edge, RGBA color, u8 line_width) {
 }
 
 void drawClippedEdge(Viewport *viewport, Edge *clipped_edge, RGBA color) {
-    if (!cullAndClipEdge(clipped_edge, &secondary_viewport))
-        return;
-
     convertEdgeFromSecondaryToMain(clipped_edge);
     projectEdge(clipped_edge, viewport);
     clipped_edge->from.z -= 0.1f;

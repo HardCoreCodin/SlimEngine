@@ -97,14 +97,21 @@ void renderViewFrustum(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
     setGridEdgesFromVertices(clipped_grid.edges.uv.v, main_grid->v_segments, clipped_grid.vertices.uv.v.from, clipped_grid.vertices.uv.v.to);
     setBoxEdgesFromVertices(&clipped_box.edges, &clipped_box.vertices);
     Edge *clipped_edge = clipped_grid.edges.uv.u;
-    for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, Color(main_grid_prim->color));
+    for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++)
+        if (cullAndClipEdge(clipped_edge, &secondary_viewport))
+            drawClippedEdge(viewport, clipped_edge, Color(main_grid_prim->color));
+
     clipped_edge = clipped_grid.edges.uv.v;
-    for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, Color(main_grid_prim->color));
+    for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++)
+        if (cullAndClipEdge(clipped_edge, &secondary_viewport))
+            drawClippedEdge(viewport, clipped_edge, Color(main_grid_prim->color));
 
     transformBoxVerticesFromObjectToViewSpace(&secondary_viewport, main_box_prim, &main_box->vertices, &clipped_box.vertices);
     setBoxEdgesFromVertices(&clipped_box.edges, &clipped_box.vertices);
     clipped_edge = clipped_box.edges.buffer;
-    for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, Color(main_box_prim->color));
+    for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++)
+        if (cullAndClipEdge(clipped_edge, &secondary_viewport))
+            drawClippedEdge(viewport, clipped_edge, Color(main_box_prim->color));
 }
 
 void renderProjection(Viewport *viewport, f32 delta_time) {
@@ -216,10 +223,33 @@ void updateAndRender() {
     }
 
     if (!mouse->is_captured) {
+        // Temporarily override primitive count so that only the first 3 primitives (arrows) can be manipulated:
         u32 primitive_count = app->scene.settings.primitives;
         app->scene.settings.primitives = 3;
+        vec3 original_positions[3] = {
+                app->scene.primitives[0].position,
+                app->scene.primitives[1].position,
+                app->scene.primitives[2].position};
         manipulateSelection(&app->scene, active_viewport, &app->controls);
         app->scene.settings.primitives = primitive_count;
+        if (app->controls.is_pressed.shift) {
+            if (app->controls.is_pressed.ctrl) {
+                for (u8 i = 0; i < 3; i++) {
+                    app->scene.primitives[i].position.y = original_positions[i].y;
+                    app->scene.primitives[i].position.z = original_positions[i].z;
+                }
+            } else {
+                for (u8 i = 0; i < 3; i++) {
+                    app->scene.primitives[i].position.x = original_positions[i].x;
+                    app->scene.primitives[i].position.z = original_positions[i].z;
+                }
+            }
+        } else if (app->controls.is_pressed.ctrl) {
+            for (u8 i = 0; i < 3; i++) {
+                app->scene.primitives[i].position.x = original_positions[i].x;
+                app->scene.primitives[i].position.y = original_positions[i].y;
+            }
+        }
     }
 
     setPreProjectionMatrix(viewport);
@@ -242,13 +272,14 @@ void updateAndRender() {
     updateProjectionBoxes(&secondary_viewport);
 
     sides_color = Color(Cyan);
-    near_color = Color(BrightRed);
-    far_color = Color(BrightBlue);
+    near_color = default_near_color;
+    far_color = default_far_color;
     NDC_color = Color(Yellow);
 
     X_color = Color(BrightRed);
     Y_color = Color(BrightGreen);
     Z_color = Color(BrightBlue);
+    W_color = Color(Magenta);
 
     if (current_viz != VIEW_FRUSTUM_SLICE)
         drawCamera(viewport, camera_color, secondary_viewport.camera, 0);
@@ -324,15 +355,16 @@ void setupViewportCore(Viewport *viewport) {
 
     if (current_viz == VIEW_FRUSTUM_SLICE) {
         initGrid(main_grid,41, 41);
-        main_grid_prim->scale    = Vec3(20, 1, 20);
+        main_grid_prim->scale    = Vec3(20, 20, 20);
+        transformed_grid = *main_grid;
 
         initGrid(projective_ref_plane_grid,41, 41);
         projective_ref_plane_prim->color = Magenta;
         projective_ref_plane_prim->scale    = Vec3(20, 1, 20);
         projective_ref_plane_prim->position = Vec3(0, 1, 0);
 
-        main_box_prim->position = Vec3(0, 0, 7);
-        rotatePrimitive(main_box_prim, 0.23f, 0.34f, 0);
+        main_box_prim->position = Vec3(0, 1, 7);
+        rotatePrimitive(main_box_prim, 0.23f, 0, 0);
 
         arrowX_box_prim->position = Vec3(1, 0, 0);
         arrowY_box_prim->position = Vec3(0, 1, 0);
@@ -448,6 +480,11 @@ void setupViewport(Viewport *viewport) {
     initMatrix(&main_matrix);
     for (u8 i = 0; i < MAX_MATRIX_COUNT; i++)
         initMatrix(matrices + i);
+
+    default_near_color = Color(BrightRed);
+    default_far_color = Color(BrightBlue);
+    default_aspect_ratio_color = Color(BrightMagenta);
+    default_focal_length_color = Color(BrightCyan);
 
     setupViewportCore(viewport);
 }

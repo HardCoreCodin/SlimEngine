@@ -235,3 +235,12 @@ INLINE void setRollMat4(f32 roll, mat4 *roll_matrix) {
     roll_matrix->X.y = -xy.y;
     roll_matrix->Y.x = +xy.y;
 }
+
+INLINE mat4 mat4fromMat3(mat3 m3) {
+    mat4 out = getMat4Identity();
+    for (u8 row = 0; row < 3; row++)
+        for (u8 col = 0; col < 3; col++)
+            out.axis[row].components[col] = m3.axis[row].components[col];
+
+    return out;
+}

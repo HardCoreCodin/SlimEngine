@@ -1,8 +1,9 @@
 #pragma once
 
 #include "./projective_base.h"
+#include "./projective_matrix.h"
 
-#define TRANSITION_COUNT 17
+#define TRANSITION_COUNT 19
 
 typedef struct Transition {
     bool active;
@@ -27,7 +28,9 @@ typedef union Transitions {
         focal_length_and_plane,
         aspect_ratio,
         ground_diagonal,
-        view_scene;
+        view_scene,
+        grid_XW,
+        scale_out;
     };
     Transition states[TRANSITION_COUNT];
 } Transitions;
@@ -35,30 +38,47 @@ typedef union Transitions {
 Transitions transitions;
 
 void updateTransitions(u8 key) {
-    if (key == '2') {
+    if (key == 'T') {
+        if (app->controls.is_pressed.ctrl) {
+            if (matrix_count) matrix_count--;
+        } else {
+            if (transitions.view_frustom_slice.active) {
+
+            } else {
+                matrices[matrix_count].M = main_matrix.M;
+                updateMatrixStrings(&matrices[matrix_count]);
+                matrix_count++;
+            }
+
+            main_matrix.M = getMat4Identity();
+            arrowX.body.to = app->scene.primitives[0].position = Vec3(1, 0, 0);
+            arrowY.body.to = app->scene.primitives[1].position = Vec3(0, 1, 0);
+            arrowZ.body.to = app->scene.primitives[2].position = Vec3(0, 0, 1);
+            updateArrow(&arrowX);
+            updateArrow(&arrowY);
+            updateArrow(&arrowZ);
+            updateMatrixStrings(&main_matrix);
+        }
+    } else if (key == '2') {
         transitions.pre_projection.active = true;
         transitions.pre_projection.t = 0;
         transitions.view_frustom_slice.active = true;
         transitions.view_frustom_slice.t = 0;
-    }
-    if (key == '1') {
+    } else if (key == '1') {
         transitions.full_projection.active = true;
         transitions.full_projection.t = 0;
-    }
-    if (key == '4') {
+    } else if (key == '4') {
         //            transitions.translate_back.active = true;
         //            transitions.translate_back.t = 0;
         transitions.reveal_projective_point.active = true;
         transitions.reveal_projective_point.t = 0;
         move_projective_point = !move_projective_point;
         draw_locator_grids = !draw_locator_grids;
-    }
-    if (key == '3') {
-        transitions.projective_lines.active = true;
+    } else if (key == '3') {
+        transitions.projective_lines.active = !transitions.projective_lines.active;
         transitions.projective_lines.t = 0;
         show_pre_projection = !show_pre_projection;
-    }
-    if (key == '5') {
+    } else if (key == '5') {
         //            transitions.scale_back.active = true;
         //            transitions.scale_back.t = 0;
         transitions.reveal_ref_plane.active = true;
@@ -67,36 +87,36 @@ void updateTransitions(u8 key) {
             transitions.reveal_normalizing_projective_point.t = 0;
         } else
             transitions.reveal_ref_plane.t = 0;
-    }
-    if (key == '6') {
+    } else if (key == '6') {
         transitions.reveal_projective_point.active = false;
+        transitions.projective_lines.active = false;
         transitions.lift_up.active = true;
         transitions.lift_up.t = 0;
         //            transitions.shear_up.active = true;
         //            transitions.shear_up.t = 0;
-    }
-    if (key == '7') {
+    } else if (key == '7') {
         transitions.lines_through_NDC.active = true;
         transitions.lines_through_NDC.t = 0;
-    }
-    if (key == '8') {
+    } else if (key == '8') {
         //            alpha = !alpha;
-    }
-    if (key == 'Z') {
+    } else if (key == 'Z') {
         transitions.focal_length_and_plane.active = !transitions.focal_length_and_plane.active;
         transitions.focal_length_and_plane.t = 0;
-    }
-    if (key == 'C') {
+    } else if (key == 'C') {
         transitions.aspect_ratio.active = !transitions.aspect_ratio.active;
         transitions.aspect_ratio.t = 0;
-    }
-    if (key == 'X') {
+    } else if (key == 'X') {
         transitions.ground_diagonal.active = !transitions.ground_diagonal.active;
         transitions.ground_diagonal.t = 0;
-    }
-    if (key == 'V') {
+    } else if (key == 'V') {
         transitions.view_scene.active = !transitions.view_scene.active;
         transitions.view_scene.t = 0;
+    } else if (key == 'G') {
+        transitions.grid_XW.active = !transitions.grid_XW.active;
+        transitions.grid_XW.t = 0;
+    } else if (key == 'B') {
+        transitions.scale_out.active = !transitions.scale_out.active;
+        transitions.scale_out.t = 0;
     }
 }
 
@@ -118,4 +138,17 @@ void transitionBox(Transition *transition, Box *from_box, Box *to_box) {
         transforming_view_frustum_box.vertices.buffer[i] = lerpVec3(from_box->vertices.buffer[i], to_box->vertices.buffer[i], transition->eased_t);
 
     setBoxEdgesFromVertices(&transforming_view_frustum_box.edges, &transforming_view_frustum_box.vertices);
+}
+
+Edge* transformedEdge(Edge *edge, mat4 M) {
+    if (transitions.view_frustom_slice.active) {
+        edge->from = vec3wUp(mulVec4Mat4(Vec4fromVec3(edge->from, 1.0f), M));
+        edge->to   = vec3wUp(mulVec4Mat4(Vec4fromVec3(edge->to,   1.0f), M));
+        if (!transitions.translate_back.active) edge->from.y = edge->to.y = transitions.lift_up.eased_t;
+    } else {
+        mulVec3Mat4(edge->from, 1.0f, M, &edge->from);
+        mulVec3Mat4(edge->to,   1.0f, M, &edge->to);
+    }
+
+    return edge;
 }

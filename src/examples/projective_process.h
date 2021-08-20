@@ -10,39 +10,66 @@
 void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
     rotatePrimitive(main_box_prim, delta_time / -3, 0, 0);
 
-    Quad view_frustum_quad, NDC_quad, transforming_quad;
-    setQuadFromBox(&view_frustum_quad, &view_frustum_box);
-    setQuadFromBox(&NDC_quad, &NDC_box);
+    if (matrix_count) {
+        initMatrix(matrices);
+        matrices->M.X.x = matrices->M.Y.y = secondary_viewport.camera->focal_length;
+        matrices->M.X.x *= secondary_viewport.frame_buffer->dimensions.height_over_width;
+        copyToString(&matrices->components[0][0].string, "L", 0);
+        copyToString(&matrices->components[1][1].string, "L/A", 0);
+        matrices->component_colors[0][0] = default_focal_length_color;
+        matrices->component_colors[1][1] = default_aspect_ratio_color;
+
+    }
+    mat4 M = getMat4Identity();
+    for (u8 i = 0; i < matrix_count; i++) M = mulMat4(M, matrices[i].M);
+    M = mulMat4(M, main_matrix.M);
+
+    Quad3 NDC_quad;
+    Quad3 view_frustum_quad, transforming_quad;
+    setQuad3FromBox(&view_frustum_quad, &view_frustum_box);
+    setQuad3FromBox(&NDC_quad, &NDC_box);
+
+    if (transitions.lift_up.active) incTransition(&transitions.lift_up, delta_time, false);
+
     transforming_quad = view_frustum_quad;
 
-    Edge projective_point_edge;
-    RGBA focal_length_color = Color(BrightGrey);
+    Edge projective_point_edge, edge;
     RGBA projective_point_color;
+    focal_length_color.A = 0;
+    aspect_ratio_color.A = 0;
     projective_point_color.G = MAX_COLOR_VALUE / 2;
     projective_point_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G);
     projective_point_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G);
 
-    if (transitions.projective_lines.active) {
-        Y_color = Color(Magenta);
+    vec3 corner = Vec3(secondary_viewport.frame_buffer->dimensions.width_over_height, 1, secondary_viewport.camera->focal_length);
 
-        if (incTransition(&transitions.projective_lines, delta_time, false)) {
-            Y_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.projective_lines.eased_t);
-            bool colorize = !(transitions.reveal_projective_point.active || transitions.lift_up.active);
-            drawProjectiveSpace(viewport, &transitions.projective_lines, colorize);
-        }
+    RGBA up_color = Y_color;
+    if (transitions.view_frustom_slice.active) {
+        if (incTransition(&transitions.view_frustom_slice, delta_time, false))
+            up_color = getColorInBetween(Y_color, W_color, transitions.view_frustom_slice.eased_t);
+    }
+    if (transitions.view_frustom_slice.eased_t < 1) {
+        sides_color.A = near_color.A = far_color.A = NDC_color.A = (u8)((f32)MAX_COLOR_VALUE * (1.0f - transitions.view_frustom_slice.eased_t));
+        drawBox(viewport, NDC_color, &NDC_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
+        transformBoxVertices(&view_frustum_box, M, &transforming_view_frustum_box.vertices);
+        drawFrustum(viewport, &transforming_view_frustum_box, near_color, far_color, sides_color, 1);
+    }
+
+    if (transitions.projective_lines.active) {
+        if (incTransition(&transitions.projective_lines, delta_time, false))
+            drawProjectiveSpace(viewport, &transitions.projective_lines, !transitions.reveal_projective_point.active);
 
         if (transitions.reveal_projective_point.active) {
             if (incTransition(&transitions.reveal_projective_point, delta_time, false))
-                projective_point_color.A = X_color.A = Y_color.A = Z_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.reveal_projective_point.eased_t);
+                projective_point_color.A = X_color.A = W_color.A = Z_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.reveal_projective_point.eased_t);
 
             static float elapsed = 0;
             elapsed += delta_time;
 
             Locator projective_point;
-            Edge *edge = projective_point.edges;
             vec3 location;
             if (move_projective_point) {
-                location.x = 2 * sinf(elapsed)       - 1;
+                location.x = 2 * sinf(elapsed)      - 1;
                 location.z = 2 * sinf(elapsed+1) - 1;
                 location.y = 1;
                 projective_point_edge.to = normVec3(location);
@@ -76,10 +103,11 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             }
 
             setLocator(&projective_point, location);
-            for (u8 i = 0; i < 3; i++, edge++) {
-                edge->to   = convertPositionToObjectSpace(edge->to,   main_camera_prim);
-                edge->from = convertPositionToObjectSpace(edge->from, main_camera_prim);
-                drawEdge(viewport, projective_point_color, edge, 3);
+            Edge *edge_ptr = projective_point.edges;
+            for (u8 i = 0; i < 3; i++, edge_ptr++) {
+                edge_ptr->to   = convertPositionToObjectSpace(edge_ptr->to,   main_camera_prim);
+                edge_ptr->from = convertPositionToObjectSpace(edge_ptr->from, main_camera_prim);
+                drawEdge(viewport, projective_point_color, edge_ptr, 3);
             }
 
             projective_point_color.A /= 2;
@@ -87,7 +115,6 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             projective_point_edge.from = convertPositionToObjectSpace(projective_point_edge.from, main_camera_prim);
             projective_point_edge.to   = convertPositionToObjectSpace(projective_point_edge.to, main_camera_prim);
             drawEdge(viewport, projective_point_color, &projective_point_edge, 2);
-
 
             arrowX.body.to = arrowY.body.to = arrowZ.body.to = getVec3Of(0);
             arrowX.body.to.x = arrowY.body.to.x = arrowZ.body.to.x = location.x;
@@ -102,27 +129,21 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             updateArrow(&arrowZ);
             viewport->settings.depth_sort = false;
             drawArrow(viewport, X_color, &arrowX, 2);
-            drawArrow(viewport, Y_color, &arrowY, 2);
+            drawArrow(viewport, up_color, &arrowY, 2);
             drawArrow(viewport, Z_color, &arrowZ, 2);
             viewport->settings.depth_sort = true;
 
-            X_color.A = Y_color.A = Z_color.A = MAX_COLOR_VALUE;
+            X_color.A = up_color.A = Z_color.A = MAX_COLOR_VALUE;
         }
+    }
 
-        if (transitions.reveal_ref_plane.active) {
-            RGBA grid_color = Color(projective_ref_plane_prim->color);
-            if (incTransition(&transitions.reveal_ref_plane, delta_time, false))
-                grid_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.reveal_ref_plane.eased_t);
+    if (transitions.reveal_ref_plane.active) {
+        RGBA grid_color = Color(projective_ref_plane_prim->color);
+        if (incTransition(&transitions.reveal_ref_plane, delta_time, false))
+            grid_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.reveal_ref_plane.eased_t);
 
-            grid_color.A /= 4;
-            drawGrid(viewport, grid_color, projective_ref_plane_grid, projective_ref_plane_prim,0);
-        }
-
-        if (transitions.lift_up.active) {
-            if (incTransition(&transitions.lift_up, delta_time, false))
-                for (u8 i = 0; i < 4; i++)
-                    transforming_quad.corners[i].y = view_frustum_quad.corners[i].y = NDC_quad.corners[i].y = transitions.lift_up.eased_t;
-        }
+        grid_color.A /= 4;
+        drawGrid(viewport, grid_color, projective_ref_plane_grid, projective_ref_plane_prim,0);
     }
 
     if (transitions.full_projection.active) {
@@ -155,12 +176,11 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             }
         }
     }
-    Edge edge;
-    vec3 corner = Vec3(secondary_viewport.frame_buffer->dimensions.width_over_height, 1, secondary_viewport.camera->focal_length);
 
     if (transitions.focal_length_and_plane.active) {
         viewport->settings.depth_sort = false;
 
+        focal_length_color = default_focal_length_color;
         if (incTransition(&transitions.focal_length_and_plane, delta_time, false))
             focal_length_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.focal_length_and_plane.eased_t);
 
@@ -171,7 +191,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         focal_length_edge.to   = convertPositionToObjectSpace(focal_length_edge.to,   main_camera_prim);
         drawEdge(viewport, focal_length_color, &focal_length_edge, 3);
 
-        Quad ref_quad;
+        Quad3 ref_quad;
         for (u8 i = 0; i < 4; i++)
             ref_quad.corners[i] = corner;
 
@@ -181,21 +201,22 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         for (u8 i = 0; i < 4; i++)
             ref_quad.corners[i] = convertPositionToObjectSpace(ref_quad.corners[i], main_camera_prim);
 
-        focal_length_color.R = focal_length_color.G = focal_length_color.B = (u8)((f32)MAX_COLOR_VALUE * 0.5f);
+        edge_color = Color(Grey);
+        edge_color.A = focal_length_color.A;
         for (u8 i = 0; i < 4; i++) {
             edge.from = ref_quad.corners[i];
             edge.to   = ref_quad.corners[(i + 1) % 4];
-            drawEdge(viewport, focal_length_color, &edge, 2);
+            drawEdge(viewport, edge_color, &edge, 2);
         }
 
         edge.from = edge.to = corner;
         edge.to.y = -1;
         edge.from.x = edge.to.x = 1;
-        drawLocalEdge(edge, focal_length_color, 0);
+        drawLocalEdge(edge, edge_color, 0);
         edge.from.x = edge.to.x = -1;
-        drawLocalEdge(edge, focal_length_color, 0);
+        drawLocalEdge(edge, edge_color, 0);
 
-        edge_color = X_color;
+        edge_color = aspect_ratio_color;
         edge_color.A = focal_length_color.A;
         edge.from = edge.to = corner;
         edge.from.x = 0;
@@ -217,9 +238,11 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         if (incTransition(&transitions.view_scene, delta_time, false))
             A = (u8)((f32)MAX_COLOR_VALUE * transitions.view_scene.eased_t);
 
-        edge_color = Color(DarkGrey);
-        edge_color.A = A;
-        drawBox(viewport, edge_color, main_box, main_box_prim, BOX__ALL_SIDES, 0);
+        if (!transitions.view_frustom_slice.active) {
+            edge_color = Color(DarkYellow);
+            edge_color.A = A;
+            drawBox(viewport, edge_color, main_box, main_box_prim, BOX__ALL_SIDES, 0);
+        }
         Edge *clipped_edge;
         transformGridVerticesFromObjectToViewSpace(&secondary_viewport, main_grid_prim, main_grid, &clipped_grid.vertices);
         setGridEdgesFromVertices(clipped_grid.edges.uv.u, main_grid->u_segments, clipped_grid.vertices.uv.u.from, clipped_grid.vertices.uv.u.to);
@@ -228,16 +251,31 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         edge_color = Color(main_grid_prim->color);
         edge_color.A = A;
         clipped_edge = clipped_grid.edges.uv.u;
-        for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, edge_color);
+        for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++)
+            if (cullAndClipEdge(clipped_edge, &secondary_viewport))
+                drawClippedEdge(viewport, transformedEdge(clipped_edge, M), edge_color);
+
         clipped_edge = clipped_grid.edges.uv.v;
-        for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, edge_color);
+        for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++)
+            if (cullAndClipEdge(clipped_edge, &secondary_viewport))
+                drawClippedEdge(viewport, transformedEdge(clipped_edge, M), edge_color);
 
         transformBoxVerticesFromObjectToViewSpace(&secondary_viewport, main_box_prim, &main_box->vertices, &clipped_box.vertices);
         setBoxEdgesFromVertices(&clipped_box.edges, &clipped_box.vertices);
         clipped_edge = clipped_box.edges.buffer;
         edge_color = Color(main_box_prim->color);
         edge_color.A = A;
-        for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++) drawClippedEdge(viewport, clipped_edge, edge_color);
+        for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++) {
+            if (transitions.view_frustom_slice.active && !(
+                    clipped_edge == &clipped_box.edges.sides.left_bottom ||
+                    clipped_edge == &clipped_box.edges.sides.right_bottom ||
+                    clipped_edge == &clipped_box.edges.sides.front_bottom ||
+                    clipped_edge == &clipped_box.edges.sides.back_bottom))
+                continue;
+
+            if (cullAndClipEdge(clipped_edge, &secondary_viewport))
+                drawClippedEdge(viewport, transformedEdge(clipped_edge, M), edge_color);
+        }
 
         if (show_secondary_viewport) {
             fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
@@ -249,47 +287,39 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         }
     }
 
-    if (transitions.view_frustom_slice.active) {
-        if (incTransition(&transitions.view_frustom_slice, delta_time, false))
-            NDC_color.A = Y_color.A = (u8)((f32)MAX_COLOR_VALUE * (1.0f - transitions.view_frustom_slice.eased_t));
+    if (transitions.grid_XW.active) {
+        edge_color = Color(DarkGrey);
+        if (incTransition(&transitions.grid_XW, delta_time, false))
+            edge_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.grid_XW.eased_t);
 
-        for (u8 i = 0; i < 4; i++) {
-            NDC_quad.corners[i]          = convertPositionToObjectSpace(NDC_quad.corners[i], main_camera_prim);
-            transforming_quad.corners[i] = convertPositionToObjectSpace(transforming_quad.corners[i], main_camera_prim);
-        }
-        for (u8 i = 0; i < 4; i++) {
-            edge.from = NDC_quad.corners[i];
-            edge.to   = NDC_quad.corners[(i + 1) % 4];
-            drawEdge(viewport, NDC_color, &edge, 2);
+        mat4 grid_matrix;
+        grid_matrix.X = Vec4( 0, 1, 0, 0);
+        grid_matrix.Y = Vec4(-1, 0, 0, 0);
+        grid_matrix.Z = Vec4(0,  0, 1, 0);
+        grid_matrix.W = Vec4(0,  0, 0, 1);
+        grid_matrix = mulMat4(grid_matrix, M);
+        transformGridVertices(main_grid, grid_matrix, &transformed_grid.vertices);
+        setGridEdgesFromVertices(transformed_grid.edges.uv.u, main_grid->u_segments, transformed_grid.vertices.uv.u.from, transformed_grid.vertices.uv.u.to);
+        setGridEdgesFromVertices(transformed_grid.edges.uv.v, main_grid->v_segments, transformed_grid.vertices.uv.v.from, transformed_grid.vertices.uv.v.to);
 
-            edge.from = transforming_quad.corners[i];
-            edge.to   = transforming_quad.corners[(i + 1) % 4];
-            edge_color = i % 2 ? sides_color : (i ? far_color : near_color);
-            edge_color.A = NDC_color.A;
-            drawEdge(viewport, edge_color, &edge, 2);
-        }
-    }
-    if (NDC_color.A) {
-        sides_color.A = near_color.A = far_color.A = NDC_color.A;
-        drawBox(viewport, NDC_color, &NDC_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
-        drawFrustum(viewport, &view_frustum_box, near_color, far_color, sides_color, 1);
+        drawGrid(viewport, edge_color, &transformed_grid, main_grid_prim, 0);
     }
 
     viewport->settings.depth_sort = false;
 
 
     if (transitions.aspect_ratio.active) {
-        edge_color = Color(White);
+        aspect_ratio_color = default_aspect_ratio_color;
 
         if (incTransition(&transitions.aspect_ratio, delta_time, false))
-            A = edge_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.aspect_ratio.eased_t);
+            aspect_ratio_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.aspect_ratio.eased_t);
 
         // Diagonal:
         edge.from = edge.to = corner;
         edge.from.x = -edge.to.x;
         edge.from.y = -edge.to.y;
         edge.to = lerpVec3(edge.from, edge.to, transitions.aspect_ratio.eased_t);
-        drawLocalEdge(edge, edge_color, 1);
+        drawLocalEdge(edge, Color(Grey), 1);
 
         // Bottom:
         edge.from = edge.to = corner;
@@ -297,13 +327,24 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         edge.to = edge.from;
         edge.to.x = -edge.to.x;
         edge.to = lerpVec3(edge.from, edge.to, transitions.aspect_ratio.eased_t);
-        drawLocalEdge(edge, X_color, 1);
+        drawLocalEdge(edge, default_aspect_ratio_color, 1);
 
         // Side
         edge.from = edge.to = corner;
         edge.from.y = -edge.from.y;
         edge.to = lerpVec3(edge.from, edge.to, transitions.aspect_ratio.eased_t);
         drawLocalEdge(edge, Y_color, 1);
+
+        if (transitions.scale_out.active) {
+            incTransition(&transitions.scale_out, delta_time, false);
+
+            edge.from = Vec3(0, 0, secondary_viewport.camera->focal_length);
+            edge.to = lerpVec3(edge.from, Vec3(0, secondary_viewport.camera->focal_length, secondary_viewport.camera->focal_length), transitions.scale_out.eased_t);
+            drawLocalEdge(edge, default_focal_length_color, 0);
+
+            edge.to = lerpVec3(edge.from, Vec3(secondary_viewport.camera->focal_length, 0, secondary_viewport.camera->focal_length), transitions.scale_out.eased_t);
+            drawLocalEdge(edge, default_focal_length_color, 0);
+        }
     }
 
     if (transitions.ground_diagonal.active) {
@@ -315,10 +356,12 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
 
         edge.to = Vec3(50, 0, 50);
         edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
+        if (transitions.lift_up.active) edge.to.y = edge.from.y = transitions.lift_up.eased_t;
         drawLocalEdge(edge, edge_color, 1);
 
         edge.to = Vec3(-50, 0, 50);
         edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
+        if (transitions.lift_up.active) edge.to.y = edge.from.y = transitions.lift_up.eased_t;
         drawLocalEdge(edge, edge_color, 1);
 
         if (!transitions.view_frustom_slice.active) {
@@ -350,25 +393,113 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         }
     }
 
-    arrowX.label = "X";
-    arrowY.label = "Y";
-    arrowZ.label = "Z";
+
+
+//        if (transitions.translate_back.active) {
+//            if (incTransition(&transitions.translate_back, delta_time, false)) {
+//                f32 translation = -transitions.translate_back.eased_t * secondary_viewport.settings.near_clipping_plane_distance;
+//                for (u8 i = 0; i < 4; i++) transforming_quad.corners[i].z += translation;
+//
+//                projective_ref_plane_prim->position.z = projective_ref_plane_prim->scale.z + secondary_viewport.settings.near_clipping_plane_distance + translation;
+//                arrowY.body.to.z = translation;
+//                updateArrow(&arrowY);
+//            }
+
+//            if (transitions.scale_back.active) {
+//                vec3 scale_target = Vec3(pre_projection_matrix.X.x, 1.0f, pre_projection_matrix.Z.z);
+//                vec3 scale = getVec3Of(1);
+//                if (incTransition(&transitions.scale_back, delta_time, false)) {
+//                    scale = lerpVec3(scale, scale_target, transitions.scale_back.eased_t);
+//                    scale.y = 1.0f;
+//                    for (u8 i = 0; i < 4; i++) transforming_quad.corners[i] = mulVec3(transforming_quad.corners[i], scale);
+//                }
+//
+//                projective_ref_plane_prim->scale = scaleVec3(scale, 10);
+//
+//                arrowX.body.to.x = scale.x * 2;
+//                updateArrow(&arrowX);
+//
+//                arrowZ.body.to.z = scale.z * 2;
+//                updateArrow(&arrowZ);
+//
+//                if (transitions.shear_up.active) {
+//                    if (incTransition(&transitions.shear_up, delta_time, false)) {
+//
+//                        arrowZ.body.to.y = transitions.shear_up.eased_t;
+//                        updateArrow(&arrowZ);
+//                    }
+//                }
+//            }
+//        }
+
+    if (transitions.view_frustom_slice.active) {
+        NDC_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.view_frustom_slice.eased_t);
+//        mat4 translation_matrix = getMat4Identity();
+//        translation_matrix.W = Vec4fromVec3(viewport->camera->transform.position, 1.0f);
+//        mat4 world_to_view = invMat4(mulMat4(mat4fromMat3(viewport->camera->transform.rotation_matrix), translation_matrix));
+        for (u8 i = 0; i < 4; i++) {
+            NDC_quad.corners[i]          = convertPositionToObjectSpace(NDC_quad.corners[i], main_camera_prim);
+//            transforming_quad.corners[i] = mulVec4Mat4(transforming_quad.corners[i], world_to_view);
+        }
+        for (u8 i = 0; i < 4; i++) {
+            edge.from = NDC_quad.corners[i];
+            edge.to   = NDC_quad.corners[(i + 1) % 4];
+
+            drawEdge(viewport, NDC_color, &edge, 2);
+
+            edge.from = transforming_quad.corners[i];
+            edge.to   = transforming_quad.corners[(i + 1) % 4];
+            transformedEdge(&edge, M);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            edge.to = convertPositionToObjectSpace(edge.to, main_camera_prim);
+
+            edge_color = i % 2 ? sides_color : (i ? far_color : near_color);
+            edge_color.A = NDC_color.A;
+            drawEdge(viewport, edge_color, &edge, 2);
+        }
+    }
+
     arrowX.head.length = arrowZ.head.length = arrowY.head.length = 0.25f;
     arrowX.body.from = arrowY.body.from = arrowZ.body.from = getVec3Of(0);
-    arrowX.body.to = main_matrix.M.X = arrowX_box_prim->position;
-    arrowY.body.to = main_matrix.M.Y = arrowY_box_prim->position;
-    arrowZ.body.to = main_matrix.M.Z = arrowZ_box_prim->position;
+    arrowX.body.to = arrowX_box_prim->position;
+    arrowY.body.to = arrowY_box_prim->position;
+    arrowZ.body.to = arrowZ_box_prim->position;
     updateArrow(&arrowX);
     updateArrow(&arrowY);
     updateArrow(&arrowZ);
+
+    if (transitions.view_frustom_slice.active) {
+        arrowX.label = "X";
+        arrowY.label = "W";
+        arrowZ.label = "Z";
+        main_matrix.M.X = Vec4(arrowX_box_prim->position.x, main_matrix.M.X.y, arrowX_box_prim->position.z, arrowX_box_prim->position.y);
+        main_matrix.M.Z = Vec4(arrowZ_box_prim->position.x, main_matrix.M.Z.y, arrowZ_box_prim->position.z, arrowZ_box_prim->position.y);
+        main_matrix.M.W = Vec4(arrowY_box_prim->position.x, main_matrix.M.W.y, arrowY_box_prim->position.z, arrowY_box_prim->position.y);
+    } else {
+        arrowX.label = "X";
+        arrowY.label = "Y";
+        arrowZ.label = "Z";
+        main_matrix.M.X = Vec4fromVec3(arrowX_box_prim->position, main_matrix.M.X.w);
+        main_matrix.M.Y = Vec4fromVec3(arrowY_box_prim->position, main_matrix.M.Y.w);
+        main_matrix.M.Z = Vec4fromVec3(arrowZ_box_prim->position, main_matrix.M.Z.w);
+    }
+
     drawArrow(viewport, X_color, &arrowX, 2);
-    drawArrow(viewport, Y_color, &arrowY, 2);
+    drawArrow(viewport, transitions.view_frustom_slice.active ? W_color : Y_color, &arrowY, 2);
     drawArrow(viewport, Z_color, &arrowZ, 2);
     viewport->settings.depth_sort = true;
 
-    matrix_count = 3;
     if (show_matrix_hud) {
         updateMatrixStrings(&main_matrix);
+        if (matrix_count) {
+            Matrix *matrix = matrices;
+            for (u8 i = 0; i < matrix_count; i++, matrix++) {
+                matrix->dim = transitions.view_frustom_slice.active ? 4 : 3;
+                setMatrixComponentColor(matrix);
+            }
+        }
+        main_matrix.dim = transitions.view_frustom_slice.active ? 4 : 3;
+        setMatrixComponentColor(&main_matrix);
         drawMatrixHUD(viewport->frame_buffer);
     }
 }

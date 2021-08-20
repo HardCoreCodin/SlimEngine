@@ -135,3 +135,7 @@ INLINE f32 mulVec3Mat4(vec3 in, f32 w, mat4 M, vec3 *out) {
     *out = Vec3fromVec4(v4);
     return v4.w;
 }
+
+INLINE vec4 lerpVec4(vec4 from, vec4 to, f32 by) {
+    return scaleAddVec4(subVec4(to, from), by, from);
+}

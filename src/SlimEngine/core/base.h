@@ -111,15 +111,13 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
 
 typedef struct u8_3 { u8 x, y, z; } u8_3;
-typedef struct vec2  { f32 x, y; } vec2;
 typedef struct vec2i { i32 x, y; } vec2i;
-//typedef struct vec3 { f32 x, y, z;     } vec3;
-typedef union vec3 { struct {f32 x, y, z; }; f32 components[3]; } vec3;
-typedef struct vec4 { f32 x, y, z, w;  } vec4;
-typedef struct mat2 { vec2 X, Y;       } mat2;
-//typedef struct mat3 { vec3 X, Y, Z;    } mat3;
-typedef union mat3 { struct {vec3 X, Y, Z; }; vec3 axis[3];   } mat3;
-typedef struct mat4 { vec4 X, Y, Z, W; } mat4;
+typedef union vec2 { struct {f32 x, y;        }; f32 components[2]; } vec2;
+typedef union vec3 { struct {f32 x, y, z;     }; f32 components[3]; } vec3;
+typedef union vec4 { struct {f32 x, y, z, w;  }; f32 components[4]; } vec4;
+typedef union mat2 { struct {vec2 X, Y;       }; vec2 axis[2]; } mat2;
+typedef union mat3 { struct {vec3 X, Y, Z;    }; vec3 axis[3]; } mat3;
+typedef union mat4 { struct {vec4 X, Y, Z, W; }; vec4 axis[4]; } mat4;
 typedef struct AABB { vec3 min, max;   } AABB;
 typedef struct quat { vec3 axis; f32 amount; } quat;
 typedef struct Edge { vec3 from, to;  } Edge;
@@ -351,7 +349,15 @@ enum ColorID {
     BrightRed,
     BrightGreen,
     BrightBlue,
-    BrightGrey
+    BrightGrey,
+
+    BrightCyan,
+    BrightMagenta,
+    BrightYellow,
+
+    DarkCyan,
+    DarkMagenta,
+    DarkYellow
 };
 
 INLINE RGBA Color(enum ColorID color_id) {
@@ -417,6 +423,23 @@ INLINE RGBA Color(enum ColorID color_id) {
             color.G = 0;
             color.B = MAX_COLOR_VALUE/2;
             break;
+
+        case DarkCyan:
+            color.R = 0;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = MAX_COLOR_VALUE/2;
+            break;
+        case DarkMagenta:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = 0;
+            color.B = MAX_COLOR_VALUE/2;
+            break;
+        case DarkYellow:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = 0;
+            break;
+
         case BrightRed:
             color.R = MAX_COLOR_VALUE;
             color.G = MAX_COLOR_VALUE/2;
@@ -446,6 +469,22 @@ INLINE RGBA Color(enum ColorID color_id) {
         case Yellow:
             color.R = MAX_COLOR_VALUE;
             color.G = MAX_COLOR_VALUE;
+            color.B = 0;
+            break;
+
+        case BrightCyan:
+            color.R = 0;
+            color.G = MAX_COLOR_VALUE*3/4;
+            color.B = MAX_COLOR_VALUE*3/4;
+            break;
+        case BrightMagenta:
+            color.R = MAX_COLOR_VALUE*3/4;
+            color.G = 0;
+            color.B = MAX_COLOR_VALUE*3/4;
+            break;
+        case BrightYellow:
+            color.R = MAX_COLOR_VALUE*3/4;
+            color.G = MAX_COLOR_VALUE*3/4;
             color.B = 0;
             break;
     }
