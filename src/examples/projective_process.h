@@ -274,24 +274,78 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                     arrow1.body.from = transforming_quad.top_right;
                     arrow1.body.to = arrow1.body.from;
                     arrow1.body.to.y = arrow1.body.to.x;
+                    edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
                     arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
+
+                    edge.from.x += 0.05f;
+                    edge.to = edge.from;
+                    edge.to.x += 0.25f;
+                    edge.to.y += 0.15f;
+
+                    drawLocalEdge(edge, Color(BrightGrey), 0);
+
+                    edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+                    edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+                    edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+                    projectEdge(&edge, viewport);
+
+                    addLabel(default_near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
+
                     updateArrow(&arrow1);
                     drawArrow(viewport, edge_color, &arrow1, 2);
+
 
                     arrow1.body.from = transforming_quad.top_right;
                     arrow1.body.from.y = arrow1.body.from.x;
                     arrow1.body.to = arrow1.body.from;
                     arrow1.body.to.z = 0;
+                    edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
                     arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
+
+                    edge.from.x += 0.05f;
+                    edge.to = edge.from;
+                    edge.to.x += 0.25f;
+                    edge.to.y += 0.15f;
+
+                    drawLocalEdge(edge, Color(BrightGrey), 0);
+
+                    edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+                    edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+                    edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+                    projectEdge(&edge, viewport);
+
+                    addLabel(default_near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
+
                     updateArrow(&arrow1);
                     drawArrow(viewport, edge_color, &arrow1, 2);
+
+
 
                     edge_color = far_color;
                     edge_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.show_chosen_trajectory.eased_t);
                     arrow1.body.from = transforming_quad.bottom_right;
                     arrow1.body.to = arrow1.body.from;
                     arrow1.body.to.y = arrow1.body.to.x;
+                    edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
                     arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
+
+                    edge.from.x += 0.05f;
+                    edge.to = edge.from;
+                    edge.to.x += 0.25f;
+                    edge.to.y += 0.15f;
+
+                    drawLocalEdge(edge, Color(BrightGrey), 0);
+
+                    edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+                    edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+                    edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+                    projectEdge(&edge, viewport);
+
+                    addLabel(default_far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
+
                     updateArrow(&arrow1);
                     drawArrow(viewport, edge_color, &arrow1, 2);
                 }
@@ -421,7 +475,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         edge.from.x = edge.to.x = -1;
         drawLocalEdge(edge, edge_color, 0);
 
-        edge_color = aspect_ratio_color;
+        edge_color = default_aspect_ratio_color;
         edge_color.A = focal_length_color.A;
         edge.from = edge.to = corner;
         edge.from.x = 0;
@@ -435,7 +489,74 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         edge.from.y = 0;
         drawLocalEdge(edge, edge_color, 2);
 
-//        viewport->settings.depth_sort = true;
+        if (transitions.aspect_ratio.active) {
+            aspect_ratio_color = default_aspect_ratio_color;
+
+            if (incTransition(&transitions.aspect_ratio, delta_time, false))
+                aspect_ratio_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.aspect_ratio.eased_t);
+
+            // Diagonal:
+            edge.from = edge.to = corner;
+            edge.from.x = -edge.to.x;
+            edge.from.y = -edge.to.y;
+            edge.to = lerpVec3(edge.from, edge.to, transitions.aspect_ratio.eased_t);
+            drawLocalEdge(edge, Color(Grey), 1);
+
+            // Bottom:
+            edge.from = edge.to = corner;
+            edge.from.y = -edge.from.y;
+            edge.to = edge.from;
+            edge.to.x = -edge.to.x;
+            edge.to = lerpVec3(edge.from, edge.to, transitions.aspect_ratio.eased_t);
+            drawLocalEdge(edge, default_aspect_ratio_color, 1);
+
+            // Side
+            edge.from = edge.to = corner;
+            edge.from.y = -edge.from.y;
+            edge.to = lerpVec3(edge.from, edge.to, transitions.aspect_ratio.eased_t);
+            drawLocalEdge(edge, Y_color, 1);
+
+            // Labels
+            edge.from = Vec3(A * 0.85f, 0.05f, L);
+            edge.to   = Vec3(A * 0.85f + 0.4f, 0.25f, L);
+            drawLocalEdge(edge, Color(BrightGrey), 1);
+
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
+            addLabel(default_aspect_ratio_color, "A", (i32)edge.to.x, (i32)edge.to.y);
+            addLabel(Color(White), " / ", (i32)edge.to.x + FONT_WIDTH, (i32)edge.to.y);
+            addLabel(Y_color, "1", (i32)edge.to.x + FONT_WIDTH * 4, (i32)edge.to.y);
+            addLabel(Color(White), " = ", (i32)edge.to.x + FONT_WIDTH * 5, (i32)edge.to.y);
+            addLabel(default_aspect_ratio_color, "W", (i32)edge.to.x + FONT_WIDTH * 8, (i32)edge.to.y);
+            addLabel(Color(White), " / ", (i32)edge.to.x + FONT_WIDTH * 9, (i32)edge.to.y);
+            addLabel(Y_color, "H", (i32)edge.to.x + FONT_WIDTH * 12, (i32)edge.to.y);
+
+            edge.from = Vec3(0.05f + A, 0.5f, L);
+            edge.to   = Vec3(0.35f + A, 0.6f, L);
+            drawLocalEdge(edge, Color(BrightGrey), 1);
+
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
+
+            addLabel(Y_color, "1", (i32)edge.to.x, (i32)edge.to.y);
+        } else {
+            edge.from = Vec3(A * 0.85f, 0.05f, L);
+            edge.to   = Vec3(A * 0.85f + 0.4f, 0.25f, L);
+            drawLocalEdge(edge, Color(BrightGrey), 1);
+
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
+            addLabel(default_aspect_ratio_color, "A", (i32)edge.to.x, (i32)edge.to.y);
+        }
 
         if (transitions.scale_out.active) {
             incTransition(&transitions.scale_out, delta_time, true);
@@ -491,27 +612,6 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             addLabel(focal_length_color, "L", (i32)edge.to.x, (i32)edge.to.y);
             addLabel(Color(White), " / ", (i32)edge.to.x + FONT_WIDTH, (i32)edge.to.y);
             addLabel(default_aspect_ratio_color, "A", (i32)edge.to.x + FONT_WIDTH * 3, (i32)edge.to.y);
-
-
-            // A
-            edge.from = Vec3(0, 0, L);
-            edge.to   = Vec3(A / 2, 0, L);
-            drawLocalEdge(edge, default_aspect_ratio_color, 1);
-
-
-            edge.from = edge.to;
-            edge.from.x += 0.05f;
-            edge.from.y += 0.05f;
-            edge.to.y += 0.25f;
-            edge.to.x += 0.15f;
-            drawLocalEdge(edge, Color(BrightGrey), 0);
-
-            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
-
-            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-            projectEdge(&edge, viewport);
-            addLabel(default_aspect_ratio_color, "A", (i32)edge.to.x, (i32)edge.to.y);
         }
     }
 
@@ -607,82 +707,47 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
 
     viewport->settings.depth_sort = false;
 
-    if (transitions.aspect_ratio.active) {
-        aspect_ratio_color = default_aspect_ratio_color;
-
-        if (incTransition(&transitions.aspect_ratio, delta_time, false))
-            aspect_ratio_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.aspect_ratio.eased_t);
-
-        // Diagonal:
-        edge.from = edge.to = corner;
-        edge.from.x = -edge.to.x;
-        edge.from.y = -edge.to.y;
-        edge.to = lerpVec3(edge.from, edge.to, transitions.aspect_ratio.eased_t);
-        drawLocalEdge(edge, Color(Grey), 1);
-
-        // Bottom:
-        edge.from = edge.to = corner;
-        edge.from.y = -edge.from.y;
-        edge.to = edge.from;
-        edge.to.x = -edge.to.x;
-        edge.to = lerpVec3(edge.from, edge.to, transitions.aspect_ratio.eased_t);
-        drawLocalEdge(edge, default_aspect_ratio_color, 1);
-
-        // Side
-        edge.from = edge.to = corner;
-        edge.from.y = -edge.from.y;
-        edge.to = lerpVec3(edge.from, edge.to, transitions.aspect_ratio.eased_t);
-        drawLocalEdge(edge, Y_color, 1);
-
-        // Labels
-        edge.from = Vec3(A / 2, 0.05f, L);
-        edge.to   = Vec3(A / 2 + 1.25f, 0.25f, L);
-        drawLocalEdge(edge, Color(BrightGrey), 1);
-
-        edge.to = lerpVec3(edge.from, edge.to, 1.15f);
-
-        edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-        edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-        projectEdge(&edge, viewport);
-        addLabel(default_aspect_ratio_color, "A", (i32)edge.to.x, (i32)edge.to.y);
-        addLabel(Color(White), " / ", (i32)edge.to.x + FONT_WIDTH, (i32)edge.to.y);
-        addLabel(Y_color, "1", (i32)edge.to.x + FONT_WIDTH * 4, (i32)edge.to.y);
-        addLabel(Color(White), " = ", (i32)edge.to.x + FONT_WIDTH * 5, (i32)edge.to.y);
-        addLabel(default_aspect_ratio_color, "W", (i32)edge.to.x + FONT_WIDTH * 8, (i32)edge.to.y);
-        addLabel(Color(White), " / ", (i32)edge.to.x + FONT_WIDTH * 9, (i32)edge.to.y);
-        addLabel(Y_color, "H", (i32)edge.to.x + FONT_WIDTH * 12, (i32)edge.to.y);
-
-        edge.from = Vec3(0.05f + A, 0.5f, L);
-        edge.to   = Vec3(0.35f + A, 0.6f, L);
-        drawLocalEdge(edge, Color(BrightGrey), 1);
-
-        edge.to = lerpVec3(edge.from, edge.to, 1.15f);
-
-        edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-        edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-        projectEdge(&edge, viewport);
-
-        addLabel(Y_color, "1", (i32)edge.to.x, (i32)edge.to.y);
-    }
     if (transitions.ground_diagonal.active) {
         incTransition(&transitions.ground_diagonal, delta_time, false);
-        edge_color.G = edge_color.R = MAX_COLOR_VALUE;
-        edge_color.B = MAX_COLOR_VALUE / 2;
-        edge_color.A = MAX_COLOR_VALUE;
+
+        edge_color = Color(Grey);
+        edge_color.A = MAX_COLOR_VALUE / 4 * 3;
         edge.from = getVec3Of(0);
 
         edge.to = Vec3(50, 0, 50);
         edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
-        drawLocalEdge(edge, edge_color, 1);
+        drawLocalEdge(edge, edge_color, 0);
 
         edge.to = Vec3(-50, 0, 50);
         edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
-        drawLocalEdge(edge, edge_color, 1);
+        drawLocalEdge(edge, edge_color, 0);
 
         if (!transitions.view_frustom_slice.active) {
-            if (transitions.focal_length_and_plane.active) {
-                arrow1.body = edge;
+            edge.to = Vec3(0, 50, 50);
+            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
+            drawLocalEdge(edge, edge_color, 0);
 
+            edge.to = Vec3(0, -50, 50);
+            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
+            drawLocalEdge(edge, edge_color, 0);
+
+            edge.to = Vec3(50, 50, 50);
+            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
+            drawLocalEdge(edge, edge_color, 0);
+
+            edge.to = Vec3(-50, 50, 50);
+            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
+            drawLocalEdge(edge, edge_color, 0);
+
+            edge.to = Vec3(50, -50, 50);
+            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
+            drawLocalEdge(edge, edge_color, 0);
+
+            edge.to = Vec3(-50, -50, 50);
+            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
+            drawLocalEdge(edge, edge_color, 0);
+
+            if (transitions.focal_length_and_plane.active) {
                 edge.from = Vec3(0, 0, L);
                 edge.to = Vec3(0, L, L);
                 drawLocalEdge(edge, default_focal_length_color, 0);
@@ -696,11 +761,11 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                 edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
                 edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
                 projectEdge(&edge, viewport);
-                addLabel(focal_length_color, "L", (i32)edge.to.x, (i32)edge.to.y);
+                addLabel(edge_color, "L", (i32)edge.to.x, (i32)edge.to.y);
 
 
-                edge.from = Vec3(L*0.75f, 0.05f, L);
-                edge.to   = Vec3(L*0.75f + 0.25f, 0.35f, L);
+                edge.from = Vec3(L*0.85f, 0.05f, L);
+                edge.to   = Vec3(L*0.85f + 0.15f, 0.35f, L);
                 drawLocalEdge(edge, Color(BrightGrey), 1);
 
                 edge.to = lerpVec3(edge.from, edge.to, 1.15f);
@@ -708,43 +773,13 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                 edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
                 edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
                 projectEdge(&edge, viewport);
-                addLabel(focal_length_color, "L", (i32)edge.to.x, (i32)edge.to.y);
+                addLabel(edge_color, "L", (i32)edge.to.x, (i32)edge.to.y);
 
 
                 edge.from = Vec3(0, 0, L);
                 edge.to = Vec3(L, 0, L);
                 drawLocalEdge(edge, default_focal_length_color, 0);
-
-                addLabel(default_focal_length_color, "L", (i32)edge.to.x + FONT_WIDTH * 12, (i32)edge.to.y);
-
-                edge = arrow1.body;
             }
-
-            edge.to = Vec3(0, 50, 50);
-            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
-            drawLocalEdge(edge, edge_color, 1);
-
-            edge.to = Vec3(0, -50, 50);
-            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
-            drawLocalEdge(edge, edge_color, 1);
-
-            edge_color.R /= 2;
-
-            edge.to = Vec3(50, 50, 50);
-            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
-            drawLocalEdge(edge, edge_color, 1);
-
-            edge.to = Vec3(-50, 50, 50);
-            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
-            drawLocalEdge(edge, edge_color, 1);
-
-            edge.to = Vec3(50, -50, 50);
-            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
-            drawLocalEdge(edge, edge_color, 1);
-
-            edge.to = Vec3(-50, -50, 50);
-            edge.to = lerpVec3(edge.from, edge.to, transitions.ground_diagonal.eased_t);
-            drawLocalEdge(edge, edge_color, 1);
         }
     }
 

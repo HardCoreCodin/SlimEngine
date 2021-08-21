@@ -3,7 +3,7 @@
 #include "./projective_base.h"
 #include "./projective_matrix.h"
 
-#define TRANSITION_COUNT 27
+#define TRANSITION_COUNT 26
 
 typedef struct Transition {
     bool active;
@@ -37,8 +37,7 @@ typedef union Transitions {
         drop_warping_ndc,
         show_diagonality,
         show_chosen_trajectory,
-        show_focal_ratio,
-        show_aspect_ratio;
+        show_focal_ratio;
     };
     Transition states[TRANSITION_COUNT];
 } Transitions;
@@ -122,7 +121,7 @@ void updateTransitions(u8 key) {
     } else if (key == 'Z') {
         transitions.focal_length_and_plane.active = !transitions.focal_length_and_plane.active;
         transitions.focal_length_and_plane.t = 0;
-    } else if (key == 'C') {
+    } else if (key == 'A') {
         transitions.aspect_ratio.active = !transitions.aspect_ratio.active;
         transitions.aspect_ratio.t = 0;
     } else if (key == 'X') {
@@ -134,21 +133,18 @@ void updateTransitions(u8 key) {
     } else if (key == 'G') {
         transitions.grid_XW.active = !transitions.grid_XW.active;
         transitions.grid_XW.t = 0;
-    } else if (key == 'B') {
+    } else if (key == 'S') {
         transitions.scale_out.active = !transitions.scale_out.active;
         transitions.scale_out.t = 0;
     } else if (key == 'D') {
         transitions.show_diagonality.active = !transitions.show_diagonality.active;
         transitions.show_diagonality.t = 0;
-    } else if (key == 'N') {
+    } else if (key == 'C') {
         transitions.show_chosen_trajectory.active = !transitions.show_chosen_trajectory.active;
         transitions.show_chosen_trajectory.t = 0;
-    } else if (key == 'S') {
+    } else if (key == 'F') {
         transitions.show_focal_ratio.active = !transitions.show_focal_ratio.active;
         transitions.show_focal_ratio.t = 0;
-    } else if (key == 'A') {
-        transitions.show_aspect_ratio.active = !transitions.show_aspect_ratio.active;
-        transitions.show_aspect_ratio.t = 0;
     }
 }
 
