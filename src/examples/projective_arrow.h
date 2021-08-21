@@ -19,8 +19,8 @@ void updateArrow(Arrow *arrow) {
     vec3 direction = scaleVec3(normVec3(subVec3(arrow->body.from, arrow->body.to)), arrow->head.length);
     arrow->head.left.to = arrow->head.right.to = arrow->body.to;
     arrow->head.left.from = arrow->head.right.from = addVec3(arrow->body.to, direction);
-    direction = crossVec3(direction, crossVec3(direction, direction.x || direction.z ? Vec3(0, 1, 0) : Vec3(1, 0, 0)));
-    arrow->head.left.from = addVec3(arrow->head.left.from, direction);
+    direction = crossVec3(direction, crossVec3(direction, direction.x || direction.y ? Vec3(0, 0, 1) : Vec3(1, 0, 0)));
+    arrow->head.left.from  = addVec3(arrow->head.left.from, direction);
     arrow->head.right.from = subVec3(arrow->head.right.from, direction);
 }
 
@@ -59,4 +59,22 @@ void updateCameraArrows(xform3 *camera_xform) {
     updateArrow(&arrowX);
     updateArrow(&arrowY);
     updateArrow(&arrowZ);
+}
+
+void drawCoordinateArrowsToPoint(Viewport *viewport, RGBA x_color, RGBA y_color, RGBA z_color, vec3 location, u8 line_width) {
+    arrowX.body.to = arrowY.body.to = arrowZ.body.to = getVec3Of(0);
+    arrowX.body.to.x = arrowY.body.to.x = arrowZ.body.to.x = location.x;
+    arrowY.body.to.y = arrowZ.body.to.y = location.y;
+
+    arrowZ.body.to.z = location.z;
+    arrowX.body.from = getVec3Of(0);
+    arrowY.body.from = arrowX.body.to;
+    arrowZ.body.from = arrowY.body.to;
+    updateArrow(&arrowX);
+    updateArrow(&arrowY);
+    updateArrow(&arrowZ);
+
+    drawArrow(viewport, x_color, &arrowX, line_width);
+    drawArrow(viewport, y_color, &arrowY, line_width);
+    drawArrow(viewport, z_color, &arrowZ, line_width);
 }

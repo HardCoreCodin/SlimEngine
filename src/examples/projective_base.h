@@ -24,7 +24,7 @@ RGBA sides_color,
      Z_color,
      W_color;
 
-PixelGrid secondary_viewport_frame_buffer;
+PixelGrid secondary_viewport_frame_buffer, text_overlay_frame_buffer;
 Viewport secondary_viewport, *active_viewport;
 
 Primitive *secondary_camera_prim,
@@ -73,6 +73,27 @@ typedef enum VIZ {
 } VIZ;
 VIZ current_viz = INTRO;
 
+typedef struct Label {
+    vec2i position;
+    RGBA color;
+    char *text;
+} Label;
+
+#define MAX_LABEL_COUNT 16
+typedef struct Labels {
+    u8 count;
+    Label array[MAX_LABEL_COUNT];
+} Labels;
+Labels labels;
+
+void addLabel(RGBA color, char* text, i32 x, i32 y) {
+    Label label;
+    label.text = text;
+    label.color = color;
+    label.position = Vec2i(x, y);
+    labels.array[labels.count++] = label;
+}
+
 void transformEdge(Edge *in_edge, Edge *out_edge, xform3 *xform) {
     out_edge->from = subVec3(in_edge->from, xform->position);
     out_edge->from = mulVec3Quat(out_edge->from, xform->rotation_inverted);
@@ -113,16 +134,6 @@ void drawSecondaryViewportToFrameBuffer(PixelGrid *frame_buffer) {
 
 INLINE vec3 vec3wUp(vec4 v) {
     return Vec3(v.x, v.w, v.z);
-}
-
-void transformGridVertices(Grid *grid, mat4 matrix, GridVertices *transformed_vertices) {
-    for (u8 side = 0; side < 2; side++) {
-        for (u8 axis = 0; axis < 2; axis++) {
-            u8 segment_count = axis ? grid->v_segments : grid->u_segments;
-            for (u8 segment = 0; segment < segment_count; segment++)
-                mulVec3Mat4(grid->vertices.buffer[axis][side][segment], 1.0f, matrix, &transformed_vertices->buffer[axis][side][segment]);
-        }
-    }
 }
 
 void transformBoxVertices(Box *box, mat4 matrix, BoxVertices *transformed_vertices) {

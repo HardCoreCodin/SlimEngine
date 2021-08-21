@@ -190,6 +190,7 @@ void renderProjectiveSpace(Viewport *viewport, f32 delta_time) {
     drawArrow(viewport, Z_color, &arrowZ, 2);
     viewport->settings.depth_sort = true;
 }
+#define TEXT_OVERLAY_BACKGROUND_PADDING 5
 
 void updateAndRender() {
     Timer *timer = &app->time.timers.update;
@@ -284,12 +285,45 @@ void updateAndRender() {
     if (current_viz != VIEW_FRUSTUM_SLICE)
         drawCamera(viewport, camera_color, secondary_viewport.camera, 0);
 
+    labels.count = 0;
+
     switch (current_viz) {
         case INTRO:              renderIntro(viewport, timer->delta_time, elapsed); break;
         case VIEW_FRUSTUM:       renderViewFrustum(viewport, timer->delta_time, elapsed); break;
         case PROJECTION:         renderProjection(viewport, timer->delta_time); break;
         case PROJECTIVE_SPACE:   renderProjectiveSpace(viewport, timer->delta_time); break;
         case VIEW_FRUSTUM_SLICE: renderViewSpaceFrustumSlice(viewport, timer->delta_time); break;
+    }
+
+    if (labels.count) {
+        RGBA background_color = Color(Black);
+        background_color.A = 0;
+
+        text_overlay_frame_buffer.dimensions = viewport->frame_buffer->dimensions;
+        fillPixelGrid(&text_overlay_frame_buffer, background_color);
+        background_color = Color(DarkGrey);
+        background_color.A = (u8)((f32)MAX_COLOR_VALUE * 0.85f);
+
+        Label *label = labels.array;
+        for (u8 i = 0; i < labels.count; i++, label++) {
+            Rect rect;
+            rect.min = rect.max = label->position;
+            rect.max.x += FONT_WIDTH * (i32)getStringLength(label->text);
+            rect.max.y += FONT_HEIGHT;
+            rect.min.x -= TEXT_OVERLAY_BACKGROUND_PADDING;
+            rect.min.y -= TEXT_OVERLAY_BACKGROUND_PADDING;
+            rect.max.x += TEXT_OVERLAY_BACKGROUND_PADDING;
+            rect.max.y += TEXT_OVERLAY_BACKGROUND_PADDING;
+            fillRect(&text_overlay_frame_buffer, background_color, &rect);
+        }
+        Pixel *pixel = text_overlay_frame_buffer.pixels;
+        i32 pixel_index = 0;
+        for (i32 y = 0; y < viewport->frame_buffer->dimensions.height; y++)
+            for (i32 x = 0; x < viewport->frame_buffer->dimensions.width; x++, pixel++, pixel_index++)
+                if (pixel->color.A) setPixel(viewport->frame_buffer, pixel->color, (f32)pixel->color.A * COLOR_COMPONENT_TO_FLOAT, x, y, 0);
+
+        label = labels.array;
+        for (u8 i = 0; i < labels.count; i++, label++) drawText(viewport->frame_buffer, label->color, label->text, label->position.x, label->position.y);
     }
 
     if (show_secondary_viewport) {
@@ -465,6 +499,7 @@ void setupViewport(Viewport *viewport) {
     active_viewport = viewport;
     viewport->settings.antialias = viewport->settings.depth_sort = true;
     initPixelGrid(&secondary_viewport_frame_buffer, allocateAppMemory(RENDER_SIZE), MAX_WIDTH, MAX_HEIGHT);
+    initPixelGrid(&text_overlay_frame_buffer, allocateAppMemory(RENDER_SIZE), MAX_WIDTH, MAX_HEIGHT);
     initPixelGrid(&matrix_image, allocateAppMemory(MATRIX_MAX_SIZE * PIXEL_SIZE), MATRIX_MAX_WIDTH, MATRIX_MAX_HEIGHT);
     initViewport(&secondary_viewport,
                  &viewport->settings,
@@ -500,5 +535,5 @@ void initApp(Defaults *defaults) {
     defaults->settings.scene.boxes      = 1;
     defaults->settings.scene.primitives = 10;
     defaults->settings.scene.cameras    = 2;
-    defaults->additional_memory_size = RENDER_SIZE + (MATRIX_MAX_SIZE * PIXEL_SIZE);
+    defaults->additional_memory_size = 2 * RENDER_SIZE + (MATRIX_MAX_SIZE * PIXEL_SIZE);
 }

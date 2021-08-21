@@ -3,7 +3,7 @@
 #include "./projective_base.h"
 #include "./projective_matrix.h"
 
-#define TRANSITION_COUNT 19
+#define TRANSITION_COUNT 27
 
 typedef struct Transition {
     bool active;
@@ -30,7 +30,15 @@ typedef union Transitions {
         ground_diagonal,
         view_scene,
         grid_XW,
-        scale_out;
+        scale_out,
+        corner_trajectory,
+        corners_warping,
+        stop_warping_ndc,
+        drop_warping_ndc,
+        show_diagonality,
+        show_chosen_trajectory,
+        show_focal_ratio,
+        show_aspect_ratio;
     };
     Transition states[TRANSITION_COUNT];
 } Transitions;
@@ -95,10 +103,22 @@ void updateTransitions(u8 key) {
         //            transitions.shear_up.active = true;
         //            transitions.shear_up.t = 0;
     } else if (key == '7') {
-        transitions.lines_through_NDC.active = true;
+        transitions.lines_through_NDC.active = !transitions.lines_through_NDC.active;
         transitions.lines_through_NDC.t = 0;
     } else if (key == '8') {
-        //            alpha = !alpha;
+        transitions.corner_trajectory.active = !transitions.corner_trajectory.active;
+        transitions.corner_trajectory.t = 0;
+    } else if (key == '9') {
+        transitions.corners_warping.active = !transitions.corners_warping.active;
+        transitions.corners_warping.t = 0;
+    } else if (key == '0') {
+        transitions.corner_trajectory.active = false;
+        transitions.stop_warping_ndc.active = true;
+        transitions.stop_warping_ndc.t = 0;
+    } else if (key == 'P') {
+        transitions.stop_warping_ndc.active = false;
+        transitions.drop_warping_ndc.active = true;
+        transitions.drop_warping_ndc.t = 0;
     } else if (key == 'Z') {
         transitions.focal_length_and_plane.active = !transitions.focal_length_and_plane.active;
         transitions.focal_length_and_plane.t = 0;
@@ -117,6 +137,18 @@ void updateTransitions(u8 key) {
     } else if (key == 'B') {
         transitions.scale_out.active = !transitions.scale_out.active;
         transitions.scale_out.t = 0;
+    } else if (key == 'D') {
+        transitions.show_diagonality.active = !transitions.show_diagonality.active;
+        transitions.show_diagonality.t = 0;
+    } else if (key == 'N') {
+        transitions.show_chosen_trajectory.active = !transitions.show_chosen_trajectory.active;
+        transitions.show_chosen_trajectory.t = 0;
+    } else if (key == 'S') {
+        transitions.show_focal_ratio.active = !transitions.show_focal_ratio.active;
+        transitions.show_focal_ratio.t = 0;
+    } else if (key == 'A') {
+        transitions.show_aspect_ratio.active = !transitions.show_aspect_ratio.active;
+        transitions.show_aspect_ratio.t = 0;
     }
 }
 
@@ -140,15 +172,17 @@ void transitionBox(Transition *transition, Box *from_box, Box *to_box) {
     setBoxEdgesFromVertices(&transforming_view_frustum_box.edges, &transforming_view_frustum_box.vertices);
 }
 
-Edge* transformedEdge(Edge *edge, mat4 M) {
+void transformedPosition(vec3 *pos, mat4 M) {
     if (transitions.view_frustom_slice.active) {
-        edge->from = vec3wUp(mulVec4Mat4(Vec4fromVec3(edge->from, 1.0f), M));
-        edge->to   = vec3wUp(mulVec4Mat4(Vec4fromVec3(edge->to,   1.0f), M));
-        if (!transitions.translate_back.active) edge->from.y = edge->to.y = transitions.lift_up.eased_t;
-    } else {
-        mulVec3Mat4(edge->from, 1.0f, M, &edge->from);
-        mulVec3Mat4(edge->to,   1.0f, M, &edge->to);
-    }
+        *pos = vec3wUp(mulVec4Mat4(Vec4fromVec3(*pos, 1.0f), M));
+        if (!transitions.lines_through_NDC.active)
+            pos->y = transitions.lift_up.eased_t;
+    } else
+        mulVec3Mat4(*pos, 1.0f, M, pos);
+}
 
+Edge* transformedEdge(Edge *edge, mat4 M) {
+    transformedPosition(&edge->from, M);
+    transformedPosition(&edge->to, M);
     return edge;
 }
