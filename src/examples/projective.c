@@ -4,7 +4,7 @@
 void onButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff = Vec2i(0, 0);
 
-    if (app->viewport.settings.show_hud) {
+    if (app->viewport.settings.show_hud && current_viz != VIEW_FRUSTUM_SLICE) {
         i32 w = secondary_viewport_frame_buffer.dimensions.width;
         i32 h = secondary_viewport_frame_buffer.dimensions.height;
         i32 x = secondary_viewport.settings.position.x;
@@ -317,9 +317,8 @@ void updateAndRender() {
             fillRect(&text_overlay_frame_buffer, background_color, &rect);
         }
         Pixel *pixel = text_overlay_frame_buffer.pixels;
-        i32 pixel_index = 0;
         for (i32 y = 0; y < viewport->frame_buffer->dimensions.height; y++)
-            for (i32 x = 0; x < viewport->frame_buffer->dimensions.width; x++, pixel++, pixel_index++)
+            for (i32 x = 0; x < viewport->frame_buffer->dimensions.width; x++, pixel++)
                 if (pixel->color.A) setPixel(viewport->frame_buffer, pixel->color, (f32)pixel->color.A * COLOR_COMPONENT_TO_FLOAT, x, y, 0);
 
         label = labels.array;
@@ -339,6 +338,44 @@ void updateAndRender() {
             main_matrix.dim = transitions.view_frustom_slice.active ? 4 : 3;
             setMatrixComponentColor(&main_matrix);
             drawMatrixHUD(viewport->frame_buffer);
+
+//            updateDimensions(&text_overlay_frame_buffer.dimensions,
+//                             viewport->frame_buffer->dimensions.width / 2,
+//                             viewport->frame_buffer->dimensions.height / 2);
+//            drawMatrixHUD(&text_overlay_frame_buffer);
+
+//            Pixel *src_pixel = text_overlay_frame_buffer.pixels;
+//            Pixel *trg_pixels = viewport->frame_buffer->pixels;
+//
+//            i32 pixel_index = 0;
+//            i32 src_width = text_overlay_frame_buffer.dimensions.width;
+//            i32 trg_width = viewport->frame_buffer->dimensions.width;
+//            for (i32 y = 0, trg_y = 0; y < 140; y++, trg_y += 4)
+//                for (i32 x = 0, trg_x = 0; x < src_width; x++, trg_x += 4, src_pixel++, pixel_index++) {
+//                    for (i32 i = 0; i < 2; i++) {
+//                        for (i32 j = 0; j < 2; j++) {
+//                            trg_width
+//                        }
+//                    }
+//                }
+
+//            updateDimensions(&secondary_viewport_frame_buffer.dimensions,
+//                             viewport->frame_buffer->dimensions.width * 2,
+//                             viewport->frame_buffer->dimensions.height * 2);
+//            Pixel *src_pixel = text_overlay_frame_buffer.pixels;
+//            Pixel *trg_pixels = secondary_viewport_frame_buffer.pixels;
+//
+//            i32 pixel_index = 0;
+//            i32 src_width = text_overlay_frame_buffer.dimensions.width;
+//            i32 trg_width = secondary_viewport_frame_buffer.dimensions.width;
+//            for (i32 y = 0, trg_y = 0; y < 140; y++, trg_y += 4)
+//                for (i32 x = 0, trg_x = 0; x < src_width; x++, trg_x += 4, src_pixel++, pixel_index++) {
+//                    for (i32 i = 0; i < 4; i++) {
+//                        for (i32 j = 0; j < 4; j++) {
+//                            trg_width
+//                        }
+//                    }
+//                }
         } else {
             fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
 

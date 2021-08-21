@@ -50,13 +50,13 @@ void updateTransitions(u8 key) {
         if (app->controls.is_pressed.ctrl) {
             if (matrix_count) matrix_count--;
         } else {
-            if (transitions.view_frustom_slice.active) {
-
-            } else {
+//            if (transitions.view_frustom_slice.active) {
+//
+//            } else {
                 matrices[matrix_count].M = main_matrix.M;
                 updateMatrixStrings(&matrices[matrix_count]);
                 matrix_count++;
-            }
+//            }
 
             main_matrix.M = getMat4Identity();
             arrowX.body.to = app->scene.primitives[0].position = Vec3(1, 0, 0);
