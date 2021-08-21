@@ -4,7 +4,7 @@
 void onButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff = Vec2i(0, 0);
 
-    if (show_secondary_viewport) {
+    if (app->viewport.settings.show_hud) {
         i32 w = secondary_viewport_frame_buffer.dimensions.width;
         i32 h = secondary_viewport_frame_buffer.dimensions.height;
         i32 x = secondary_viewport.settings.position.x;
@@ -326,13 +326,27 @@ void updateAndRender() {
         for (u8 i = 0; i < labels.count; i++, label++) drawText(viewport->frame_buffer, label->color, label->text, label->position.x, label->position.y);
     }
 
-    if (show_secondary_viewport) {
-        fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
+    if (app->viewport.settings.show_hud) {
+        if (current_viz == VIEW_FRUSTUM_SLICE) {
+            updateMatrixStrings(&main_matrix);
+            if (matrix_count) {
+                Matrix *matrix = matrices;
+                for (u8 i = 0; i < matrix_count; i++, matrix++) {
+                    matrix->dim = transitions.view_frustom_slice.active ? 4 : 3;
+                    setMatrixComponentColor(matrix);
+                }
+            }
+            main_matrix.dim = transitions.view_frustom_slice.active ? 4 : 3;
+            setMatrixComponentColor(&main_matrix);
+            drawMatrixHUD(viewport->frame_buffer);
+        } else {
+            fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
 
-        drawGrid(&secondary_viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
-        drawBox(&secondary_viewport, Color(main_box_prim->color), main_box, main_box_prim, BOX__ALL_SIDES, 1);
+            drawGrid(&secondary_viewport, Color(main_grid_prim->color), main_grid, main_grid_prim,0);
+            drawBox(&secondary_viewport, Color(main_box_prim->color), main_box, main_box_prim, BOX__ALL_SIDES, 1);
 
-        drawSecondaryViewportToFrameBuffer(viewport->frame_buffer);
+            drawSecondaryViewportToFrameBuffer(viewport->frame_buffer);
+        }
     }
 
     active_viewport->navigation.moved  = false;
@@ -480,7 +494,7 @@ void onKeyChanged(u8 key, bool is_pressed) {
             current_viz = (VIZ)(((u8)(current_viz) + 1) % (u8)VIS_COUNT);
             setupViewportCore(&app->viewport);
         } else if (key == app->controls.key_map.tab)
-            show_secondary_viewport = !show_secondary_viewport;
+            app->viewport.settings.show_hud = !app->viewport.settings.show_hud;
         else if (key == 'R')
             orbit = !orbit;
         else if (key == 'Q')

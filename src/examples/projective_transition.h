@@ -3,7 +3,7 @@
 #include "./projective_base.h"
 #include "./projective_matrix.h"
 
-#define TRANSITION_COUNT 26
+#define TRANSITION_COUNT 28
 
 typedef struct Transition {
     bool active;
@@ -37,7 +37,8 @@ typedef union Transitions {
         drop_warping_ndc,
         show_diagonality,
         show_chosen_trajectory,
-        show_focal_ratio;
+        show_focal_ratio,
+        show_chosen_trajectory_labels;
     };
     Transition states[TRANSITION_COUNT];
 } Transitions;
@@ -145,6 +146,9 @@ void updateTransitions(u8 key) {
     } else if (key == 'F') {
         transitions.show_focal_ratio.active = !transitions.show_focal_ratio.active;
         transitions.show_focal_ratio.t = 0;
+    } else if (key == 'B') {
+        transitions.show_chosen_trajectory_labels.active = true;
+        transitions.show_chosen_trajectory_labels.t = 0;
     }
 }
 
