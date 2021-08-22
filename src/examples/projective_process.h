@@ -13,10 +13,10 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
     static float elapsed = 0;
     elapsed += delta_time;
     arrow1.head.length = arrowX.head.length = arrowZ.head.length = arrowY.head.length = transitions.view_frustom_slice.active ? 0.5f : 0.25f;
-    if (transitions.scale_out.active) {
-        incTransition(&transitions.scale_out, delta_time, true);
-        transitions.scale_out.active = true;
-    }
+
+    transitions.scale_arrows.active = true;
+    incTransition(&transitions.scale_arrows, delta_time, true);
+    if (transitions.scale_arrows.eased_t == 0) transitions.scale_arrows.eased_t = 0.001f;
 
     f32 L = secondary_viewport.camera->focal_length;
     f32 A = secondary_viewport.frame_buffer->dimensions.width_over_height;
@@ -25,18 +25,18 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
 
     rotatePrimitive(main_box_prim, delta_time / -3, 0, 0);
 
-    if (matrix_count) {
+    if (transitions.view_frustom_slice.active && matrix_count) {
         Matrix *matrix = matrices;
 
         initMatrix(matrix);
         matrix->M.X.x = L / A;
         matrix->M.Y.y = L;
-        copyToString(&matrix->components[0][0].string, "L / A", 0);
+        copyToString(&matrix->components[0][0].string, "L/A", 0);
         copyToString(&matrix->components[1][1].string, "L", 0);
-        matrix->component_colors[0][0] = default_focal_length_color;
-        matrix->component_colors[1][1] = default_aspect_ratio_color;
+        matrix->component_colors[0][0] = Color(White);;
+        matrix->component_colors[1][1] = Color(White);;
 
-        if (transitions.view_frustom_slice.active && matrix_count > 1) {
+        if (matrix_count > 1) {
             matrix++;
 
             initMatrix(matrix);
@@ -46,15 +46,15 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             copyToString(&matrix->components[2][3].string, "1", 0);
             copyToString(&matrix->components[3][3].string, "0", 0);
             copyToString(&matrix->components[3][2].string, "-N", 0);
-            matrix->component_colors[3][2] = default_near_color;
+            matrix->component_colors[3][2] = Color(White);;
 
             if (matrix_count == 3) {
                 matrix++;
 
                 initMatrix(matrix);
                 matrix->M.Z.z = F / (F - N);
-                copyToString(&matrix->components[2][2].string, "F/(F - N)", 0);
-                matrix->component_colors[2][2] = default_far_color;
+                copyToString(&matrix->components[2][2].string, "F/(F-N)", 0);
+                matrix->component_colors[2][2] = Color(White);;
             }
         }
     }
@@ -135,10 +135,8 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                 transitions.reveal_normalizing_projective_point.active = true;
                 arrow1.body.from = getVec3Of(0);
                 arrow1.body.to   = location;
-                updateArrow(&arrow1);
-
                 viewport->settings.depth_sort = false;
-                drawArrow(viewport, projective_point_color, &arrow1, 2);
+                if (updateArrow(&arrow1)) drawArrow(viewport, projective_point_color, &arrow1, 2);
                 viewport->settings.depth_sort = true;
             }
 
@@ -200,8 +198,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                     arrow1.body.from = transforming_quad.corners[i];
                     arrow1.body.to   = warping_ndc.corners[i] = lerpVec3(arrow1.body.from, scaleVec3(projective_point_edge.to, f), transitions.corner_trajectory.eased_t);
 
-                    updateArrow(&arrow1);
-                    drawArrow(viewport, projective_point_color, &arrow1, 2);
+                    if (updateArrow(&arrow1)) drawArrow(viewport, projective_point_color, &arrow1, 2);
                 }
 
                 projective_point_edge.to = scaleVec3(projective_point_edge.to, 40);
@@ -255,42 +252,34 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
 
                     arrow1.body.from = edge.from;
                     arrow1.body.to = edge.to;
-                    updateArrow(&arrow1);
-                    drawArrow(viewport, near_color, &arrow1, 2);
+                    if (updateArrow(&arrow1)) drawArrow(viewport, near_color, &arrow1, 2);
 
                     arrow1.body.from = edge.from;
                     arrow1.body.to = getVec3Of(0);
-                    updateArrow(&arrow1);
-                    drawArrow(viewport, near_color, &arrow1, 2);
-
+                    if (updateArrow(&arrow1)) drawArrow(viewport, near_color, &arrow1, 2);
 
                     f = 4 + 2 * sinf(elapsed + 1);
                     arrow1.body.from = getVec3Of(f);
                     arrow1.body.to = arrow1.body.from;
                     arrow1.body.to.x = 0;
-                    updateArrow(&arrow1);
-                    drawArrow(viewport, far_color, &arrow1, 2);
+                    if (updateArrow(&arrow1)) drawArrow(viewport, far_color, &arrow1, 2);
 
                     arrow1.body.from = getVec3Of(f);
                     arrow1.body.to = arrow1.body.from;
                     arrow1.body.to.y = 0;
-                    updateArrow(&arrow1);
-                    drawArrow(viewport, far_color, &arrow1, 2);
+                    if (updateArrow(&arrow1)) drawArrow(viewport, far_color, &arrow1, 2);
 
                     arrow1.body.from = getVec3Of(f);
                     arrow1.body.to = arrow1.body.from;
                     arrow1.body.to.z = 0;
-                    updateArrow(&arrow1);
-                    drawArrow(viewport, far_color, &arrow1, 2);
+                    if (updateArrow(&arrow1)) drawArrow(viewport, far_color, &arrow1, 2);
                 }
             }
 
         }
     }
 
-    if (transitions.show_chosen_trajectory.active) {
-        incTransition(&transitions.show_chosen_trajectory, delta_time, false);
-
+    if (transitions.show_chosen_trajectory.active && incTransition(&transitions.show_chosen_trajectory, delta_time, false)) {
         near_color = default_near_color;
         far_color  = default_far_color;
         if (transitions.show_chosen_trajectory_labels.active) {
@@ -308,7 +297,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         arrow1.body.to = arrow1.body.from;
         arrow1.body.to.y = arrow1.body.to.x;
         edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
-        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_out.eased_t);
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
         if (transitions.show_chosen_trajectory_labels.active) {
             edge.from.x += 0.05f;
             edge.to = edge.from;
@@ -325,8 +314,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
 
             addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
         }
-        updateArrow(&arrow1);
-        drawArrow(viewport, edge_color, &arrow1, 1);
+        if (updateArrow(&arrow1)) drawArrow(viewport, edge_color, &arrow1, 1);
 
 
         arrow1.body.from = Vec3(N, 0, N);;
@@ -335,8 +323,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         arrow1.body.to.z = 0;
         edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
         arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
-        updateArrow(&arrow1);
-        drawArrow(viewport, edge_color, &arrow1, 1);
+        if (updateArrow(&arrow1)) drawArrow(viewport, edge_color, &arrow1, 1);
         if (transitions.show_chosen_trajectory_labels.active) {
             edge.from.x += 0.05f;
             edge.to = edge.from;
@@ -357,7 +344,6 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             arrow1.body.from.y = 0;
             arrow1.body.to = arrow1.body.from;
             arrow1.body.to.z = 0;
-            edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
             edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
             arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
 
@@ -383,9 +369,8 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         arrow1.body.to = arrow1.body.from;
         arrow1.body.to.y = arrow1.body.to.z;
         arrow1.body.to.z = 0;
-        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_out.eased_t);
-        updateArrow(&arrow1);
-        drawArrow(viewport, edge_color, &arrow1, 1);
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_arrows.eased_t);
+        if (updateArrow(&arrow1)) drawArrow(viewport, edge_color, &arrow1, 1);
 
         edge.to = normVec3(NDC_quad.bottom_right);
         edge_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.x);
@@ -394,7 +379,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         arrow1.body.to = arrow1.body.from;
         arrow1.body.to.y = arrow1.body.to.x;
         edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
-        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_out.eased_t);
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_arrows.eased_t);
         if (transitions.show_chosen_trajectory_labels.active) {
             edge.from.x += 0.05f;
             edge.to = edge.from;
@@ -411,15 +396,14 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
 
             addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
         }
-        updateArrow(&arrow1);
-        drawArrow(viewport, edge_color, &arrow1, 1);
+        if (updateArrow(&arrow1)) drawArrow(viewport, edge_color, &arrow1, 1);
 
 
         arrow1.body.from = Vec3(F, 0, F);;
         arrow1.body.to = arrow1.body.from;
         arrow1.body.to.z = 0;
         edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
-        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_out.eased_t);
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
         if (transitions.show_chosen_trajectory_labels.active) {
             edge.from.x += 0.05f;
             edge.to = edge.from;
@@ -505,13 +489,11 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             edge.to   = Vec3(0, 0.5f, L);
 
             arrow1.body = edge;
-            updateArrow(&arrow1);
-            drawArrow(viewport, Color(BrightGrey), &arrow1, 1);
+            if (updateArrow(&arrow1)) drawArrow(viewport, Color(BrightGrey), &arrow1, 1);
 
             arrow1.body.from = edge.to;
             arrow1.body.to = edge.from;
-            updateArrow(&arrow1);
-            drawArrow(viewport, Color(BrightGrey), &arrow1, 1);
+            if (updateArrow(&arrow1)) drawArrow(viewport, Color(BrightGrey), &arrow1, 1);
 
             vec3 offset_dir = Vec3(0, edge.to.z - edge.from.z, edge.from.y - edge.to.y);
 
@@ -666,15 +648,14 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             addLabel(default_aspect_ratio_color, "A", (i32)edge.to.x, (i32)edge.to.y);
         }
 
-        if (transitions.scale_out.active) {
+        if (transitions.scale_out.active && incTransition(&transitions.scale_out, delta_time, true)) {
             edge.from = Vec3(0, 1, L);
             edge.to   = Vec3(0, L, L);
             edge.to   = lerpVec3(edge.from, edge.to, transitions.scale_out.eased_t);
             arrow1.body = edge;
             edge_color = Y_color;
             edge_color.A = (u8)((f32)MAX_COLOR_VALUE * 0.75f);
-            updateArrow(&arrow1);
-            drawArrow(viewport, edge_color, &arrow1, 2);
+            if (updateArrow(&arrow1)) drawArrow(viewport, edge_color, &arrow1, 2);
 
             edge.from = edge.to;
             edge.from.x -= 0.05f;
@@ -695,12 +676,11 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
 
             edge.from = Vec3(A, 0, L);
             edge.to   = Vec3(L, 0, L);
-            edge.to   = lerpVec3(edge.from, edge.to, transitions.scale_out.eased_t);
+            edge.to   = lerpVec3(edge.from, edge.to, transitions.scale_arrows.eased_t);
             arrow1.body = edge;
             edge_color = X_color;
             edge_color.A = (u8)((f32)MAX_COLOR_VALUE * 0.75f);
-            updateArrow(&arrow1);
-            drawArrow(viewport, edge_color, &arrow1, 2);
+            if (updateArrow(&arrow1)) drawArrow(viewport, edge_color, &arrow1, 2);
 
             edge.from = edge.to;
             edge.from.x += 0.05f;
@@ -768,7 +748,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
     if (transitions.grid_XW.active) {
         edge_color = Color(DarkGrey);
         if (incTransition(&transitions.grid_XW, delta_time, false))
-            edge_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.grid_XW.eased_t);
+            edge_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.grid_XW.eased_t) / 2;
 
         vec3 P3;
         vec4 P4;
@@ -777,18 +757,46 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                 u8 segment_count = axis ? main_grid->v_segments : main_grid->u_segments;
                 for (u8 segment = 0; segment < segment_count; segment++) {
                     P3 = main_grid->vertices.buffer[axis][side][segment];
-                    P3.y = P3.x;
-                    P3.x = 0;
                     if (transitions.view_frustom_slice.active) {
                         P4.x = 0;
                         P4.y = 0;
                         P4.z = P3.z;
-                        P4.w = P3.y;
+                        P4.w = P3.x;
                         P4 = mulVec4Mat4(P4, M);
                         P3.x = 0;
-                        P4.y = P4.w;
+                        P3.y = P4.w;
                         P3.z = P4.z;
                     } else {
+                        P3.y = P3.x;
+                        P3.x = 0;
+                        mulVec3Mat4(P3, 1.0f, M, &P3);
+                    }
+                    transformed_grid.vertices.buffer[axis][side][segment] = P3;
+                }
+            }
+        }
+        setGridEdgesFromVertices(transformed_grid.edges.uv.u, main_grid->u_segments, transformed_grid.vertices.uv.u.from, transformed_grid.vertices.uv.u.to);
+        setGridEdgesFromVertices(transformed_grid.edges.uv.v, main_grid->v_segments, transformed_grid.vertices.uv.v.from, transformed_grid.vertices.uv.v.to);
+
+        drawGrid(viewport, edge_color, &transformed_grid, main_grid_prim, 0);
+
+        for (u8 side = 0; side < 2; side++) {
+            for (u8 axis = 0; axis < 2; axis++) {
+                u8 segment_count = axis ? main_grid->v_segments : main_grid->u_segments;
+                for (u8 segment = 0; segment < segment_count; segment++) {
+                    P3 = main_grid->vertices.buffer[axis][side][segment];
+                    if (transitions.view_frustom_slice.active) {
+                        P4.z = 0;
+                        P4.y = 0;
+                        P4.x = P3.x;
+                        P4.w = P3.z;
+                        P4 = mulVec4Mat4(P4, M);
+                        P3.x = P4.x;
+                        P3.y = P4.w;
+                        P3.z = 0;
+                    } else {
+                        P3.y = P3.z;
+                        P3.z = 0;
                         mulVec3Mat4(P3, 1.0f, M, &P3);
                     }
                     transformed_grid.vertices.buffer[axis][side][segment] = P3;
@@ -848,30 +856,6 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                 edge.to = Vec3(0, L, L);
                 drawLocalEdge(edge, default_focal_length_color, 0);
 
-//                edge.from = Vec3(0.05f, L*0.75f, L);
-//                edge.to   = Vec3(0.35f, L*0.75f + 0.25f, L);
-//                drawLocalEdge(edge, Color(BrightGrey), 1);
-
-//                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
-//
-//                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-//                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-//                projectEdge(&edge, viewport);
-//                addLabel(edge_color, "L", (i32)edge.to.x, (i32)edge.to.y);
-
-
-//                edge.from = Vec3(L*0.85f, 0.05f, L);
-//                edge.to   = Vec3(L*0.85f + 0.15f, 0.35f, L);
-//                drawLocalEdge(edge, Color(BrightGrey), 1);
-
-//                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
-//
-//                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-//                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-//                projectEdge(&edge, viewport);
-//                addLabel(edge_color, "L", (i32)edge.to.x, (i32)edge.to.y);
-
-
                 edge.from = Vec3(0, 0, L);
                 edge.to = Vec3(L, 0, L);
                 drawLocalEdge(edge, default_focal_length_color, 0);
@@ -914,7 +898,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         edge.from.x += 0.1f;
         edge.to = edge.from;
         edge.to.x += 0.5f;
-        edge.to.y += 0.25f;
+        edge.to.y += 1.25f;
         drawLocalEdge(edge, Color(BrightGrey), 0);
         edge.to = lerpVec3(edge.from, edge.to, 1.25f);
         edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
@@ -928,8 +912,8 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         edge.from = lerpVec3(edge.from, edge.to, 0.5f);
         edge.from.x += 0.1f;
         edge.to = edge.from;
-        edge.to.x += 0.5f;
-        edge.to.y += 0.25f;
+        edge.to.x += 1.5f;
+        edge.to.y += 1.25f;
         drawLocalEdge(edge, Color(BrightGrey), 0);
         edge.to = lerpVec3(edge.from, edge.to, 1.25f);
         edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
@@ -941,10 +925,10 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         edge.to = Vec3(-0.8f, F, F);
         drawLocalEdge(edge, far_color, 1);
         edge.from = lerpVec3(edge.from, edge.to, 0.5f);
-        edge.from.x -= 0.1f;
+        edge.from.x -= 0.2f;
         edge.to = edge.from;
-        edge.to.x -= 0.5f;
-        edge.to.y += 0.25f;
+        edge.to.x -= 1.5f;
+        edge.to.y += 1.25f;
         drawLocalEdge(edge, Color(BrightGrey), 0);
         edge.to = lerpVec3(edge.from, edge.to, 1.25f);
         edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
@@ -953,29 +937,30 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
 
         arrow1.body.from = Vec3(0, F, F-N);
-        arrow1.body.to = lerpVec3(arrow1.body.from, Vec3(0, F, F), transitions.scale_out.eased_t);
-        updateArrow(&arrow1);
-        drawArrow(viewport, Z_color, &arrow1, 1);
+        arrow1.body.to = lerpVec3(arrow1.body.from, Vec3(0, F, F), transitions.scale_arrows.eased_t);
+        if (updateArrow(&arrow1)) drawArrow(viewport, Z_color, &arrow1, 1);
         edge.from = lerpVec3(arrow1.body.from, Vec3(0, F, F), 0.5f);
-        edge.from.x -= 0.1f;
+        edge.from.x += 0.2f;
         edge.to = edge.from;
-        edge.to.x -= 0.5f;
-        edge.to.y += 0.25f;
+        edge.to.x += 1.5f;
+        edge.to.y += 1.25f;
         drawLocalEdge(edge, Color(BrightGrey), 0);
         edge.to = lerpVec3(edge.from, edge.to, 1.25f);
         edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
         edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
         projectEdge(&edge, viewport);
         addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
+        addLabel(Color(White), " / (", (i32)edge.to.x + FONT_WIDTH, (i32)edge.to.y);
+        addLabel(far_color, "F", (i32)edge.to.x + FONT_WIDTH * 5, (i32)edge.to.y);
+        addLabel(Color(White), " - ", (i32)edge.to.x + FONT_WIDTH * 6, (i32)edge.to.y);
+        addLabel(near_color, "N", (i32)edge.to.x + FONT_WIDTH * 9, (i32)edge.to.y);
+        addLabel(Color(White), ")", (i32)edge.to.x + FONT_WIDTH * 10, (i32)edge.to.y);
     }
 
     arrowX.body.from = arrowY.body.from = arrowZ.body.from = getVec3Of(0);
     arrowX.body.to = arrowX_box_prim->position;
     arrowY.body.to = arrowY_box_prim->position;
     arrowZ.body.to = arrowZ_box_prim->position;
-    updateArrow(&arrowX);
-    updateArrow(&arrowY);
-    updateArrow(&arrowZ);
 
     if (transitions.view_frustom_slice.active) {
         arrowX.label = "X";
@@ -992,9 +977,8 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         main_matrix.M.Y = Vec4fromVec3(arrowY_box_prim->position, main_matrix.M.Y.w);
         main_matrix.M.Z = Vec4fromVec3(arrowZ_box_prim->position, main_matrix.M.Z.w);
     }
-
-    drawArrow(viewport, X_color, &arrowX, 2);
-    drawArrow(viewport, transitions.view_frustom_slice.active ? W_color : Y_color, &arrowY, 2);
-    drawArrow(viewport, Z_color, &arrowZ, 2);
+    if (updateArrow(&arrowX)) drawArrow(viewport, X_color, &arrowX, 2);
+    if (updateArrow(&arrowY)) drawArrow(viewport, transitions.view_frustom_slice.active ? W_color : Y_color, &arrowY, 2);
+    if (updateArrow(&arrowZ)) drawArrow(viewport, Z_color, &arrowZ, 2);
     viewport->settings.depth_sort = true;
 }

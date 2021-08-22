@@ -2,6 +2,10 @@
 
 #include "../core/base.h"
 
+INLINE bool isEqualVec3(vec3 a, vec3 b) {
+    return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
 INLINE vec3 getVec3Of(f32 value) {
     vec3 out;
 

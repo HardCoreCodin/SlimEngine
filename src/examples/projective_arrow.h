@@ -15,13 +15,15 @@ typedef struct Arrow {
 
 Arrow arrow1, arrowX, arrowY, arrowZ;
 
-void updateArrow(Arrow *arrow) {
+bool updateArrow(Arrow *arrow) {
+    if (isEqualVec3(arrow->body.from, arrow->body.to)) return false;
     vec3 direction = scaleVec3(normVec3(subVec3(arrow->body.from, arrow->body.to)), arrow->head.length);
     arrow->head.left.to = arrow->head.right.to = arrow->body.to;
     arrow->head.left.from = arrow->head.right.from = addVec3(arrow->body.to, direction);
     direction = crossVec3(direction, crossVec3(direction, direction.x || direction.y ? Vec3(0, 0, 1) : Vec3(1, 0, 0)));
     arrow->head.left.from  = addVec3(arrow->head.left.from, direction);
     arrow->head.right.from = subVec3(arrow->head.right.from, direction);
+    return true;
 }
 
 void drawArrow(Viewport *viewport, RGBA color, Arrow *arrow, u8 line_width) {

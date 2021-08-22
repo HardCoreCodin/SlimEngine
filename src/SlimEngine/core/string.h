@@ -123,4 +123,5 @@ void printFloatIntoString(f32 number, NumberString *number_string, u8 float_digi
     }
     tmp[number_string->string.length - float_digits_count] = '.';
     copyToString(&number_string->string, tmp, 0);
+    if (is_negative) number_string->string.length++;
 }

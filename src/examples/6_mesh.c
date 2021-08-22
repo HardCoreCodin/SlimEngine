@@ -1,12 +1,12 @@
-//#include "../SlimEngine/app.h"
-//#include "../SlimEngine/core/time.h"
-//#include "../SlimEngine/scene/grid.h"
-//#include "../SlimEngine/scene/mesh.h"
-//#include "../SlimEngine/viewport/hud.h"
-//#include "../SlimEngine/viewport/navigation.h"
-//#include "../SlimEngine/viewport/manipulation.h"
+#include "../SlimEngine/app.h"
+#include "../SlimEngine/core/time.h"
+#include "../SlimEngine/scene/grid.h"
+#include "../SlimEngine/scene/mesh.h"
+#include "../SlimEngine/viewport/hud.h"
+#include "../SlimEngine/viewport/navigation.h"
+#include "../SlimEngine/viewport/manipulation.h"
 // Or using the single-header file:
- #include "../SlimEngine.h"
+// #include "../SlimEngine.h"
 
 void setCountersInHUD(HUD *hud, Timer *timer) {
     printNumberIntoString(timer->average_frames_per_second,      &hud->lines[0].value);

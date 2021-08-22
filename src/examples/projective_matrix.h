@@ -14,12 +14,6 @@ enum ColorID MATRIX_AXIS_COLORS[4] = {
         BrightBlue,
         BrightMagenta
 };
-char* MATRIX_AXIS_LABELS[4] = {
-        "X",
-        "Y",
-        "Z",
-        "W"
-};
 
 #define MAX_MATRIX_COUNT 8
 
@@ -30,7 +24,7 @@ typedef struct Matrix {
     u8 dim;
 } Matrix;
 
-Matrix main_matrix, matrices[MAX_MATRIX_COUNT];
+Matrix main_matrix, final_matrix, matrices[MAX_MATRIX_COUNT];
 u8 matrix_count = 0;
 
 
@@ -41,7 +35,7 @@ void initMatrix(Matrix *matrix) {
         for (u8 row = 0; row < 4; row++) {
             initNumberString(&matrix->components[row][col]);
             matrix->component_colors[row][col] = Color(MATRIX_AXIS_COLORS[row]);
-            copyToString(&matrix->components[row][col].string, MATRIX_AXIS_LABELS[col], 0);
+            copyToString(&matrix->components[row][col].string, col == row ? "1" : "0", 0);
         }
 }
 
@@ -87,6 +81,7 @@ u32 getMatrixMaxRowLength(Matrix *matrix) {
     return max_row_length;
 }
 u32 getMatrixWidth(Matrix *matrix) {
+    if (matrix == &final_matrix) return 320;
     return MATRIX_PADDING + ((getMatrixMaxRowLength(matrix) + matrix->dim - 1) * FONT_WIDTH) + MATRIX_PADDING;
 }
 u32 getMatrixHeight(Matrix *matrix) {
@@ -144,7 +139,7 @@ void drawMatrixHUD(PixelGrid *canvas) {
 
     rect.min.x = rect.min.y = 0;
     rect.max.x = canvas->dimensions.width;
-    rect.max.y = MATRIX_HUD_START_Y + LINE_HEIGHT * 2 + (i32)getMatrixHeight(&main_matrix) + MATRIX_PADDING;
+    rect.max.y = MATRIX_HUD_START_Y + LINE_HEIGHT * 2 + (i32)getMatrixHeight(show_final_matrix ? &final_matrix : &main_matrix) + MATRIX_PADDING;
     RGBA background_color = Color(Black);
     fillTransparentRect(canvas, background_color, 0.85f, &rect);
 
@@ -168,10 +163,10 @@ void drawMatrixHUD(PixelGrid *canvas) {
     printFloatIntoString(secondary_viewport_frame_buffer.dimensions.width_over_height, &number, 2);
     drawText(canvas, aspect_ratio_color, number.string.char_ptr, MATRIX_HUD_START_X + 32 * FONT_WIDTH + 19 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT);
 
-    rect.min.x = canvas->dimensions.width - (i32)getMatrixWidth(&main_matrix) - MATRIX_PADDING;
-    drawText(canvas, Color(White), "Transformation:", rect.min.x, MATRIX_HUD_START_Y);
+    rect.min.x = canvas->dimensions.width - (i32)getMatrixWidth(show_final_matrix ? &final_matrix : &main_matrix) - MATRIX_PADDING;
+    drawText(canvas, Color(White), show_final_matrix ? "Final Matrix" : "Transformation:", rect.min.x, MATRIX_HUD_START_Y);
 
-    drawMatrix(canvas, background_color, &main_matrix, rect.min.x, MATRIX_HUD_START_Y + LINE_HEIGHT);
+    drawMatrix(canvas, background_color, show_final_matrix ? &final_matrix : &main_matrix, rect.min.x, MATRIX_HUD_START_Y + LINE_HEIGHT);
 
     drawText(canvas, Color(White), "P' = P * M * ", MATRIX_HUD_START_X, MATRIX_HUD_START_Y + LINE_HEIGHT * 3);
 

@@ -422,6 +422,17 @@ void setupViewportCore(Viewport *viewport) {
         arrowX_box_prim->scale = Vec3(0.2f, 0.2f, 0.2f);
         arrowY_box_prim->scale = Vec3(0.2f, 0.2f, 0.2f);
         arrowZ_box_prim->scale = Vec3(0.2f, 0.2f, 0.2f);
+
+        copyToString(&final_matrix.components[0][0].string, "L/A", 0);
+        copyToString(&final_matrix.components[1][1].string, "L", 0);
+        copyToString(&final_matrix.components[2][3].string, "1", 0);
+        copyToString(&final_matrix.components[3][3].string, "0", 0);
+        copyToString(&final_matrix.components[3][2].string, "-NF/(F-N)", 0);
+        copyToString(&final_matrix.components[2][2].string, "F/(F-N)", 0);
+        final_matrix.component_colors[0][0] = Color(White);
+        final_matrix.component_colors[1][1] = Color(White);
+        final_matrix.component_colors[2][2] = Color(White);
+        final_matrix.component_colors[3][2] = Color(White);
     } else {
         rotatePrimitive(main_grid_prim, 0.5f, 0, 0);
         camera_xform->position = Vec3(0, 9, -10);
@@ -528,11 +539,12 @@ void setupViewport(Viewport *viewport) {
     secondary_viewport.settings.near_clipping_plane_distance = 4;
 
     initMatrix(&main_matrix);
+    initMatrix(&final_matrix);
     for (u8 i = 0; i < MAX_MATRIX_COUNT; i++)
         initMatrix(matrices + i);
 
     default_near_color = Color(BrightRed);
-    default_far_color = Color(BrightBlue);
+    default_far_color = Color(BrightGreen);
     default_aspect_ratio_color = Color(BrightMagenta);
     default_focal_length_color = Color(BrightCyan);
 

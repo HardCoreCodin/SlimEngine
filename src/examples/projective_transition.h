@@ -19,7 +19,7 @@ typedef union Transitions {
         view_frustom_slice,
         lift_up,
         translate_back,
-        scale_back,
+        scale_arrows,
         shear_up,
         reveal_ref_plane,
         reveal_projective_point,
@@ -117,8 +117,14 @@ void updateTransitions(u8 key) {
         transitions.drop_warping_ndc.active = true;
         transitions.drop_warping_ndc.t = 0;
     } else if (key == 'Z') {
-        transitions.focal_length_and_plane.active = !transitions.focal_length_and_plane.active;
-        transitions.focal_length_and_plane.t = 0;
+        if (app->controls.is_pressed.ctrl) {
+            arrowX.body.to = arrowX_box_prim->position = Vec3(1, 0, 0);
+            arrowY.body.to = arrowY_box_prim->position = Vec3(0, 1, 0);
+            arrowZ.body.to = arrowZ_box_prim->position = Vec3(0, 0, 1);
+        } else {
+            transitions.focal_length_and_plane.active = !transitions.focal_length_and_plane.active;
+            transitions.focal_length_and_plane.t = 0;
+        }
     } else if (key == 'A') {
         transitions.aspect_ratio.active = !transitions.aspect_ratio.active;
         transitions.aspect_ratio.t = 0;
@@ -149,6 +155,8 @@ void updateTransitions(u8 key) {
     } else if (key == 'H') {
         transitions.show_final_scale.active = !transitions.show_final_scale.active;
         transitions.show_final_scale.t = 0;
+    } else if (key == 'M') {
+        show_final_matrix = !show_final_matrix;
     }
 }
 

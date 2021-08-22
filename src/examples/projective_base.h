@@ -57,6 +57,7 @@ RGBA edge_color;
 RGBA camera_color;
 
 bool orbit = false;
+bool show_final_matrix = false;
 bool show_pre_projection = false;
 bool draw_locator_grids = false;
 bool move_projective_point = true;
