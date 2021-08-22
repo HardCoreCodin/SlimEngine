@@ -39,7 +39,8 @@ typedef union Transitions {
         show_chosen_trajectory,
         show_focal_ratio,
         show_chosen_trajectory_labels,
-        show_final_scale;
+        show_final_scale,
+        show_NDC_corner_labels;
     };
     Transition states[TRANSITION_COUNT];
 } Transitions;
@@ -157,6 +158,9 @@ void updateTransitions(u8 key) {
         transitions.show_final_scale.t = 0;
     } else if (key == 'M') {
         show_final_matrix = !show_final_matrix;
+    } if (key == 'L') {
+        transitions.show_NDC_corner_labels.active = !transitions.show_NDC_corner_labels.active;
+        transitions.show_NDC_corner_labels.t = 0;
     }
 }
 

@@ -33,8 +33,8 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         matrix->M.Y.y = L;
         copyToString(&matrix->components[0][0].string, "L/A", 0);
         copyToString(&matrix->components[1][1].string, "L", 0);
-        matrix->component_colors[0][0] = Color(White);;
-        matrix->component_colors[1][1] = Color(White);;
+        matrix->component_colors[0][0] = Color(White);
+        matrix->component_colors[1][1] = Color(White);
 
         if (matrix_count > 1) {
             matrix++;
@@ -82,6 +82,32 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
     projective_point_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)projective_point_color.G);
 
     vec3 corner = Vec3(secondary_viewport.frame_buffer->dimensions.width_over_height, 1, L);
+
+    if (transitions.show_NDC_corner_labels.active) {
+        for (u8 i = 0; i < BOX__VERTEX_COUNT; i++) {
+            edge.from = scaleVec3(NDC_box.vertices.buffer[i], 1.15f);
+            edge.to   = scaleVec3(edge.from, 1.15f);
+            drawLocalEdge(edge, Color(Grey), 1);
+
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
+            char *str;
+            switch (i) {
+                case 0: str = "(-1, 1, 1)"; break;
+                case 1: str = "(1, 1, 1)"; break;
+                case 2: str = "(-1,-1, 1)"; break;
+                case 3: str = "(1,-1, 1)"; break;
+                case 4: str = "(-1, 1, 0)"; break;
+                case 5: str = "(1, 1, 0)"; break;
+                case 6: str = "(-1,-1, 0)"; break;
+                case 7: str = "(1,-1, 0)"; break;
+            }
+            addLabel(Color(White), str, (i32)edge.to.x - ((i%2) ? 0 : (FONT_WIDTH*10)), (i32)edge.to.y);
+        }
+    }
 
     RGBA up_color = Y_color;
     if (transitions.view_frustom_slice.active) {
