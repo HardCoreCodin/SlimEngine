@@ -377,3 +377,12 @@ void drawLine3D(PixelGrid *canvas, RGBA color, vec3 from, vec3 to, u8 line_width
         }
     }
 }
+
+void drawTransparentHLine2D(PixelGrid *canvas, RGBA color, f32 opacity, i32 from, i32 to, i32 at) {
+    if (!inRange(at, canvas->dimensions.height, 0)) return;
+
+    i32 first, last;
+    subRange(from, to, canvas->dimensions.width, 0, &first, &last);
+    for (i32 i = first; i <= last; i++)
+        setPixel(canvas, color, opacity, i, at, 0);
+}

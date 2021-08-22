@@ -301,7 +301,7 @@ void updateAndRender() {
 
         text_overlay_frame_buffer.dimensions = viewport->frame_buffer->dimensions;
         fillPixelGrid(&text_overlay_frame_buffer, background_color);
-        background_color = Color(DarkGrey);
+        background_color = Color(Black);
         background_color.A = (u8)((f32)MAX_COLOR_VALUE * 0.85f);
 
         Label *label = labels.array;
@@ -338,44 +338,6 @@ void updateAndRender() {
             main_matrix.dim = transitions.view_frustom_slice.active ? 4 : 3;
             setMatrixComponentColor(&main_matrix);
             drawMatrixHUD(viewport->frame_buffer);
-
-//            updateDimensions(&text_overlay_frame_buffer.dimensions,
-//                             viewport->frame_buffer->dimensions.width / 2,
-//                             viewport->frame_buffer->dimensions.height / 2);
-//            drawMatrixHUD(&text_overlay_frame_buffer);
-
-//            Pixel *src_pixel = text_overlay_frame_buffer.pixels;
-//            Pixel *trg_pixels = viewport->frame_buffer->pixels;
-//
-//            i32 pixel_index = 0;
-//            i32 src_width = text_overlay_frame_buffer.dimensions.width;
-//            i32 trg_width = viewport->frame_buffer->dimensions.width;
-//            for (i32 y = 0, trg_y = 0; y < 140; y++, trg_y += 4)
-//                for (i32 x = 0, trg_x = 0; x < src_width; x++, trg_x += 4, src_pixel++, pixel_index++) {
-//                    for (i32 i = 0; i < 2; i++) {
-//                        for (i32 j = 0; j < 2; j++) {
-//                            trg_width
-//                        }
-//                    }
-//                }
-
-//            updateDimensions(&secondary_viewport_frame_buffer.dimensions,
-//                             viewport->frame_buffer->dimensions.width * 2,
-//                             viewport->frame_buffer->dimensions.height * 2);
-//            Pixel *src_pixel = text_overlay_frame_buffer.pixels;
-//            Pixel *trg_pixels = secondary_viewport_frame_buffer.pixels;
-//
-//            i32 pixel_index = 0;
-//            i32 src_width = text_overlay_frame_buffer.dimensions.width;
-//            i32 trg_width = secondary_viewport_frame_buffer.dimensions.width;
-//            for (i32 y = 0, trg_y = 0; y < 140; y++, trg_y += 4)
-//                for (i32 x = 0, trg_x = 0; x < src_width; x++, trg_x += 4, src_pixel++, pixel_index++) {
-//                    for (i32 i = 0; i < 4; i++) {
-//                        for (i32 j = 0; j < 4; j++) {
-//                            trg_width
-//                        }
-//                    }
-//                }
         } else {
             fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
 
@@ -551,7 +513,6 @@ void setupViewport(Viewport *viewport) {
     viewport->settings.antialias = viewport->settings.depth_sort = true;
     initPixelGrid(&secondary_viewport_frame_buffer, allocateAppMemory(RENDER_SIZE), MAX_WIDTH, MAX_HEIGHT);
     initPixelGrid(&text_overlay_frame_buffer, allocateAppMemory(RENDER_SIZE), MAX_WIDTH, MAX_HEIGHT);
-    initPixelGrid(&matrix_image, allocateAppMemory(MATRIX_MAX_SIZE * PIXEL_SIZE), MATRIX_MAX_WIDTH, MATRIX_MAX_HEIGHT);
     initViewport(&secondary_viewport,
                  &viewport->settings,
                  &viewport->navigation.settings,
@@ -586,5 +547,5 @@ void initApp(Defaults *defaults) {
     defaults->settings.scene.boxes      = 1;
     defaults->settings.scene.primitives = 10;
     defaults->settings.scene.cameras    = 2;
-    defaults->additional_memory_size = 2 * RENDER_SIZE + (MATRIX_MAX_SIZE * PIXEL_SIZE);
+    defaults->additional_memory_size = 2 * RENDER_SIZE;
 }
