@@ -52,6 +52,7 @@ void updateTransitions(u8 key) {
         if (app->controls.is_pressed.ctrl) {
             if (matrix_count) matrix_count--;
         } else {
+            matrices[matrix_count].is_custom = app->controls.is_pressed.shift;
             matrices[matrix_count].M = main_matrix.M;
             updateMatrixStrings(&matrices[matrix_count]);
             matrix_count++;
@@ -161,6 +162,12 @@ void updateTransitions(u8 key) {
     } if (key == 'L') {
         transitions.show_NDC_corner_labels.active = !transitions.show_NDC_corner_labels.active;
         transitions.show_NDC_corner_labels.t = 0;
+    } if (key == 'O') {
+        secondary_viewport.settings.use_cube_NDC = !secondary_viewport.settings.use_cube_NDC;
+        setPreProjectionMatrix(&secondary_viewport);
+        initBox(&NDC_box);
+        if (!secondary_viewport.settings.use_cube_NDC) for (u8 i = 4; i < 8; i++) NDC_box.vertices.buffer[i].z = 0;
+        setBoxEdgesFromVertices(&NDC_box.edges, &NDC_box.vertices);
     }
 }
 

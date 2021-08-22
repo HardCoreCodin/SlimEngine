@@ -340,7 +340,7 @@ void updateAndRender() {
             }
             main_matrix.dim = transitions.view_frustom_slice.active ? 4 : 3;
             setMatrixComponentColor(&main_matrix);
-            drawMatrixHUD(viewport->frame_buffer);
+            drawMatrixHUD(viewport->frame_buffer, transitions.focal_length_and_plane.active, transitions.aspect_ratio.active);
         } else {
             fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
 
@@ -471,7 +471,7 @@ void setupViewportCore(Viewport *viewport) {
     scene->selection->primitive = scene->primitives + 1;
 
     initBox(&NDC_box);
-    for (u8 i = 4; i < 8; i++) NDC_box.vertices.buffer[i].z = 0;
+    if (!secondary_viewport.settings.use_cube_NDC) for (u8 i = 4; i < 8; i++) NDC_box.vertices.buffer[i].z = 0;
     setBoxEdgesFromVertices(&NDC_box.edges, &NDC_box.vertices);
 
     secondary_camera_prim->position = secondary_viewport.camera->transform.position;

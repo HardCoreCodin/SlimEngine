@@ -234,6 +234,7 @@ void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->show_hud = false;
     settings->antialias = false;
     settings->depth_sort = false;
+    settings->use_cube_NDC = false;
     settings->position.x = 0;
     settings->position.y = 0;
 }
@@ -248,13 +249,12 @@ void setPreProjectionMatrix(Viewport *viewport) {
     viewport->pre_projection_matrix.Z.x = viewport->pre_projection_matrix.Z.y = 0;
     viewport->pre_projection_matrix.X.x = viewport->camera->focal_length * viewport->frame_buffer->dimensions.height_over_width;
     viewport->pre_projection_matrix.Y.y = viewport->camera->focal_length;
-    viewport->pre_projection_matrix.Z.z = f / (f - n);
-    viewport->pre_projection_matrix.W.z = -n * viewport->pre_projection_matrix.Z.z;
+    viewport->pre_projection_matrix.Z.z = viewport->pre_projection_matrix.W.z = 1.0f / (f - n);
+    viewport->pre_projection_matrix.Z.z *= viewport->settings.use_cube_NDC ? (f + n) : f;
+    viewport->pre_projection_matrix.W.z *= viewport->settings.use_cube_NDC ? (-2 * f * n) : (-n * f);
     viewport->pre_projection_matrix.Z.w = 1.0f;
 
     viewport->pre_projection_matrix_inverted = invMat4(viewport->pre_projection_matrix);
-    //    this.z_axis.z      =     (f + n) * d;
-    //    this.translation.z = -2 * f * n  * d;
 }
 
 void initViewport(Viewport *viewport,

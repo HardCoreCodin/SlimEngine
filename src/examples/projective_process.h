@@ -25,36 +25,63 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
 
     rotatePrimitive(main_box_prim, delta_time / -3, 0, 0);
 
-    if (transitions.view_frustom_slice.active && matrix_count) {
+    if (matrix_count) {
         Matrix *matrix = matrices;
-
-        initMatrix(matrix);
-        matrix->M.X.x = L / A;
-        matrix->M.Y.y = L;
-        copyToString(&matrix->components[0][0].string, "L/A", 0);
-        copyToString(&matrix->components[1][1].string, "L", 0);
-        matrix->component_colors[0][0] = Color(White);
-        matrix->component_colors[1][1] = Color(White);
-
-        if (matrix_count > 1) {
-            matrix++;
-
+        if (!matrix->is_custom) {
             initMatrix(matrix);
-            matrix->M.Z.w = 1;
-            matrix->M.W.w = 0;
-            matrix->M.W.z = -N;
-            copyToString(&matrix->components[2][3].string, "1", 0);
-            copyToString(&matrix->components[3][3].string, "0", 0);
-            copyToString(&matrix->components[3][2].string, "-N", 0);
-            matrix->component_colors[3][2] = Color(White);;
+            matrix->M.X.x = L / A;
+            matrix->M.Y.y = L;
+            copyToString(&matrix->components[0][0].string, "L/A", 0);
+            copyToString(&matrix->components[1][1].string, "L", 0);
+            matrix->component_colors[0][0] = Color(White);
+            matrix->component_colors[1][1] = Color(White);
 
-            if (matrix_count == 3) {
+            if (matrix_count > 1) {
                 matrix++;
 
-                initMatrix(matrix);
-                matrix->M.Z.z = F / (F - N);
-                copyToString(&matrix->components[2][2].string, "F/(F-N)", 0);
-                matrix->component_colors[2][2] = Color(White);;
+                if (!matrix->is_custom) {
+                    initMatrix(matrix);
+
+                    matrix->M.Z.w = 1;
+                    matrix->M.W.w = 0;
+                    matrix->M.W.z = -N;
+                    copyToString(&matrix->components[2][3].string, "1", 0);
+                    copyToString(&matrix->components[3][3].string, "0", 0);
+                    copyToString(&matrix->components[3][2].string, "-N", 0);
+                    matrix->component_colors[2][3] = Color(White);
+                    matrix->component_colors[3][3] = Color(White);
+                    matrix->component_colors[3][2] = Color(White);
+
+                    if (matrix_count >= 3) {
+                        matrix++;
+
+                        if (!matrix->is_custom) {
+                            initMatrix(matrix);
+
+                            if (secondary_viewport.settings.use_cube_NDC) {
+                                matrix->M.Z.z = 2.0f*F / (F - N);
+                                copyToString(&matrix->components[2][2].string, "2F/(F-N)", 0);
+                                matrix->component_colors[2][2] = Color(White);
+
+                                if (matrix_count >= 4) {
+                                    matrix++;
+
+                                    if (!matrix->is_custom) {
+                                        initMatrix(matrix);
+
+                                        matrix->M.W.z = -1;
+                                        copyToString(&matrix->components[3][2].string, "-1", 0);
+                                        matrix->component_colors[3][2] = Color(White);
+                                    }
+                                }
+                            } else {
+                                matrix->M.Z.z = F/(F-N);
+                                copyToString(&matrix->components[2][2].string, "F/(F-N)", 0);
+                                matrix->component_colors[2][2] = Color(White);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -100,10 +127,10 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                 case 1: str = "(1, 1, 1)"; break;
                 case 2: str = "(-1,-1, 1)"; break;
                 case 3: str = "(1,-1, 1)"; break;
-                case 4: str = "(-1, 1, 0)"; break;
-                case 5: str = "(1, 1, 0)"; break;
-                case 6: str = "(-1,-1, 0)"; break;
-                case 7: str = "(1,-1, 0)"; break;
+                case 4: str = secondary_viewport.settings.use_cube_NDC ? "(-1, 1,-1)" : "(-1, 1, 0)"; break;
+                case 5: str = secondary_viewport.settings.use_cube_NDC ? "(1, 1,-1)" : "(1, 1, 0)"; break;
+                case 6: str = secondary_viewport.settings.use_cube_NDC ? "(-1,-1,-1)" : "(-1,-1, 0)"; break;
+                case 7: str = secondary_viewport.settings.use_cube_NDC ? "(1,-1,-1)" : "(1,-1, 0)"; break;
             }
             addLabel(Color(White), str, (i32)edge.to.x - ((i%2) ? 0 : (FONT_WIDTH*10)), (i32)edge.to.y);
         }

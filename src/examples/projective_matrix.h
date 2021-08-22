@@ -22,6 +22,7 @@ typedef struct Matrix {
     NumberString components[4][4];
     RGBA component_colors[4][4];
     u8 dim;
+    bool is_custom;
 } Matrix;
 
 Matrix main_matrix, final_matrix, matrices[MAX_MATRIX_COUNT];
@@ -30,6 +31,7 @@ u8 matrix_count = 0;
 
 void initMatrix(Matrix *matrix) {
     matrix->dim = 4;
+    matrix->is_custom = false;
     matrix->M = getMat4Identity();
     for (u8 col = 0; col < 4; col++)
         for (u8 row = 0; row < 4; row++) {
@@ -134,7 +136,7 @@ void drawMatrix(PixelGrid *canvas, RGBA background_color, Matrix *matrix, i32 x,
     }
 }
 
-void drawMatrixHUD(PixelGrid *canvas) {
+void drawMatrixHUD(PixelGrid *canvas, bool show_focal_length, bool show_aspect_ratio) {
     Rect rect;
 
     rect.min.x = rect.min.y = 0;
@@ -145,8 +147,6 @@ void drawMatrixHUD(PixelGrid *canvas) {
 
     drawText(canvas, default_near_color, "Near Clipping Plane: N = ", MATRIX_HUD_START_X, MATRIX_HUD_START_Y);
     drawText(canvas, default_far_color, "Far  Clipping Plane: F = ", MATRIX_HUD_START_X, MATRIX_HUD_START_Y + LINE_HEIGHT);
-    if (focal_length_color.A) drawText(canvas, focal_length_color, "Focal Length : L = ", MATRIX_HUD_START_X + 32 * FONT_WIDTH, MATRIX_HUD_START_Y);
-    if (aspect_ratio_color.A) drawText(canvas, aspect_ratio_color, "Aspect Ratio : A = ", MATRIX_HUD_START_X + 32 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT);
 
     NumberString number;
     initNumberString(&number);
@@ -157,11 +157,18 @@ void drawMatrixHUD(PixelGrid *canvas) {
     printFloatIntoString(secondary_viewport.settings.far_clipping_plane_distance, &number, 2);
     drawText(canvas, default_far_color, number.string.char_ptr, MATRIX_HUD_START_X + 25 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT);
 
-    printFloatIntoString(secondary_viewport.camera->focal_length, &number, 2);
-    drawText(canvas, focal_length_color, number.string.char_ptr, MATRIX_HUD_START_X + 32 * FONT_WIDTH + 19 * FONT_WIDTH, MATRIX_HUD_START_Y);
+    if (show_focal_length) {
+        printFloatIntoString(secondary_viewport.camera->focal_length, &number, 2);
+        drawText(canvas, focal_length_color, "Focal Length : L = ", MATRIX_HUD_START_X + 32 * FONT_WIDTH, MATRIX_HUD_START_Y);
+        drawText(canvas, focal_length_color, number.string.char_ptr, MATRIX_HUD_START_X + 32 * FONT_WIDTH + 19 * FONT_WIDTH, MATRIX_HUD_START_Y);
 
-    printFloatIntoString(secondary_viewport_frame_buffer.dimensions.width_over_height, &number, 2);
-    drawText(canvas, aspect_ratio_color, number.string.char_ptr, MATRIX_HUD_START_X + 32 * FONT_WIDTH + 19 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT);
+        if (show_aspect_ratio) {
+            printFloatIntoString(secondary_viewport_frame_buffer.dimensions.width_over_height, &number, 2);
+            drawText(canvas, aspect_ratio_color, "Aspect Ratio : A = ", MATRIX_HUD_START_X + 32 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT);
+            drawText(canvas, aspect_ratio_color, number.string.char_ptr, MATRIX_HUD_START_X + 32 * FONT_WIDTH + 19 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT);
+        }
+    }
+
 
     rect.min.x = canvas->dimensions.width - (i32)getMatrixWidth(show_final_matrix ? &final_matrix : &main_matrix) - MATRIX_PADDING;
     drawText(canvas, Color(White), show_final_matrix ? "Final Matrix" : "Transformation:", rect.min.x, MATRIX_HUD_START_Y);

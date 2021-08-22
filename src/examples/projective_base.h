@@ -48,7 +48,6 @@ Box NDC_box,
     pre_projected_view_frustum_box,
     transforming_view_frustum_box,
     view_frustum_box,
-//    scaled_view_frustum_box,
     clipped_box,
     *main_box;
 
