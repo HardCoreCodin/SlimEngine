@@ -3,7 +3,7 @@
 #include "./projective_base.h"
 #include "./projective_matrix.h"
 
-#define TRANSITION_COUNT 28
+#define TRANSITION_COUNT 29
 
 typedef struct Transition {
     bool active;
@@ -38,7 +38,8 @@ typedef union Transitions {
         show_diagonality,
         show_chosen_trajectory,
         show_focal_ratio,
-        show_chosen_trajectory_labels;
+        show_chosen_trajectory_labels,
+        show_final_scale;
     };
     Transition states[TRANSITION_COUNT];
 } Transitions;
@@ -50,13 +51,9 @@ void updateTransitions(u8 key) {
         if (app->controls.is_pressed.ctrl) {
             if (matrix_count) matrix_count--;
         } else {
-//            if (transitions.view_frustom_slice.active) {
-//
-//            } else {
-                matrices[matrix_count].M = main_matrix.M;
-                updateMatrixStrings(&matrices[matrix_count]);
-                matrix_count++;
-//            }
+            matrices[matrix_count].M = main_matrix.M;
+            updateMatrixStrings(&matrices[matrix_count]);
+            matrix_count++;
 
             main_matrix.M = getMat4Identity();
             arrowX.body.to = app->scene.primitives[0].position = Vec3(1, 0, 0);
@@ -70,10 +67,10 @@ void updateTransitions(u8 key) {
     } else if (key == '2') {
         transitions.pre_projection.active = true;
         transitions.pre_projection.t = 0;
-        transitions.view_frustom_slice.active = true;
+        transitions.view_frustom_slice.active = !transitions.view_frustom_slice.active;
         transitions.view_frustom_slice.t = 0;
     } else if (key == '1') {
-        transitions.full_projection.active = true;
+        transitions.full_projection.active = !transitions.full_projection.active;
         transitions.full_projection.t = 0;
     } else if (key == '4') {
         //            transitions.translate_back.active = true;
@@ -147,8 +144,11 @@ void updateTransitions(u8 key) {
         transitions.show_focal_ratio.active = !transitions.show_focal_ratio.active;
         transitions.show_focal_ratio.t = 0;
     } else if (key == 'B') {
-        transitions.show_chosen_trajectory_labels.active = true;
+        transitions.show_chosen_trajectory_labels.active = !transitions.show_chosen_trajectory_labels.active;
         transitions.show_chosen_trajectory_labels.t = 0;
+    } else if (key == 'H') {
+        transitions.show_final_scale.active = !transitions.show_final_scale.active;
+        transitions.show_final_scale.t = 0;
     }
 }
 
@@ -173,16 +173,33 @@ void transitionBox(Transition *transition, Box *from_box, Box *to_box) {
 }
 
 void transformedPosition(vec3 *pos, mat4 M) {
+    vec4 final_pos, pos4 = Vec4fromVec3(*pos, 1.0f);
+    if (transitions.full_projection.active) {
+        final_pos = mulVec4Mat4(pos4, secondary_viewport.pre_projection_matrix);
+        final_pos = scaleVec4(final_pos, 1.0f / final_pos.w);
+    }
+
     if (transitions.view_frustom_slice.active) {
-        *pos = vec3wUp(mulVec4Mat4(Vec4fromVec3(*pos, 1.0f), M));
-        if (!transitions.lines_through_NDC.active)
+        vec3 target_pos = vec3wUp(mulVec4Mat4(pos4, M));
+        *pos = transitions.full_projection.active ? lerpVec3(target_pos, vec3wUp(final_pos), transitions.full_projection.eased_t) : target_pos;
+        if (!transitions.lift_up.active || transitions.lift_up.t < 1)
             pos->y = transitions.lift_up.eased_t;
-    } else
+    } else {
         mulVec3Mat4(*pos, 1.0f, M, pos);
+        if (transitions.full_projection.active)
+            *pos = lerpVec3(*pos, Vec3fromVec4(final_pos), transitions.full_projection.eased_t);
+    }
 }
 
 Edge* transformedEdge(Edge *edge, mat4 M) {
     transformedPosition(&edge->from, M);
     transformedPosition(&edge->to, M);
     return edge;
+}
+
+void transformBoxVertices(Box *box, mat4 matrix, BoxVertices *transformed_vertices) {
+    for (u8 i = 0; i < BOX__VERTEX_COUNT; i++) {
+        transformed_vertices->buffer[i] = box->vertices.buffer[i];
+        transformedPosition(transformed_vertices->buffer + i, matrix);
+    }
 }

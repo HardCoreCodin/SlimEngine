@@ -232,6 +232,9 @@ void updateAndRender() {
                 app->scene.primitives[1].position,
                 app->scene.primitives[2].position};
         manipulateSelection(&app->scene, active_viewport, &app->controls);
+        if (transitions.view_frustom_slice.active && app->scene.selection->primitive == 0)
+            app->scene.primitives[0].position = original_positions[0];
+
         app->scene.settings.primitives = primitive_count;
         if (app->controls.is_pressed.shift) {
             if (app->controls.is_pressed.ctrl) {

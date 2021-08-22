@@ -13,6 +13,10 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
     static float elapsed = 0;
     elapsed += delta_time;
     arrow1.head.length = arrowX.head.length = arrowZ.head.length = arrowY.head.length = transitions.view_frustom_slice.active ? 0.5f : 0.25f;
+    if (transitions.scale_out.active) {
+        incTransition(&transitions.scale_out, delta_time, true);
+        transitions.scale_out.active = true;
+    }
 
     f32 L = secondary_viewport.camera->focal_length;
     f32 A = secondary_viewport.frame_buffer->dimensions.width_over_height;
@@ -22,16 +26,37 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
     rotatePrimitive(main_box_prim, delta_time / -3, 0, 0);
 
     if (matrix_count) {
-        initMatrix(matrices);
-        matrices->M.X.x = L / A;
-        matrices->M.Y.y = L;
-        copyToString(&matrices->components[0][0].string, "L / A", 0);
-        copyToString(&matrices->components[1][1].string, "L", 0);
-        matrices->component_colors[0][0] = default_focal_length_color;
-        matrices->component_colors[1][1] = default_aspect_ratio_color;
+        Matrix *matrix = matrices;
 
+        initMatrix(matrix);
+        matrix->M.X.x = L / A;
+        matrix->M.Y.y = L;
+        copyToString(&matrix->components[0][0].string, "L / A", 0);
+        copyToString(&matrix->components[1][1].string, "L", 0);
+        matrix->component_colors[0][0] = default_focal_length_color;
+        matrix->component_colors[1][1] = default_aspect_ratio_color;
 
+        if (transitions.view_frustom_slice.active && matrix_count > 1) {
+            matrix++;
 
+            initMatrix(matrix);
+            matrix->M.Z.w = 1;
+            matrix->M.W.w = 0;
+            matrix->M.W.z = -N;
+            copyToString(&matrix->components[2][3].string, "1", 0);
+            copyToString(&matrix->components[3][3].string, "0", 0);
+            copyToString(&matrix->components[3][2].string, "-N", 0);
+            matrix->component_colors[3][2] = default_near_color;
+
+            if (matrix_count == 3) {
+                matrix++;
+
+                initMatrix(matrix);
+                matrix->M.Z.z = F / (F - N);
+                copyToString(&matrix->components[2][2].string, "F/(F - N)", 0);
+                matrix->component_colors[2][2] = default_far_color;
+            }
+        }
     }
     mat4 M = getMat4Identity();
     for (u8 i = 0; i < matrix_count; i++) M = mulMat4(M, matrices[i].M);
@@ -69,6 +94,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         sides_color.A = near_color.A = far_color.A = NDC_color.A = (u8)((f32)MAX_COLOR_VALUE * (1.0f - transitions.view_frustom_slice.eased_t));
         if (!transitions.focal_length_and_plane.active)
             drawBox(viewport, NDC_color, &NDC_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
+
         transformBoxVertices(&view_frustum_box, M, &transforming_view_frustum_box.vertices);
         drawFrustum(viewport, &transforming_view_frustum_box, near_color, far_color, sides_color, 1);
     }
@@ -148,7 +174,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
     }
 
     if (transitions.full_projection.active) {
-        if (incTransition(&transitions.full_projection, delta_time, true)) {
+        if (incTransition(&transitions.full_projection, delta_time, false)) {
             sides_color = getColorInBetween(sides_color, Color(Yellow), transitions.full_projection.eased_t);
             near_color  = getColorInBetween(near_color,  Color(Yellow), transitions.full_projection.eased_t);
             far_color   = getColorInBetween(far_color,   Color(Yellow), transitions.full_projection.eased_t);
@@ -263,178 +289,175 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
     }
 
     if (transitions.show_chosen_trajectory.active) {
-        if (incTransition(&transitions.show_chosen_trajectory, delta_time, false)) {
-//            for (u8 i = 0; i < 4; i++) transforming_quad.corners[i].y = 1.0f - transitions.show_chosen_trajectory.eased_t;
+        incTransition(&transitions.show_chosen_trajectory, delta_time, false);
 
-            near_color = default_near_color;
-            far_color  = default_far_color;
-            if (transitions.show_chosen_trajectory_labels.active) {
-                if (incTransition(&transitions.show_chosen_trajectory_labels, delta_time, false))
-                    near_color.A = far_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.show_chosen_trajectory_labels.eased_t);
-            }
+        near_color = default_near_color;
+        far_color  = default_far_color;
+        if (transitions.show_chosen_trajectory_labels.active) {
+            if (incTransition(&transitions.show_chosen_trajectory_labels, delta_time, false))
+                near_color.A = far_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.show_chosen_trajectory_labels.eased_t);
+        }
 
-            edge.to = normVec3(NDC_quad.top_right);
-            edge_color.G = MAX_COLOR_VALUE / 2;
-            edge_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.x);
-            edge_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.z);
-            edge_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.show_chosen_trajectory.eased_t);
+        edge.to = normVec3(NDC_quad.top_right);
+        edge_color.G = MAX_COLOR_VALUE / 2;
+        edge_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.x);
+        edge_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.z);
+        edge_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.show_chosen_trajectory.eased_t);
 
-            arrow1.body.from = Vec3(N, 0, N);;
-            arrow1.body.to = arrow1.body.from;
-            arrow1.body.to.y = arrow1.body.to.x;
-            edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
-            arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
-            if (transitions.show_chosen_trajectory_labels.active) {
-                edge.from.x += 0.05f;
-                edge.to = edge.from;
-                edge.to.x += 0.25f;
-                edge.to.y += 0.15f;
+        arrow1.body.from = Vec3(N, 0, N);;
+        arrow1.body.to = arrow1.body.from;
+        arrow1.body.to.y = arrow1.body.to.x;
+        edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_out.eased_t);
+        if (transitions.show_chosen_trajectory_labels.active) {
+            edge.from.x += 0.05f;
+            edge.to = edge.from;
+            edge.to.x += 0.25f;
+            edge.to.y += 0.15f;
 
-                drawLocalEdge(edge, Color(BrightGrey), 0);
+            drawLocalEdge(edge, Color(BrightGrey), 0);
 
-                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
 
-                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-                projectEdge(&edge, viewport);
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
 
-                addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
-            }
-            updateArrow(&arrow1);
-            drawArrow(viewport, edge_color, &arrow1, 1);
-
-
-            arrow1.body.from = Vec3(N, 0, N);;
-            arrow1.body.from.y = arrow1.body.from.x;
-            arrow1.body.to = arrow1.body.from;
-            arrow1.body.to.z = 0;
-            edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
-            arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
-            updateArrow(&arrow1);
-            drawArrow(viewport, edge_color, &arrow1, 1);
-            if (transitions.show_chosen_trajectory_labels.active) {
-                edge.from.x += 0.05f;
-                edge.to = edge.from;
-                edge.to.x += 0.25f;
-                edge.to.y += 0.15f;
-
-                drawLocalEdge(edge, Color(BrightGrey), 0);
-
-                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
-
-                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-                projectEdge(&edge, viewport);
-
-                addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
-
-                arrow1.body.from = Vec3(N, 0, N);;
-                arrow1.body.from.y = 0;
-                arrow1.body.to = arrow1.body.from;
-                arrow1.body.to.z = 0;
-                edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
-                edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
-                arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
-
-                edge.from.x += 0.05f;
-                edge.to = edge.from;
-                edge.to.x += 0.25f;
-                edge.to.y += 0.15f;
-
-                drawLocalEdge(edge, Color(BrightGrey), 0);
-
-                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
-
-                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-                projectEdge(&edge, viewport);
-
-                addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
-
-                drawLocalEdge(arrow1.body, near_color, 1);
-            }
+            addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
+        }
+        updateArrow(&arrow1);
+        drawArrow(viewport, edge_color, &arrow1, 1);
 
 
-            arrow1.body.from = Vec3(N, 0, N);;
-            arrow1.body.to = arrow1.body.from;
-            arrow1.body.to.y = arrow1.body.to.z;
-            arrow1.body.to.z = 0;
-            arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
-            updateArrow(&arrow1);
-            drawArrow(viewport, edge_color, &arrow1, 1);
+        arrow1.body.from = Vec3(N, 0, N);;
+        arrow1.body.from.y = arrow1.body.from.x;
+        arrow1.body.to = arrow1.body.from;
+        arrow1.body.to.z = 0;
+        edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
+        updateArrow(&arrow1);
+        drawArrow(viewport, edge_color, &arrow1, 1);
+        if (transitions.show_chosen_trajectory_labels.active) {
+            edge.from.x += 0.05f;
+            edge.to = edge.from;
+            edge.to.x += 0.25f;
+            edge.to.y += 0.15f;
 
-            edge.to = normVec3(NDC_quad.bottom_right);
-            edge_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.x);
-            edge_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.z);
-            arrow1.body.from = Vec3(F, 0, F);;
-            arrow1.body.to = arrow1.body.from;
-            arrow1.body.to.y = arrow1.body.to.x;
-            edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
-            arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
-            if (transitions.show_chosen_trajectory_labels.active) {
-                edge.from.x += 0.05f;
-                edge.to = edge.from;
-                edge.to.x += 0.25f;
-                edge.to.y += 0.15f;
+            drawLocalEdge(edge, Color(BrightGrey), 0);
 
-                drawLocalEdge(edge, Color(BrightGrey), 0);
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
 
-                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
 
-                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-                projectEdge(&edge, viewport);
+            addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
 
-                addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
-            }
-            updateArrow(&arrow1);
-            drawArrow(viewport, edge_color, &arrow1, 1);
-
-
-            arrow1.body.from = Vec3(F, 0, F);;
+            arrow1.body.from = Vec3(N, 0, N);
+            arrow1.body.from.y = 0;
             arrow1.body.to = arrow1.body.from;
             arrow1.body.to.z = 0;
             edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
-            arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
-            if (transitions.show_chosen_trajectory_labels.active) {
-                edge.from.x += 0.05f;
-                edge.to = edge.from;
-                edge.to.x += 0.25f;
-                edge.to.y += 0.15f;
-
-                drawLocalEdge(edge, Color(BrightGrey), 0);
-
-                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
-
-                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-                projectEdge(&edge, viewport);
-
-                addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
-                drawLocalEdge(arrow1.body, far_color, 1);
-            }
-
-            arrow1.body.from = Vec3(N, 0, N);;
-            arrow1.body.to = arrow1.body.from;
-            arrow1.body.to.z = 0;
             edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
             arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
-            if (transitions.show_chosen_trajectory_labels.active) {
-                edge.from.x += 0.05f;
-                edge.to = edge.from;
-                edge.to.x += 0.25f;
-                edge.to.y += 0.15f;
 
-                drawLocalEdge(edge, Color(BrightGrey), 0);
+            edge.from.x += 0.05f;
+            edge.to = edge.from;
+            edge.to.x += 0.25f;
+            edge.to.y += 0.15f;
 
-                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+            drawLocalEdge(edge, Color(BrightGrey), 0);
 
-                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-                projectEdge(&edge, viewport);
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
 
-                addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
-            }
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
+
+            addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
+
+            drawLocalEdge(arrow1.body, near_color, 1);
+        }
+
+        arrow1.body.from = Vec3(N, 0, N);;
+        arrow1.body.to = arrow1.body.from;
+        arrow1.body.to.y = arrow1.body.to.z;
+        arrow1.body.to.z = 0;
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_out.eased_t);
+        updateArrow(&arrow1);
+        drawArrow(viewport, edge_color, &arrow1, 1);
+
+        edge.to = normVec3(NDC_quad.bottom_right);
+        edge_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.x);
+        edge_color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.z);
+        arrow1.body.from = Vec3(F, 0, F);;
+        arrow1.body.to = arrow1.body.from;
+        arrow1.body.to.y = arrow1.body.to.x;
+        edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_out.eased_t);
+        if (transitions.show_chosen_trajectory_labels.active) {
+            edge.from.x += 0.05f;
+            edge.to = edge.from;
+            edge.to.x += 0.25f;
+            edge.to.y += 0.15f;
+
+            drawLocalEdge(edge, Color(BrightGrey), 0);
+
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
+
+            addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
+        }
+        updateArrow(&arrow1);
+        drawArrow(viewport, edge_color, &arrow1, 1);
+
+
+        arrow1.body.from = Vec3(F, 0, F);;
+        arrow1.body.to = arrow1.body.from;
+        arrow1.body.to.z = 0;
+        edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.scale_out.eased_t);
+        if (transitions.show_chosen_trajectory_labels.active) {
+            edge.from.x += 0.05f;
+            edge.to = edge.from;
+            edge.to.x += 0.25f;
+            edge.to.y += 0.15f;
+
+            drawLocalEdge(edge, Color(BrightGrey), 0);
+
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
+
+            addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
+            drawLocalEdge(arrow1.body, far_color, 1);
+        }
+
+        arrow1.body.from = Vec3(N, 0, N);;
+        arrow1.body.to = arrow1.body.from;
+        arrow1.body.to.z = 0;
+        edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
+        arrow1.body.to = lerpVec3(arrow1.body.from, arrow1.body.to, transitions.show_chosen_trajectory.eased_t);
+        if (transitions.show_chosen_trajectory_labels.active) {
+            edge.from.x += 0.05f;
+            edge.to = edge.from;
+            edge.to.x += 0.25f;
+            edge.to.y += 0.15f;
+
+            drawLocalEdge(edge, Color(BrightGrey), 0);
+
+            edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+
+            edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+            edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+            projectEdge(&edge, viewport);
+
+            addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
         }
     }
 
@@ -644,9 +667,6 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         }
 
         if (transitions.scale_out.active) {
-            incTransition(&transitions.scale_out, delta_time, true);
-            transitions.scale_out.active = true;
-
             edge.from = Vec3(0, 1, L);
             edge.to   = Vec3(0, L, L);
             edge.to   = lerpVec3(edge.from, edge.to, transitions.scale_out.eased_t);
@@ -828,28 +848,28 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                 edge.to = Vec3(0, L, L);
                 drawLocalEdge(edge, default_focal_length_color, 0);
 
-                edge.from = Vec3(0.05f, L*0.75f, L);
-                edge.to   = Vec3(0.35f, L*0.75f + 0.25f, L);
-                drawLocalEdge(edge, Color(BrightGrey), 1);
+//                edge.from = Vec3(0.05f, L*0.75f, L);
+//                edge.to   = Vec3(0.35f, L*0.75f + 0.25f, L);
+//                drawLocalEdge(edge, Color(BrightGrey), 1);
 
-                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+//                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+//
+//                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+//                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+//                projectEdge(&edge, viewport);
+//                addLabel(edge_color, "L", (i32)edge.to.x, (i32)edge.to.y);
 
-                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-                projectEdge(&edge, viewport);
-                addLabel(edge_color, "L", (i32)edge.to.x, (i32)edge.to.y);
 
+//                edge.from = Vec3(L*0.85f, 0.05f, L);
+//                edge.to   = Vec3(L*0.85f + 0.15f, 0.35f, L);
+//                drawLocalEdge(edge, Color(BrightGrey), 1);
 
-                edge.from = Vec3(L*0.85f, 0.05f, L);
-                edge.to   = Vec3(L*0.85f + 0.15f, 0.35f, L);
-                drawLocalEdge(edge, Color(BrightGrey), 1);
-
-                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
-
-                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
-                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
-                projectEdge(&edge, viewport);
-                addLabel(edge_color, "L", (i32)edge.to.x, (i32)edge.to.y);
+//                edge.to = lerpVec3(edge.from, edge.to, 1.15f);
+//
+//                edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+//                edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+//                projectEdge(&edge, viewport);
+//                addLabel(edge_color, "L", (i32)edge.to.x, (i32)edge.to.y);
 
 
                 edge.from = Vec3(0, 0, L);
@@ -863,8 +883,6 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         NDC_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.view_frustom_slice.eased_t);
         vec3 *NDC = NDC_quad.corners, *frs = transforming_quad.corners;
         for (u8 i = 0; i < 4; i++, frs++, NDC++) {
-            if (transitions.full_projection.active)
-                *frs = lerpVec3(*frs, *NDC, transitions.full_projection.eased_t);
             *frs = convertPositionToObjectSpace(*frs, main_camera_prim);
             *NDC = convertPositionToObjectSpace(*NDC, main_camera_prim);
         }
@@ -880,6 +898,75 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
             edge_color.A = NDC_color.A;
             drawEdge(viewport, edge_color, &edge, 2);
         }
+    }
+
+    if (transitions.show_final_scale.active) {
+        incTransition(&transitions.show_final_scale, delta_time, false);
+
+        near_color = default_near_color;
+        far_color  = default_far_color;
+        near_color.A = far_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.show_final_scale.eased_t);
+
+        edge.from = Vec3(0.8f, F, -N);
+        edge.to = Vec3(0.8f, F, 0);
+        drawLocalEdge(edge, near_color, 1);
+        edge.from = lerpVec3(edge.from, edge.to, 0.5f);
+        edge.from.x += 0.1f;
+        edge.to = edge.from;
+        edge.to.x += 0.5f;
+        edge.to.y += 0.25f;
+        drawLocalEdge(edge, Color(BrightGrey), 0);
+        edge.to = lerpVec3(edge.from, edge.to, 1.25f);
+        edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+        edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+        projectEdge(&edge, viewport);
+        addLabel(near_color, "N", (i32)edge.to.x, (i32)edge.to.y);
+
+        edge.from = Vec3(0, F, -N);
+        edge.to = Vec3(0, F, -N + F);
+        drawLocalEdge(edge, far_color, 1);
+        edge.from = lerpVec3(edge.from, edge.to, 0.5f);
+        edge.from.x += 0.1f;
+        edge.to = edge.from;
+        edge.to.x += 0.5f;
+        edge.to.y += 0.25f;
+        drawLocalEdge(edge, Color(BrightGrey), 0);
+        edge.to = lerpVec3(edge.from, edge.to, 1.25f);
+        edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+        edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+        projectEdge(&edge, viewport);
+        addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
+
+        edge.from = Vec3(-0.8f, F, 0);
+        edge.to = Vec3(-0.8f, F, F);
+        drawLocalEdge(edge, far_color, 1);
+        edge.from = lerpVec3(edge.from, edge.to, 0.5f);
+        edge.from.x -= 0.1f;
+        edge.to = edge.from;
+        edge.to.x -= 0.5f;
+        edge.to.y += 0.25f;
+        drawLocalEdge(edge, Color(BrightGrey), 0);
+        edge.to = lerpVec3(edge.from, edge.to, 1.25f);
+        edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+        edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+        projectEdge(&edge, viewport);
+        addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
+
+        arrow1.body.from = Vec3(0, F, F-N);
+        arrow1.body.to = lerpVec3(arrow1.body.from, Vec3(0, F, F), transitions.scale_out.eased_t);
+        updateArrow(&arrow1);
+        drawArrow(viewport, Z_color, &arrow1, 1);
+        edge.from = lerpVec3(arrow1.body.from, Vec3(0, F, F), 0.5f);
+        edge.from.x -= 0.1f;
+        edge.to = edge.from;
+        edge.to.x -= 0.5f;
+        edge.to.y += 0.25f;
+        drawLocalEdge(edge, Color(BrightGrey), 0);
+        edge.to = lerpVec3(edge.from, edge.to, 1.25f);
+        edge.to   = convertPositionToObjectSpace(edge.to, main_camera_prim);
+        edge.from = convertPositionToObjectSpace(edge.from, main_camera_prim);
+        projectEdge(&edge, viewport);
+        addLabel(far_color, "F", (i32)edge.to.x, (i32)edge.to.y);
     }
 
     arrowX.body.from = arrowY.body.from = arrowZ.body.from = getVec3Of(0);

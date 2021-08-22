@@ -134,11 +134,6 @@ INLINE vec3 vec3wUp(vec4 v) {
     return Vec3(v.x, v.w, v.z);
 }
 
-void transformBoxVertices(Box *box, mat4 matrix, BoxVertices *transformed_vertices) {
-    for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
-        mulVec3Mat4(box->vertices.buffer[i], 1.0f, matrix, &transformed_vertices->buffer[i]);
-}
-
 BoxCorners getViewFrustumCorners(Viewport *viewport) {
     BoxCorners corners;
     corners.back_top_right.z = viewport->settings.near_clipping_plane_distance;
