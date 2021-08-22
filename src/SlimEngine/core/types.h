@@ -216,7 +216,7 @@ typedef struct ViewportSettings {
     u32 hud_line_count;
     HUDLine *hud_lines;
     enum ColorID hud_default_color;
-    bool show_hud, depth_sort, antialias, use_cube_NDC;
+    bool show_hud, depth_sort, antialias, use_cube_NDC, flip_z;
 } ViewportSettings;
 
 typedef struct Viewport {

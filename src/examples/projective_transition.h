@@ -159,15 +159,19 @@ void updateTransitions(u8 key) {
         transitions.show_final_scale.t = 0;
     } else if (key == 'M') {
         show_final_matrix = !show_final_matrix;
-    } if (key == 'L') {
+    } else if (key == 'L') {
         transitions.show_NDC_corner_labels.active = !transitions.show_NDC_corner_labels.active;
         transitions.show_NDC_corner_labels.t = 0;
-    } if (key == 'O') {
+    } else if (key == 'O') {
         secondary_viewport.settings.use_cube_NDC = !secondary_viewport.settings.use_cube_NDC;
         setPreProjectionMatrix(&secondary_viewport);
         initBox(&NDC_box);
         if (!secondary_viewport.settings.use_cube_NDC) for (u8 i = 4; i < 8; i++) NDC_box.vertices.buffer[i].z = 0;
         setBoxEdgesFromVertices(&NDC_box.edges, &NDC_box.vertices);
+    } else if (key == 'K') {
+        collapse_final_matrix = !collapse_final_matrix;
+    } else if (key == 'J') {
+        secondary_viewport.settings.flip_z = !secondary_viewport.settings.flip_z;
     }
 }
 
@@ -196,6 +200,7 @@ void transformedPosition(vec3 *pos, mat4 M) {
     if (transitions.full_projection.active) {
         final_pos = mulVec4Mat4(pos4, secondary_viewport.pre_projection_matrix);
         final_pos = scaleVec4(final_pos, 1.0f / final_pos.w);
+        final_pos.z = -final_pos.z;
     }
 
     if (transitions.view_frustom_slice.active) {

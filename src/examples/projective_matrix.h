@@ -83,7 +83,7 @@ u32 getMatrixMaxRowLength(Matrix *matrix) {
     return max_row_length;
 }
 u32 getMatrixWidth(Matrix *matrix) {
-    if (matrix == &final_matrix) return 320;
+    if (matrix == &final_matrix) return secondary_viewport.settings.use_cube_NDC ? 380 : 320;
     return MATRIX_PADDING + ((getMatrixMaxRowLength(matrix) + matrix->dim - 1) * FONT_WIDTH) + MATRIX_PADDING;
 }
 u32 getMatrixHeight(Matrix *matrix) {

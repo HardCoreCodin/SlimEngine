@@ -340,6 +340,33 @@ void updateAndRender() {
             }
             main_matrix.dim = transitions.view_frustom_slice.active ? 4 : 3;
             setMatrixComponentColor(&main_matrix);
+
+            if (secondary_viewport.settings.use_cube_NDC) {
+                copyToString(&final_matrix.components[0][0].string, "L/A", 0);
+                copyToString(&final_matrix.components[1][1].string, "L", 0);
+                copyToString(&final_matrix.components[2][3].string, secondary_viewport.settings.flip_z ? "-1" : "1", 0);
+                copyToString(&final_matrix.components[3][3].string, "0", 0);
+                copyToString(&final_matrix.components[3][2].string, "-2NF/(F-N)", 0);
+                copyToString(&final_matrix.components[2][2].string, collapse_final_matrix ? (secondary_viewport.settings.flip_z ? "-(F+N)/(F-N)" : "(F+N)/(F-N)") : "2F/(F-N) - 1", 0);
+                final_matrix.component_colors[0][0] = Color(White);
+                final_matrix.component_colors[1][1] = Color(White);
+                final_matrix.component_colors[2][2] = Color(White);
+                final_matrix.component_colors[2][3] = Color(White);
+                final_matrix.component_colors[3][2] = Color(White);
+                final_matrix.component_colors[3][3] = Color(White);
+            } else {
+                copyToString(&final_matrix.components[0][0].string, "L/A", 0);
+                copyToString(&final_matrix.components[1][1].string, "L", 0);
+                copyToString(&final_matrix.components[2][3].string, "1", 0);
+                copyToString(&final_matrix.components[3][3].string, "0", 0);
+                copyToString(&final_matrix.components[3][2].string, "-NF/(F-N)", 0);
+                copyToString(&final_matrix.components[2][2].string, "F/(F-N)", 0);
+                final_matrix.component_colors[0][0] = Color(White);
+                final_matrix.component_colors[1][1] = Color(White);
+                final_matrix.component_colors[2][2] = Color(White);
+                final_matrix.component_colors[3][2] = Color(White);
+            }
+
             drawMatrixHUD(viewport->frame_buffer, transitions.focal_length_and_plane.active, transitions.aspect_ratio.active);
         } else {
             fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black));
@@ -422,17 +449,6 @@ void setupViewportCore(Viewport *viewport) {
         arrowX_box_prim->scale = Vec3(0.2f, 0.2f, 0.2f);
         arrowY_box_prim->scale = Vec3(0.2f, 0.2f, 0.2f);
         arrowZ_box_prim->scale = Vec3(0.2f, 0.2f, 0.2f);
-
-        copyToString(&final_matrix.components[0][0].string, "L/A", 0);
-        copyToString(&final_matrix.components[1][1].string, "L", 0);
-        copyToString(&final_matrix.components[2][3].string, "1", 0);
-        copyToString(&final_matrix.components[3][3].string, "0", 0);
-        copyToString(&final_matrix.components[3][2].string, "-NF/(F-N)", 0);
-        copyToString(&final_matrix.components[2][2].string, "F/(F-N)", 0);
-        final_matrix.component_colors[0][0] = Color(White);
-        final_matrix.component_colors[1][1] = Color(White);
-        final_matrix.component_colors[2][2] = Color(White);
-        final_matrix.component_colors[3][2] = Color(White);
     } else {
         rotatePrimitive(main_grid_prim, 0.5f, 0, 0);
         camera_xform->position = Vec3(0, 9, -10);

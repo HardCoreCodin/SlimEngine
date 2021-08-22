@@ -42,7 +42,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                 if (!matrix->is_custom) {
                     initMatrix(matrix);
 
-                    matrix->M.Z.w = 1;
+                    matrix->M.Z.w = 1.0f;
                     matrix->M.W.w = 0;
                     matrix->M.W.z = -N;
                     copyToString(&matrix->components[2][3].string, "1", 0);
@@ -72,6 +72,16 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                                         matrix->M.W.z = -1;
                                         copyToString(&matrix->components[3][2].string, "-1", 0);
                                         matrix->component_colors[3][2] = Color(White);
+
+                                        if (secondary_viewport.settings.flip_z) {
+                                            matrix_count = 5;
+
+                                            matrix++;
+                                            initMatrix(matrix);
+                                            matrix->M.W = invertedVec4(matrix->M.W);
+                                            copyToString(&matrix->components[2][2].string, "-1", 0);
+                                            matrix->component_colors[2][2] = Color(White);
+                                        } else matrix_count = 4;
                                     }
                                 }
                             } else {
