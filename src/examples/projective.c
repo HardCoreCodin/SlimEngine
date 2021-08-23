@@ -347,7 +347,7 @@ void updateAndRender() {
                 copyToString(&final_matrix.components[2][3].string, secondary_viewport.settings.flip_z ? "-1" : "1", 0);
                 copyToString(&final_matrix.components[3][3].string, "0", 0);
                 copyToString(&final_matrix.components[3][2].string, "-2NF/(F-N)", 0);
-                copyToString(&final_matrix.components[2][2].string, collapse_final_matrix ? (secondary_viewport.settings.flip_z ? "-(F+N)/(F-N)" : "(F+N)/(F-N)") : "2F/(F-N) - 1", 0);
+                copyToString(&final_matrix.components[2][2].string, (secondary_viewport.settings.flip_z ? "-(F+N)/(F-N)" : "(F+N)/(F-N)"), 0);
                 final_matrix.component_colors[0][0] = Color(White);
                 final_matrix.component_colors[1][1] = Color(White);
                 final_matrix.component_colors[2][2] = Color(White);

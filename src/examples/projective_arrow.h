@@ -66,12 +66,12 @@ void updateCameraArrows(xform3 *camera_xform) {
 void drawCoordinateArrowsToPoint(Viewport *viewport, RGBA x_color, RGBA y_color, RGBA z_color, vec3 location, u8 line_width) {
     arrowX.body.to = arrowY.body.to = arrowZ.body.to = getVec3Of(0);
     arrowX.body.to.x = arrowY.body.to.x = arrowZ.body.to.x = location.x;
-    arrowY.body.to.y = arrowZ.body.to.y = location.y;
+    arrowY.body.to.y = location.y;
 
-    arrowZ.body.to.z = location.z;
+    arrowZ.body.to.z = arrowY.body.to.z = location.z;
     arrowX.body.from = getVec3Of(0);
-    arrowY.body.from = arrowX.body.to;
-    arrowZ.body.from = arrowY.body.to;
+    arrowY.body.from = arrowZ.body.to;
+    arrowZ.body.from = arrowX.body.to;
     updateArrow(&arrowX);
     updateArrow(&arrowY);
     updateArrow(&arrowZ);

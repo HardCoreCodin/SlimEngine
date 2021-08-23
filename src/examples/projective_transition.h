@@ -18,7 +18,7 @@ typedef union Transitions {
         projective_lines,
         view_frustom_slice,
         lift_up,
-        translate_back,
+        show_transformation,
         scale_arrows,
         shear_up,
         reveal_ref_plane,
@@ -65,6 +65,10 @@ void updateTransitions(u8 key) {
             updateArrow(&arrowY);
             updateArrow(&arrowZ);
             updateMatrixStrings(&main_matrix);
+            if (!app->controls.is_pressed.shift) {
+                transitions.show_transformation.active = true;
+                transitions.show_transformation.t = 0;
+            }
         }
     } else if (key == '2') {
         transitions.pre_projection.active = true;
@@ -75,8 +79,6 @@ void updateTransitions(u8 key) {
         transitions.full_projection.active = !transitions.full_projection.active;
         transitions.full_projection.t = 0;
     } else if (key == '4') {
-        //            transitions.translate_back.active = true;
-        //            transitions.translate_back.t = 0;
         transitions.reveal_projective_point.active = true;
         transitions.reveal_projective_point.t = 0;
         move_projective_point = !move_projective_point;
@@ -86,8 +88,6 @@ void updateTransitions(u8 key) {
         transitions.projective_lines.t = 0;
         show_pre_projection = !show_pre_projection;
     } else if (key == '5') {
-        //            transitions.scale_back.active = true;
-        //            transitions.scale_back.t = 0;
         transitions.reveal_ref_plane.active = true;
         if (transitions.reveal_projective_point.active && move_projective_point) {
             transitions.reveal_normalizing_projective_point.active = true;
@@ -107,8 +107,14 @@ void updateTransitions(u8 key) {
     } else if (key == '8') {
         transitions.corner_trajectory.active = !transitions.corner_trajectory.active;
         transitions.corner_trajectory.t = 0;
+        transitions.stop_warping_ndc.active = false;
+        transitions.drop_warping_ndc.active = false;
+        transitions.corners_warping.active = false;
+        transitions.corners_warping.t = 0;
+        transitions.stop_warping_ndc.t = 0;
+        transitions.drop_warping_ndc.t = 0;
     } else if (key == '9') {
-        transitions.corners_warping.active = !transitions.corners_warping.active;
+        transitions.corners_warping.active = true;
         transitions.corners_warping.t = 0;
     } else if (key == '0') {
         transitions.corner_trajectory.active = false;
@@ -195,35 +201,45 @@ void transitionBox(Transition *transition, Box *from_box, Box *to_box) {
     setBoxEdgesFromVertices(&transforming_view_frustum_box.edges, &transforming_view_frustum_box.vertices);
 }
 
-void transformedPosition(vec3 *pos, mat4 M) {
+void transformedPosition(vec3 *pos, mat4 M, mat4 src) {
     vec4 final_pos, pos4 = Vec4fromVec3(*pos, 1.0f);
     if (transitions.full_projection.active) {
         final_pos = mulVec4Mat4(pos4, secondary_viewport.pre_projection_matrix);
         final_pos = scaleVec4(final_pos, 1.0f / final_pos.w);
-        final_pos.z = -final_pos.z;
+        if (secondary_viewport.settings.flip_z)
+            final_pos.z = -final_pos.z;
     }
 
     if (transitions.view_frustom_slice.active) {
         vec3 target_pos = vec3wUp(mulVec4Mat4(pos4, M));
-        *pos = transitions.full_projection.active ? lerpVec3(target_pos, vec3wUp(final_pos), transitions.full_projection.eased_t) : target_pos;
+        *pos = transitions.full_projection.active ?
+                lerpVec3(target_pos, vec3wUp(final_pos), transitions.full_projection.eased_t) :
+                (transitions.show_transformation.active ? lerpVec3(vec3wUp(mulVec4Mat4(pos4, src)), target_pos, transitions.show_transformation.eased_t) : target_pos);
         if (!transitions.lift_up.active || transitions.lift_up.t < 1)
             pos->y = transitions.lift_up.eased_t;
     } else {
-        mulVec3Mat4(*pos, 1.0f, M, pos);
+        vec3 target_pos = *pos;
+        mulVec3Mat4(target_pos, 1.0f, M, &target_pos);
+        if (transitions.show_transformation.active) {
+            vec3 src_pos = *pos;
+            mulVec3Mat4(src_pos, 1.0f, src, &src_pos);
+            *pos = lerpVec3(src_pos, target_pos, transitions.show_transformation.eased_t);
+        } else *pos = target_pos;
+
         if (transitions.full_projection.active)
             *pos = lerpVec3(*pos, Vec3fromVec4(final_pos), transitions.full_projection.eased_t);
     }
 }
 
-Edge* transformedEdge(Edge *edge, mat4 M) {
-    transformedPosition(&edge->from, M);
-    transformedPosition(&edge->to, M);
+Edge* transformedEdge(Edge *edge, mat4 M, mat4 src) {
+    transformedPosition(&edge->from, M, src);
+    transformedPosition(&edge->to, M, src);
     return edge;
 }
 
-void transformBoxVertices(Box *box, mat4 matrix, BoxVertices *transformed_vertices) {
+void transformBoxVertices(Box *box, mat4 matrix, BoxVertices *transformed_vertices, mat4 src) {
     for (u8 i = 0; i < BOX__VERTEX_COUNT; i++) {
         transformed_vertices->buffer[i] = box->vertices.buffer[i];
-        transformedPosition(transformed_vertices->buffer + i, matrix);
+        transformedPosition(transformed_vertices->buffer + i, matrix, src);
     }
 }
