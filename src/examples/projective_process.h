@@ -374,6 +374,33 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                 near_color.A = far_color.A = (u8)((f32)MAX_COLOR_VALUE * transitions.show_chosen_trajectory_labels.eased_t);
         }
 
+        Edge *edge_ptr;
+        Locator locator;
+        for (u8 i = 0; i < 4; i++) {
+            setLocator(&locator, transforming_quad.corners[i]);
+            edge_ptr = locator.edges;
+            for (u8 j = 0; j < 3; j++, edge_ptr++) {
+                edge_ptr->to   = convertPositionToObjectSpace(edge_ptr->to,   main_camera_prim);
+                edge_ptr->from = convertPositionToObjectSpace(edge_ptr->from, main_camera_prim);
+                drawEdge(viewport, Color(BrightBlue), edge_ptr, 4);
+            }
+        }
+        vec3 target_locations[4] = {
+                Vec3(F, F, F),
+                Vec3(-F, F, F),
+                Vec3(N, N, secondary_viewport.settings.use_cube_NDC ? -N : 0),
+                Vec3(-N, N, secondary_viewport.settings.use_cube_NDC ? -N : 0)
+        };
+        for (u8 i = 0; i < 4; i++) {
+            setLocator(&locator, target_locations[i]);
+            edge_ptr = locator.edges;
+            for (u8 j = 0; j < 3; j++, edge_ptr++) {
+                edge_ptr->to   = convertPositionToObjectSpace(edge_ptr->to,   main_camera_prim);
+                edge_ptr->from = convertPositionToObjectSpace(edge_ptr->from, main_camera_prim);
+                drawEdge(viewport, Color(BrightYellow), edge_ptr, 4);
+            }
+        }
+
         edge.to = normVec3(NDC_quad.top_right);
         edge_color.G = MAX_COLOR_VALUE / 2;
         edge_color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)edge_color.G * edge.to.x);
@@ -511,8 +538,7 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         }
         if (updateArrow(&arrow1)) drawArrow(viewport, edge_color, &arrow1, 1);
 
-
-        arrow1.body.from = Vec3(F, 0, F);;
+        arrow1.body.from = Vec3(F, 0, F);
         arrow1.body.to = arrow1.body.from;
         arrow1.body.to.z = 0;
         edge.from = lerpVec3(arrow1.body.from, arrow1.body.to, 0.5f);
