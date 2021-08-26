@@ -40,18 +40,20 @@ void updateAndRender() {
 
     updateViewport(viewport, mouse);
 
-    fillPixelGrid(viewport->frame_buffer, Color(Black));
+    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
+    setPreProjectionMatrix(viewport);
 
     Primitive *prim = &scene->primitives[0];
-    drawGrid(viewport, Color(prim->color), scene->grids, prim, 0);
+    drawGrid(viewport, Color(prim->color), 1, scene->grids, prim, 1);
 
     Camera *camera1 = &scene->cameras[0];
     Camera *camera2 = &scene->cameras[1];
     if (viewport->camera == camera1)
-        drawCamera(viewport, Color(Yellow), camera2, 0);
+        drawCamera(viewport, Color(Yellow), 1, camera2, 1);
     else
-        drawCamera(viewport, Color(Cyan  ), camera1, 0);
+        drawCamera(viewport, Color(Cyan  ), 1, camera1, 1);
 
+    preparePixelGridForDisplay(viewport->frame_buffer);
     resetMouseChanges(mouse);
     endFrameTimer(timer);
 }

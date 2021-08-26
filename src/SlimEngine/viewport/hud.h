@@ -17,9 +17,9 @@ void drawHUD(PixelGrid *canvas, HUD *hud) {
         } else
             alt = false;
 
-        drawText(canvas, Color(line->title_color), line->title.char_ptr, x, y);
-        drawText(canvas, Color(
-                alt ? line->alternate_value_color    : line->value_color),
+        drawText(canvas, ColorOf(line->title_color), line->title.char_ptr, x, y);
+        drawText(canvas, ColorOf(
+                         alt ? line->alternate_value_color : line->value_color),
                  alt ? line->alternate_value.char_ptr : line->value.string.char_ptr,
                  x + line->title.length * FONT_WIDTH, y);
         y += (i32)(hud->line_height * (f32)FONT_HEIGHT);

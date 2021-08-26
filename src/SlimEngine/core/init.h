@@ -95,15 +95,18 @@ void initPixelGrid(PixelGrid *pixel_grid, void* memory, u32 max_width, u32 max_h
     updateDimensions(&pixel_grid->dimensions, max_width, max_height);
 }
 
-void fillPixelGrid(PixelGrid *pixel_grid, RGBA color) {
+void fillPixelGrid(PixelGrid *pixel_grid, vec3 color, f32 opacity) {
+    Pixel pixel;
+    pixel.color.R = (u8)color.r;
+    pixel.color.G = (u8)color.g;
+    pixel.color.B = (u8)color.b;
+    pixel.color.A = (u8)((f32)MAX_COLOR_VALUE * opacity);
     FloatPixel float_pixel;
-    float_pixel.color.x = (f32)color.R * COLOR_COMPONENT_TO_FLOAT;
-    float_pixel.color.y = (f32)color.G * COLOR_COMPONENT_TO_FLOAT;
-    float_pixel.color.z = (f32)color.B * COLOR_COMPONENT_TO_FLOAT;
-    float_pixel.opacity = 0.0f;
+    float_pixel.color = color;
+    float_pixel.opacity = opacity;
     float_pixel.depth = INFINITY;
     for (u32 i = 0; i < pixel_grid->dimensions.width_times_height; i++) {
-        pixel_grid->pixels[i].color = color;
+        pixel_grid->pixels[i]             = pixel;
         pixel_grid->float_pixels[i] = float_pixel;
     }
 }
@@ -254,26 +257,6 @@ void setPreProjectionMatrix(Viewport *viewport) {
     viewport->pre_projection_matrix.Z.z *= viewport->settings.use_cube_NDC ? (f + n) : f;
     viewport->pre_projection_matrix.W.z *= viewport->settings.use_cube_NDC ? (-2 * f * n) : (-n * f);
     viewport->pre_projection_matrix.Z.w = 1.0f;
-
-
-//    viewport->pre_projection_matrix.X.y = viewport->pre_projection_matrix.X.z = viewport->pre_projection_matrix.X.w = 0;
-//    viewport->pre_projection_matrix.Y.x = viewport->pre_projection_matrix.Y.z = viewport->pre_projection_matrix.Y.w = 0;
-//    viewport->pre_projection_matrix.W.x = viewport->pre_projection_matrix.W.y = viewport->pre_projection_matrix.W.w = 0;
-//    viewport->pre_projection_matrix.Z.x = viewport->pre_projection_matrix.Z.y = 0;
-//    viewport->pre_projection_matrix.Z.w = 1.0f;
-//    viewport->pre_projection_matrix.X.x = viewport->camera->focal_length * viewport->frame_buffer->dimensions.height_over_width;
-//    viewport->pre_projection_matrix.Y.y = viewport->camera->focal_length;
-//    if (viewport->settings.use_cube_NDC) {
-//        viewport->pre_projection_matrix.W.z = (-2 * f * n) / (f - n);
-//        viewport->pre_projection_matrix.Z.z = (f + n) / (f - n);
-//        if (viewport->settings.flip_z) {
-//            viewport->pre_projection_matrix.Z.z = -viewport->pre_projection_matrix.Z.z;
-//            viewport->pre_projection_matrix.Z.w = -viewport->pre_projection_matrix.Z.w;
-//        }
-//    } else {
-//        viewport->pre_projection_matrix.Z.z = f / (f - n);
-//        viewport->pre_projection_matrix.W.z = (-n * f) / (f - n);
-//    }
 
     viewport->pre_projection_matrix_inverted = invMat4(viewport->pre_projection_matrix);
 }

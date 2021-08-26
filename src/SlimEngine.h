@@ -72,7 +72,9 @@ typedef void* (*CallbackWithInt)(u64 size);
 typedef void (*CallbackWithBool)(bool on);
 typedef void (*CallbackWithCharPtr)(char* str);
 
+
 #define TAU 6.28f
+#define SQRT2_OVER_2 0.70710678118f
 #define SQRT3 1.73205080757f
 #define COLOR_COMPONENT_TO_FLOAT 0.00392156862f
 #define FLOAT_TO_COLOR_COMPONENT 255.0f
@@ -110,13 +112,13 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
 
 typedef struct u8_3 { u8 x, y, z; } u8_3;
-typedef struct vec2  { f32 x, y; } vec2;
 typedef struct vec2i { i32 x, y; } vec2i;
-typedef struct vec3 { f32 x, y, z;     } vec3;
-typedef struct vec4 { f32 x, y, z, w;  } vec4;
-typedef struct mat2 { vec2 X, Y;       } mat2;
-typedef struct mat3 { vec3 X, Y, Z;    } mat3;
-typedef struct mat4 { vec4 X, Y, Z, W; } mat4;
+typedef union vec2 { struct {f32 x, y;        }; struct {f32 u, v;       }; f32 components[2]; } vec2;
+typedef union vec3 { struct {f32 x, y, z;     }; struct {f32 u, v, w;    }; struct {f32 r, g, b; }; struct {f32 red, green, blue; }; f32 components[3]; } vec3;
+typedef union vec4 { struct {f32 x, y, z, w;  }; struct {f32 r, g, b, a; }; struct {vec3 v3; f32 _; }; f32 components[4]; } vec4;
+typedef union mat2 { struct {vec2 X, Y;       }; vec2 axis[2]; } mat2;
+typedef union mat3 { struct {vec3 X, Y, Z;    }; vec3 axis[3]; } mat3;
+typedef union mat4 { struct {vec4 X, Y, Z, W; }; vec4 axis[4]; } mat4;
 typedef struct AABB { vec3 min, max;   } AABB;
 typedef struct quat { vec3 axis; f32 amount; } quat;
 typedef struct Edge { vec3 from, to;  } Edge;
@@ -125,7 +127,8 @@ typedef struct RGBA { u8 B, G, R, A; } RGBA;
 typedef struct FloatPixel { vec3 color; f32 opacity; f64 depth; } FloatPixel;
 typedef union Pixel { RGBA color; u32 value; } Pixel;
 
-#define RENDER_SIZE ((sizeof(Pixel) + sizeof(FloatPixel) + (sizeof(f64))) * MAX_WIDTH * MAX_HEIGHT)
+#define PIXEL_SIZE (sizeof(Pixel) + sizeof(FloatPixel) + (sizeof(f64)))
+#define RENDER_SIZE (PIXEL_SIZE * MAX_WIDTH * MAX_HEIGHT)
 
 INLINE vec2i Vec2i(i32 x, i32 y) {
     vec2i out;
@@ -133,7 +136,12 @@ INLINE vec2i Vec2i(i32 x, i32 y) {
     out.y = y;
     return out;
 }
-
+INLINE vec2 Vec2(f32 x, f32 y) {
+    vec2 out;
+    out.x = x;
+    out.y = y;
+    return out;
+}
 INLINE vec3 Vec3(f32 x, f32 y, f32 z) {
     vec3 out;
     out.x = x;
@@ -141,12 +149,39 @@ INLINE vec3 Vec3(f32 x, f32 y, f32 z) {
     out.z = z;
     return out;
 }
-
+INLINE vec3 Vec3fromVec4(vec4 v4) {
+    vec3 out;
+    out.x = v4.x;
+    out.y = v4.y;
+    out.z = v4.z;
+    return out;
+}
+INLINE vec4 Vec4(f32 x, f32 y, f32 z, f32 w) {
+    vec4 out;
+    out.x = x;
+    out.y = y;
+    out.z = z;
+    out.w = w;
+    return out;
+}
+INLINE vec4 Vec4fromVec3(vec3 v3, f32 w) {
+    vec4 out;
+    out.x = v3.x;
+    out.y = v3.y;
+    out.z = v3.z;
+    out.w = w;
+    return out;
+}
 INLINE quat Quat(vec3 axis, f32 amout) {
     quat out;
     out.axis = axis;
     out.amount = amout;
     return out;
+}
+
+f32 smoothstep(f32 from, f32 to, f32 t) {
+    t = (t - from) / (to - from);
+    return t * t * (3 - 2 * t);
 }
 
 #define Kilobytes(value) ((value)*1024LL)
@@ -242,6 +277,7 @@ typedef struct PixelGrid {
     Dimensions dimensions;
     Pixel* pixels;
     FloatPixel* float_pixels;
+    bool gamma_corrected_blending;
 } PixelGrid;
 
 void swap(i32 *a, i32 *b) {
@@ -260,6 +296,11 @@ void subRange(i32 from, i32 to, i32 end, i32 start, i32 *first, i32 *last) {
 
 INLINE bool inRange(i32 value, i32 end, i32 start) {
     return value >= start && value < end;
+}
+
+INLINE f32 clampValueToBetween(f32 value, f32 from, f32 to) {
+    f32 mn = value < to ? value : to;
+    return mn > from ? mn : from;
 }
 
 INLINE f32 clampValue(f32 value) {
@@ -301,13 +342,23 @@ enum ColorID {
     DarkRed,
     DarkGreen,
     DarkBlue,
+    DarkGrey,
 
     BrightRed,
     BrightGreen,
-    BrightBlue
+    BrightBlue,
+    BrightGrey,
+
+    BrightCyan,
+    BrightMagenta,
+    BrightYellow,
+
+    DarkCyan,
+    DarkMagenta,
+    DarkYellow
 };
 
-INLINE RGBA Color(enum ColorID color_id) {
+INLINE RGBA ColorOf(enum ColorID color_id) {
     RGBA color;
     color.A = MAX_COLOR_VALUE;
 
@@ -324,9 +375,19 @@ INLINE RGBA Color(enum ColorID color_id) {
 
             break;
         case Grey:
-            color.R = MAX_COLOR_VALUE/2;
-            color.G = MAX_COLOR_VALUE/2;
-            color.B = MAX_COLOR_VALUE/2;
+                color.R = MAX_COLOR_VALUE/2;
+                color.G = MAX_COLOR_VALUE/2;
+                color.B = MAX_COLOR_VALUE/2;
+                break;
+        case DarkGrey:
+            color.R = MAX_COLOR_VALUE/4;
+            color.G = MAX_COLOR_VALUE/4;
+            color.B = MAX_COLOR_VALUE/4;
+            break;
+        case BrightGrey:
+            color.R = MAX_COLOR_VALUE*3/4;
+            color.G = MAX_COLOR_VALUE*3/4;
+            color.B = MAX_COLOR_VALUE*3/4;
             break;
 
         case Red:
@@ -361,6 +422,22 @@ INLINE RGBA Color(enum ColorID color_id) {
             color.B = MAX_COLOR_VALUE/2;
             break;
 
+        case DarkCyan:
+            color.R = 0;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = MAX_COLOR_VALUE/2;
+            break;
+        case DarkMagenta:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = 0;
+            color.B = MAX_COLOR_VALUE/2;
+            break;
+        case DarkYellow:
+            color.R = MAX_COLOR_VALUE/2;
+            color.G = MAX_COLOR_VALUE/2;
+            color.B = 0;
+            break;
+
         case BrightRed:
             color.R = MAX_COLOR_VALUE;
             color.G = MAX_COLOR_VALUE/2;
@@ -392,9 +469,230 @@ INLINE RGBA Color(enum ColorID color_id) {
             color.G = MAX_COLOR_VALUE;
             color.B = 0;
             break;
+
+        case BrightCyan:
+            color.R = 0;
+            color.G = MAX_COLOR_VALUE*3/4;
+            color.B = MAX_COLOR_VALUE*3/4;
+            break;
+        case BrightMagenta:
+            color.R = MAX_COLOR_VALUE*3/4;
+            color.G = 0;
+            color.B = MAX_COLOR_VALUE*3/4;
+            break;
+        case BrightYellow:
+            color.R = MAX_COLOR_VALUE*3/4;
+            color.G = MAX_COLOR_VALUE*3/4;
+            color.B = 0;
+            break;
     }
 
     return color;
+}
+
+INLINE vec3 Color(enum ColorID color_id) {
+    vec3 color;
+
+    switch (color_id) {
+        case Black:
+            color.r = 0.0f;
+            color.g = 0.0f;
+            color.b = 0.0f;
+            break;
+        case White:
+            color.r = (f32)MAX_COLOR_VALUE;
+            color.g = (f32)MAX_COLOR_VALUE;
+            color.b = (f32)MAX_COLOR_VALUE;
+
+            break;
+        case Grey:
+            color.r = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.g = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.b = (f32)MAX_COLOR_VALUE / 2.0f;
+            break;
+        case DarkGrey:
+            color.r = (f32)MAX_COLOR_VALUE / 4.0f;
+            color.g = (f32)MAX_COLOR_VALUE / 4.0f;
+            color.b = (f32)MAX_COLOR_VALUE / 4.0f;
+            break;
+        case BrightGrey:
+            color.r = (f32)MAX_COLOR_VALUE * 3.0f / 4.0f;
+            color.g = (f32)MAX_COLOR_VALUE * 3.0f / 4.0f;
+            color.b = (f32)MAX_COLOR_VALUE * 3.0f / 4.0f;
+            break;
+
+        case Red:
+            color.r = (f32)MAX_COLOR_VALUE;
+            color.g = 0.0f;
+            color.b = 0.0f;
+            break;
+        case Green:
+            color.r = 0.0f;
+            color.g = (f32)MAX_COLOR_VALUE;
+            color.b = 0.0f;
+            break;
+        case Blue:
+            color.r = 0.0f;
+            color.g = 0.0f;
+            color.b = (f32)MAX_COLOR_VALUE;
+            break;
+
+        case DarkRed:
+            color.r = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.g = 0.0f;
+            color.b = 0.0f;
+            break;
+        case DarkGreen:
+            color.r = 0.0f;
+            color.g = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.b = 0.0f;
+            break;
+        case DarkBlue:
+            color.r = 0.0f;
+            color.g = 0.0f;
+            color.b = (f32)MAX_COLOR_VALUE / 2.0f;
+            break;
+
+        case DarkCyan:
+            color.r = 0.0f;
+            color.g = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.b = (f32)MAX_COLOR_VALUE / 2.0f;
+            break;
+        case DarkMagenta:
+            color.r = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.g = 0.0f;
+            color.b = (f32)MAX_COLOR_VALUE / 2.0f;
+            break;
+        case DarkYellow:
+            color.r = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.g = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.b = 0.0f;
+            break;
+
+        case BrightRed:
+            color.r = (f32)MAX_COLOR_VALUE;
+            color.g = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.b = (f32)MAX_COLOR_VALUE / 2.0f;
+            break;
+        case BrightGreen:
+            color.r = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.g = (f32)MAX_COLOR_VALUE;
+            color.b = (f32)MAX_COLOR_VALUE / 2.0f;
+            break;
+        case BrightBlue:
+            color.r = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.g = (f32)MAX_COLOR_VALUE / 2.0f;
+            color.b = (f32)MAX_COLOR_VALUE;
+            break;
+
+        case Cyan:
+            color.r = 0.0f;
+            color.g = (f32)MAX_COLOR_VALUE;
+            color.b = (f32)MAX_COLOR_VALUE;
+            break;
+        case Magenta:
+            color.r = (f32)MAX_COLOR_VALUE;
+            color.g = 0.0f;
+            color.b = (f32)MAX_COLOR_VALUE;
+            break;
+        case Yellow:
+            color.r = (f32)MAX_COLOR_VALUE;
+            color.g = (f32)MAX_COLOR_VALUE;
+            color.b = 0.0f;
+            break;
+
+        case BrightCyan:
+            color.r = 0.0f;
+            color.g = (f32)MAX_COLOR_VALUE * 3.0f / 4.0f;
+            color.b = (f32)MAX_COLOR_VALUE * 3.0f / 4.0f;
+            break;
+        case BrightMagenta:
+            color.r = (f32)MAX_COLOR_VALUE * 3.0f / 4.0f;
+            color.g = 0.0f;
+            color.b = (f32)MAX_COLOR_VALUE * 3.0f / 4.0f;
+            break;
+        case BrightYellow:
+            color.r = (f32)MAX_COLOR_VALUE * 3.0f / 4.0f;
+            color.g = (f32)MAX_COLOR_VALUE * 3.0f / 4.0f;
+            color.b = 0.0f;
+            break;
+    }
+
+    return color;
+}
+
+vec3 getColorInBetween(vec3 from, vec3 to, f32 t) {
+    return Vec3(
+            clampValueToBetween(fast_mul_add(to.r - from.r, t, from.r), 0, (f32)MAX_COLOR_VALUE),
+            clampValueToBetween(fast_mul_add(to.g - from.g, t, from.g), 0, (f32)MAX_COLOR_VALUE),
+            clampValueToBetween(fast_mul_add(to.b - from.b, t, from.b), 0, (f32)MAX_COLOR_VALUE)
+   );
+}
+
+void copyPixels(PixelGrid *src, PixelGrid *trg, i32 width, i32 height, i32 trg_x, i32 trg_y) {
+    Pixel *trg_pixels = trg->pixels;
+    Pixel *src_pixels = src->pixels;
+    Dimensions *trg_dim = &trg->dimensions;
+    Dimensions *src_dim = &src->dimensions;
+    i32 trg_index;
+    for (i32 y = 0; y < height; y++) {
+        for (i32 x = 0; x < width; x++) {
+            trg_index = y + trg_y;
+            trg_index *= trg_dim->width;
+            trg_index += x + trg_x;
+            trg_pixels[trg_index] = src_pixels[src_dim->width * y + x];
+        }
+    }
+}
+
+INLINE void setPixel(PixelGrid *canvas, vec3 color, f32 opacity, i32 x, i32 y, f64 depth) {
+    if (!inRange(y, canvas->dimensions.height, 0) ||
+        !inRange(x, canvas->dimensions.width, 0))
+        return;
+
+    i32 index = canvas->dimensions.width * y + x;
+    FloatPixel final_pixel, new_pixel, old_pixel = canvas->float_pixels[index];
+    new_pixel.color = color;
+    new_pixel.depth = depth;
+    new_pixel.opacity = opacity;
+
+    FloatPixel *foreground, *background;
+    if (depth > old_pixel.depth) {
+        background = &new_pixel;
+        foreground = &old_pixel;
+    } else {
+        background = &old_pixel;
+        foreground = &new_pixel;
+    }
+
+    f32 foreground_transparency = 1.0f - foreground->opacity;
+    for (u8 i = 0; i < 3; i++) {
+        if (canvas->gamma_corrected_blending) {
+            background->color.components[i] *= background->color.components[i];
+            foreground->color.components[i] *= foreground->color.components[i];
+        }
+        final_pixel.color.components[i] = fast_mul_add(
+                background->color.components[i], foreground_transparency,
+                foreground->color.components[i] * foreground->opacity
+                );
+        if (canvas->gamma_corrected_blending)
+            final_pixel.color.components[i] = sqrtf(final_pixel.color.components[i]);
+    }
+    final_pixel.opacity = foreground->opacity + background->opacity * foreground_transparency;
+    final_pixel.depth   = foreground->depth;
+
+    canvas->float_pixels[index] = final_pixel;
+}
+
+void preparePixelGridForDisplay(PixelGrid *canvas) {
+    FloatPixel *float_pixel = canvas->float_pixels;
+    Pixel *pixel = canvas->pixels;
+    for (u32 pixel_index = 0; pixel_index < canvas->dimensions.width_times_height; pixel_index++, float_pixel++, pixel++) {
+        pixel->color.R = (u8)(clampValueToBetween(float_pixel->color.r, 0, MAX_COLOR_VALUE));
+        pixel->color.G = (u8)(clampValueToBetween(float_pixel->color.g, 0, MAX_COLOR_VALUE));
+        pixel->color.B = (u8)(clampValueToBetween(float_pixel->color.b, 0, MAX_COLOR_VALUE));
+        pixel->color.A = (u8)(clampValue(float_pixel->opacity) * FLOAT_TO_COLOR_COMPONENT);
+    }
 }
 
 typedef struct String {
@@ -402,94 +700,10 @@ typedef struct String {
     char *char_ptr;
 } String;
 
-void setString(String *string, char *char_ptr) {
-    string->char_ptr = char_ptr;
-    string->length = 0;
-    if (char_ptr)
-        while (char_ptr[string->length])
-            string->length++;
-}
-
-u32 getStringLength(char *string) {
-    char *char_ptr = string;
-    u32 length = 0;
-    if (char_ptr) while (char_ptr[length]) length++;
-    return length;
-}
-
-u32 getDirectoryLength(char *path) {
-    u32 path_len = getStringLength(path);
-    u32 dir_len = path_len;
-    while (path[dir_len] != '/' && path[dir_len] != '\\') dir_len--;
-    return dir_len + 1;
-}
-
-void copyToString(String *string, char* char_ptr, u32 offset) {
-    string->length = offset;
-    char *source_char = char_ptr;
-    char *string_char = string->char_ptr + offset;
-    while (source_char[0]) {
-        *string_char = *source_char;
-        string_char++;
-        source_char++;
-        string->length++;
-    }
-    *string_char = 0;
-}
-
-void mergeString(String *string, char* first, char* second, u32 offset) {
-    copyToString(string, first, 0);
-    copyToString(string, second, offset);
-}
-
 typedef struct NumberString {
-    char _buffer[12];
+    char _buffer[13];
     String string;
 } NumberString;
-
-void initNumberString(NumberString *number_string) {
-    number_string->string.char_ptr = number_string->_buffer;
-    number_string->string.length = 1;
-    number_string->_buffer[11] = 0;
-    for (u8 i = 0; i < 11; i++)
-        number_string->_buffer[i] = ' ';
-}
-
-void printNumberIntoString(i32 number, NumberString *number_string) {
-    initNumberString(number_string);
-    char *buffer = number_string->_buffer;
-
-    bool is_negative = number < 0;
-    if (is_negative) number = -number;
-
-    if (number) {
-        u32 temp;
-        buffer += 11;
-        number_string->string.char_ptr = buffer;
-        number_string->string.length = 0;
-
-        for (u8 i = 0; i < 11; i++) {
-            temp = number;
-            number /= 10;
-            number_string->string.length++;
-            *buffer-- = (char)('0' + temp - number * 10);
-            if (!number) {
-                if (is_negative) {
-                    *buffer = '-';
-                    number_string->string.char_ptr--;
-                    number_string->string.length++;
-                }
-
-                break;
-            }
-            number_string->string.char_ptr--;
-        }
-    } else {
-        buffer[11] = '0';
-        number_string->string.length = 1;
-        number_string->string.char_ptr = buffer + 11;
-    }
-}
 
 typedef struct HUDLine {
     String title, alternate_value;
@@ -504,6 +718,8 @@ typedef struct HUD {
     f32 line_height;
     HUDLine *lines;
 } HUD;
+
+
 typedef struct KeyMap      { u8 ctrl, alt, shift, space, tab; } KeyMap;
 typedef struct IsPressed { bool ctrl, alt, shift, space, tab; } IsPressed;
 typedef struct Controls {
@@ -528,21 +744,21 @@ typedef struct Timer {
     Ticks *ticks;
     f32 delta_time;
     u64 ticks_before,
-            ticks_after,
-            ticks_diff,
-            accumulated_ticks,
-            accumulated_frame_count,
-            ticks_of_last_report,
-            seconds,
-            milliseconds,
-            microseconds,
-            nanoseconds;
+        ticks_after,
+        ticks_diff,
+        accumulated_ticks,
+        accumulated_frame_count,
+        ticks_of_last_report,
+        seconds,
+        milliseconds,
+        microseconds,
+        nanoseconds;
     f64 average_frames_per_tick,
-            average_ticks_per_frame;
+        average_ticks_per_frame;
     u16 average_frames_per_second,
-            average_milliseconds_per_frame,
-            average_microseconds_per_frame,
-            average_nanoseconds_per_frame;
+        average_milliseconds_per_frame,
+        average_microseconds_per_frame,
+        average_nanoseconds_per_frame;
 } Timer;
 
 typedef struct Timers {
@@ -560,6 +776,13 @@ typedef struct Curve {
     u32 revolution_count;
 } Curve;
 
+typedef union Quad3 {
+    struct {
+        vec3 top_left, top_right, bottom_right, bottom_left;
+    };
+    vec3 corners[4];
+} Quad3;
+
 typedef enum BoxSide {
     NoSide = 0,
     Top    = 1,
@@ -572,13 +795,13 @@ typedef enum BoxSide {
 
 typedef struct BoxCorners {
     vec3 front_top_left,
-            front_top_right,
-            front_bottom_left,
-            front_bottom_right,
-            back_top_left,
-            back_top_right,
-            back_bottom_left,
-            back_bottom_right;
+         front_top_right,
+         front_bottom_left,
+         front_bottom_right,
+         back_top_left,
+         back_top_right,
+         back_bottom_left,
+         back_bottom_right;
 } BoxCorners;
 
 typedef union BoxVertices {
@@ -588,17 +811,17 @@ typedef union BoxVertices {
 
 typedef struct BoxEdgeSides {
     Edge front_top,
-            front_bottom,
-            front_left,
-            front_right,
-            back_top,
-            back_bottom,
-            back_left,
-            back_right,
-            left_bottom,
-            left_top,
-            right_bottom,
-            right_top;
+         front_bottom,
+         front_left,
+         front_right,
+         back_top,
+         back_bottom,
+         back_left,
+         back_right,
+         left_bottom,
+         left_top,
+         right_bottom,
+         right_top;
 } BoxEdgeSides;
 
 typedef union BoxEdges {
@@ -639,7 +862,7 @@ typedef struct Grid {
     GridEdges edges;
     GridVertices vertices;
     u8 u_segments,
-            v_segments;
+       v_segments;
 } Grid;
 
 enum PrimitiveType {
@@ -663,17 +886,17 @@ typedef struct Primitive {
 
 typedef struct xform3 {
     mat3 matrix,
-            yaw_matrix,
-            pitch_matrix,
-            roll_matrix,
-            rotation_matrix,
-            rotation_matrix_inverted;
+         yaw_matrix,
+         pitch_matrix,
+         roll_matrix,
+         rotation_matrix,
+         rotation_matrix_inverted;
     quat rotation,
-            rotation_inverted;
+         rotation_inverted;
     vec3 position, scale,
-            *up_direction,
-            *right_direction,
-            *forward_direction;
+         *up_direction,
+         *right_direction,
+         *forward_direction;
 } xform3;
 
 typedef struct Camera {
@@ -712,12 +935,13 @@ typedef struct ProjectionPlane {
 } ProjectionPlane;
 
 typedef struct ViewportSettings {
+    vec2i position;
     f32 near_clipping_plane_distance,
         far_clipping_plane_distance;
     u32 hud_line_count;
     HUDLine *hud_lines;
     enum ColorID hud_default_color;
-    bool show_hud, depth_sort, antialias;
+    bool show_hud, depth_sort, antialias, use_cube_NDC, flip_z;
 } ViewportSettings;
 
 typedef struct Viewport {
@@ -728,6 +952,9 @@ typedef struct Viewport {
     Camera *camera;
     PixelGrid *frame_buffer;
     Box default_box;
+    vec2i position;
+    mat4 pre_projection_matrix,
+         pre_projection_matrix_inverted;
 } Viewport;
 
 typedef struct Ray {
@@ -759,11 +986,11 @@ typedef struct Mesh {
 typedef struct Selection {
     quat object_rotation;
     vec3 transformation_plane_origin,
-            transformation_plane_normal,
-            transformation_plane_center,
-            object_scale,
-            world_offset,
-            *world_position;
+         transformation_plane_normal,
+         transformation_plane_center,
+         object_scale,
+         world_offset,
+         *world_position;
     Box box;
     Ray ray, local_ray;
     RayHit hit, local_hit;
@@ -888,479 +1115,310 @@ void setGridEdgesFromVertices(Edge *edges, u8 edge_count, vec3 *from, vec3 *to) 
     }
 }
 
-void initMouse(Mouse *mouse) {
-    mouse->is_captured = false;
-
-    mouse->moved = false;
-    mouse->move_handled = false;
-
-    mouse->double_clicked = false;
-    mouse->double_clicked_handled = false;
-
-    mouse->wheel_scrolled = false;
-    mouse->wheel_scroll_amount = 0;
-    mouse->wheel_scroll_handled = false;
-
-    mouse->pos.x = 0;
-    mouse->pos.y = 0;
-    mouse->pos_raw_diff.x = 0;
-    mouse->pos_raw_diff.y = 0;
-    mouse->raw_movement_handled = false;
-
-    mouse->middle_button.is_pressed = false;
-    mouse->middle_button.is_handled = false;
-    mouse->middle_button.up_pos.x = 0;
-    mouse->middle_button.down_pos.x = 0;
-
-    mouse->right_button.is_pressed = false;
-    mouse->right_button.is_handled = false;
-    mouse->right_button.up_pos.x = 0;
-    mouse->right_button.down_pos.x = 0;
-
-    mouse->left_button.is_pressed = false;
-    mouse->left_button.is_handled = false;
-    mouse->left_button.up_pos.x = 0;
-    mouse->left_button.down_pos.x = 0;
+void setString(String *string, char *char_ptr) {
+    string->char_ptr = char_ptr;
+    string->length = 0;
+    if (char_ptr)
+        while (char_ptr[string->length])
+            string->length++;
 }
 
-void initTimer(Timer *timer, GetTicks getTicks, Ticks *ticks) {
-    timer->getTicks = getTicks;
-    timer->ticks    = ticks;
-
-    timer->delta_time = 0;
-    timer->ticks_before = 0;
-    timer->ticks_after = 0;
-    timer->ticks_diff = 0;
-
-    timer->accumulated_ticks = 0;
-    timer->accumulated_frame_count = 0;
-
-    timer->ticks_of_last_report = 0;
-
-    timer->seconds = 0;
-    timer->milliseconds = 0;
-    timer->microseconds = 0;
-    timer->nanoseconds = 0;
-
-    timer->average_frames_per_tick = 0;
-    timer->average_ticks_per_frame = 0;
-    timer->average_frames_per_second = 0;
-    timer->average_milliseconds_per_frame = 0;
-    timer->average_microseconds_per_frame = 0;
-    timer->average_nanoseconds_per_frame = 0;
+u32 getStringLength(char *string) {
+    char *char_ptr = string;
+    u32 length = 0;
+    if (char_ptr) while (char_ptr[length]) length++;
+    return length;
 }
 
-void initTime(Time *time, GetTicks getTicks, u64 ticks_per_second) {
-    time->getTicks = getTicks;
-    time->ticks.per_second = ticks_per_second;
-
-    time->ticks.per_tick.seconds      = 1          / (f64)(time->ticks.per_second);
-    time->ticks.per_tick.milliseconds = 1000       / (f64)(time->ticks.per_second);
-    time->ticks.per_tick.microseconds = 1000000    / (f64)(time->ticks.per_second);
-    time->ticks.per_tick.nanoseconds  = 1000000000 / (f64)(time->ticks.per_second);
-
-    initTimer(&time->timers.update, getTicks, &time->ticks);
-    initTimer(&time->timers.render, getTicks, &time->ticks);
-    initTimer(&time->timers.aux,    getTicks, &time->ticks);
-
-    time->timers.update.ticks_before = time->timers.update.ticks_of_last_report = getTicks();
+u32 getDirectoryLength(char *path) {
+    u32 path_len = getStringLength(path);
+    u32 dir_len = path_len;
+    while (path[dir_len] != '/' && path[dir_len] != '\\') dir_len--;
+    return dir_len + 1;
 }
 
-void initPixelGrid(PixelGrid *pixel_grid, void* memory) {
-    pixel_grid->pixels = (Pixel*)(memory);
-    pixel_grid->float_pixels = (FloatPixel*)(pixel_grid->pixels + MAX_WIDTH * MAX_HEIGHT);
-    updateDimensions(&pixel_grid->dimensions, MAX_WIDTH, MAX_HEIGHT);
-}
-
-void fillPixelGrid(PixelGrid *pixel_grid, RGBA color) {
-    FloatPixel float_pixel;
-    float_pixel.color.x = (f32)color.R * COLOR_COMPONENT_TO_FLOAT;
-    float_pixel.color.y = (f32)color.G * COLOR_COMPONENT_TO_FLOAT;
-    float_pixel.color.z = (f32)color.B * COLOR_COMPONENT_TO_FLOAT;
-    float_pixel.opacity = 0.0f;
-    float_pixel.depth = INFINITY;
-    for (u32 i = 0; i < pixel_grid->dimensions.width_times_height; i++) {
-        pixel_grid->pixels[i].color = color;
-        pixel_grid->float_pixels[i] = float_pixel;
+void copyToString(String *string, char* char_ptr, u32 offset) {
+    string->length = offset;
+    char *source_char = char_ptr;
+    char *string_char = string->char_ptr + offset;
+    while (source_char[0]) {
+        *string_char = *source_char;
+        string_char++;
+        source_char++;
+        string->length++;
     }
+    *string_char = 0;
 }
 
-void initXform3(xform3 *xform) {
-    mat3 I;
-    I.X.x = 1; I.Y.x = 0; I.Z.x = 0;
-    I.X.y = 0; I.Y.y = 1; I.Z.y = 0;
-    I.X.z = 0; I.Y.z = 0; I.Z.z = 1;
-    xform->matrix = xform->yaw_matrix = xform->pitch_matrix = xform->roll_matrix = xform->rotation_matrix = xform->rotation_matrix_inverted = I;
-    xform->right_direction   = &xform->rotation_matrix.X;
-    xform->up_direction      = &xform->rotation_matrix.Y;
-    xform->forward_direction = &xform->rotation_matrix.Z;
-    xform->scale.x = 1;
-    xform->scale.y = 1;
-    xform->scale.z = 1;
-    xform->position.x = 0;
-    xform->position.y = 0;
-    xform->position.z = 0;
-    xform->rotation.axis.x = 0;
-    xform->rotation.axis.y = 0;
-    xform->rotation.axis.z = 0;
-    xform->rotation.amount = 1;
-    xform->rotation_inverted = xform->rotation;
+void mergeString(String *string, char* first, char* second, u32 offset) {
+    copyToString(string, first, 0);
+    copyToString(string, second, offset);
 }
 
-void initCamera(Camera* camera) {
-    camera->focal_length = camera->zoom = CAMERA_DEFAULT__FOCAL_LENGTH;
-    camera->target_distance = CAMERA_DEFAULT__TARGET_DISTANCE;
-    camera->dolly = 0;
-    camera->current_velocity.x = 0;
-    camera->current_velocity.y = 0;
-    camera->current_velocity.z = 0;
-    initXform3(&camera->transform);
+void initNumberString(NumberString *number_string) {
+    number_string->string.char_ptr = number_string->_buffer;
+    number_string->string.length = 1;
+    number_string->_buffer[11] = 0;
+    for (u8 i = 0; i < 11; i++)
+        number_string->_buffer[i] = ' ';
 }
 
-void initBox(Box *box) {
-    box->vertices.corners.front_top_left.x    = -1;
-    box->vertices.corners.back_top_left.x     = -1;
-    box->vertices.corners.front_bottom_left.x = -1;
-    box->vertices.corners.back_bottom_left.x  = -1;
+void printNumberIntoString(i32 number, NumberString *number_string) {
+    initNumberString(number_string);
+    char *buffer = number_string->_buffer;
+    buffer[12] = 0;
 
-    box->vertices.corners.front_top_right.x    = 1;
-    box->vertices.corners.back_top_right.x     = 1;
-    box->vertices.corners.front_bottom_right.x = 1;
-    box->vertices.corners.back_bottom_right.x  = 1;
+    bool is_negative = number < 0;
+    if (is_negative) number = -number;
 
+    if (number) {
+        u32 temp;
+        buffer += 11;
+        number_string->string.char_ptr = buffer;
+        number_string->string.length = 0;
 
-    box->vertices.corners.front_bottom_left.y  = -1;
-    box->vertices.corners.front_bottom_right.y = -1;
-    box->vertices.corners.back_bottom_left.y   = -1;
-    box->vertices.corners.back_bottom_right.y  = -1;
-
-    box->vertices.corners.front_top_left.y  = 1;
-    box->vertices.corners.front_top_right.y = 1;
-    box->vertices.corners.back_top_left.y   = 1;
-    box->vertices.corners.back_top_right.y  = 1;
-
-
-    box->vertices.corners.front_top_left.z     = 1;
-    box->vertices.corners.front_top_right.z    = 1;
-    box->vertices.corners.front_bottom_left.z  = 1;
-    box->vertices.corners.front_bottom_right.z = 1;
-
-    box->vertices.corners.back_top_left.z     = -1;
-    box->vertices.corners.back_top_right.z    = -1;
-    box->vertices.corners.back_bottom_left.z  = -1;
-    box->vertices.corners.back_bottom_right.z = -1;
-
-    setBoxEdgesFromVertices(&box->edges, &box->vertices);
-}
-
-void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, enum ColorID default_color, i32 position_x, i32 position_y) {
-    hud->lines = lines;
-    hud->line_count = line_count;
-    hud->line_height = line_height;
-    hud->position.x = position_x;
-    hud->position.y = position_y;
-
-    if (lines) {
-        HUDLine *line = lines;
-        for (u32 i = 0; i < line_count; i++, line++) {
-            line->use_alternate = null;
-            line->invert_alternate_use = false;
-            line->title_color = line->value_color = line->alternate_value_color = default_color;
-            initNumberString(&line->value);
-            line->title.char_ptr = line->alternate_value.char_ptr = (char*)("");
-            line->title.length = line->alternate_value.length = 0;
-        }
-    }
-}
-
-void setDefaultNavigationSettings(NavigationSettings *settings) {
-    settings->max_velocity  = NAVIGATION_DEFAULT__MAX_VELOCITY;
-    settings->acceleration  = NAVIGATION_DEFAULT__ACCELERATION;
-    settings->speeds.turn   = NAVIGATION_SPEED_DEFAULT__TURN;
-    settings->speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
-    settings->speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
-    settings->speeds.zoom   = NAVIGATION_SPEED_DEFAULT__ZOOM;
-    settings->speeds.dolly  = NAVIGATION_SPEED_DEFAULT__DOLLY;
-    settings->speeds.pan    = NAVIGATION_SPEED_DEFAULT__PAN;
-}
-
-void initNavigation(Navigation *navigation, NavigationSettings *navigation_settings) {
-    navigation->settings = *navigation_settings;
-
-    navigation->turned = false;
-    navigation->moved = false;
-    navigation->zoomed = false;
-
-    navigation->move.right = false;
-    navigation->move.left = false;
-    navigation->move.up = false;
-    navigation->move.down = false;
-    navigation->move.forward = false;
-    navigation->move.backward = false;
-
-    navigation->turn.right = false;
-    navigation->turn.left = false;
-}
-
-void setDefaultViewportSettings(ViewportSettings *settings) {
-    settings->near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
-    settings->far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
-    settings->hud_default_color = White;
-    settings->hud_line_count = 0;
-    settings->hud_lines = null;
-    settings->show_hud = false;
-    settings->antialias = false;
-    settings->depth_sort = false;
-}
-
-void initViewport(Viewport *viewport,
-                  ViewportSettings *viewport_settings,
-                  NavigationSettings *navigation_settings,
-                  Camera *camera,
-                  PixelGrid *frame_buffer) {
-    viewport->camera = camera;
-    viewport->settings = *viewport_settings;
-    viewport->frame_buffer = frame_buffer;
-    initBox(&viewport->default_box);
-    initHUD(&viewport->hud, viewport_settings->hud_lines, viewport_settings->hud_line_count, 1, viewport_settings->hud_default_color, 0, 0);
-    initNavigation(&viewport->navigation, navigation_settings);
-}
-
-void setDefaultSceneSettings(SceneSettings *settings) {
-    settings->cameras = 1;
-    settings->primitives = 0;
-    settings->meshes = 0;
-    settings->curves = 0;
-    settings->boxes = 0;
-    settings->grids = 0;
-    settings->mesh_files = null;
-    settings->file.char_ptr = null;
-    settings->file.length = 0;
-    settings->autoload = false;
-}
-
-void initCurve(Curve *curve) {
-    curve->thickness = 0.1f;
-    curve->revolution_count = 1;
-}
-
-void initPrimitive(Primitive *primitive) {
-    primitive->id = 0;
-    primitive->type = PrimitiveType_None;
-    primitive->color = White;
-    primitive->flags = ALL_FLAGS;
-    primitive->scale.x = 1;
-    primitive->scale.y = 1;
-    primitive->scale.z = 1;
-    primitive->position.x = 0;
-    primitive->position.y = 0;
-    primitive->position.z = 0;
-    primitive->rotation.axis.x = 0;
-    primitive->rotation.axis.y = 0;
-    primitive->rotation.axis.z = 0;
-    primitive->rotation.amount = 1;
-}
-
-bool initGrid(Grid *grid, u8 u_segments, u8 v_segments) {
-    if (!u_segments || u_segments > GRID__MAX_SEGMENTS ||
-        !v_segments || v_segments > GRID__MAX_SEGMENTS)
-        return false;
-
-    grid->u_segments = u_segments;
-    grid->v_segments = v_segments;
-
-    f32 u_step = u_segments > 1 ? (2.0f / (u_segments - 1)) : 0;
-    f32 v_step = v_segments > 1 ? (2.0f / (v_segments - 1)) : 0;
-
-    for (u8 u = 0; u < grid->u_segments; u++) {
-        grid->vertices.uv.u.from[u].y = grid->vertices.uv.u.to[u].y = 0;
-        grid->vertices.uv.u.from[u].x = grid->vertices.uv.u.to[u].x = -1 + u * u_step;
-        grid->vertices.uv.u.from[u].z = -1;
-        grid->vertices.uv.u.to[  u].z = +1;
-    }
-    for (u8 v = 0; v < grid->v_segments; v++) {
-        grid->vertices.uv.v.from[v].y = grid->vertices.uv.v.to[v].y = 0;
-        grid->vertices.uv.v.from[v].z = grid->vertices.uv.v.to[v].z = -1 + v * v_step;
-        grid->vertices.uv.v.from[v].x = -1;
-        grid->vertices.uv.v.to[  v].x = +1;
-    }
-
-    setGridEdgesFromVertices(grid->edges.uv.u, grid->u_segments, grid->vertices.uv.u.from, grid->vertices.uv.u.to);
-    setGridEdgesFromVertices(grid->edges.uv.v, grid->v_segments, grid->vertices.uv.v.from, grid->vertices.uv.v.to);
-
-    return true;
-}
-
-void initSelection(Selection *selection) {
-    selection->object_type = selection->object_id = 0;
-    selection->changed = false;
-}
-
-void accumulateTimer(Timer* timer) {
-    timer->ticks_diff = timer->ticks_after - timer->ticks_before;
-    timer->accumulated_ticks += timer->ticks_diff;
-    timer->accumulated_frame_count++;
-
-    timer->seconds      = (u64)(timer->ticks->per_tick.seconds      * (f64)(timer->ticks_diff));
-    timer->milliseconds = (u64)(timer->ticks->per_tick.milliseconds * (f64)(timer->ticks_diff));
-    timer->microseconds = (u64)(timer->ticks->per_tick.microseconds * (f64)(timer->ticks_diff));
-    timer->nanoseconds  = (u64)(timer->ticks->per_tick.nanoseconds  * (f64)(timer->ticks_diff));
-}
-
-void averageTimer(Timer *timer) {
-    timer->average_frames_per_tick = (f64)timer->accumulated_frame_count / timer->accumulated_ticks;
-    timer->average_ticks_per_frame = (f64)timer->accumulated_ticks / timer->accumulated_frame_count;
-    timer->average_frames_per_second = (u16)(timer->average_frames_per_tick      * timer->ticks->per_second);
-    timer->average_milliseconds_per_frame = (u16)(timer->average_ticks_per_frame * timer->ticks->per_tick.milliseconds);
-    timer->average_microseconds_per_frame = (u16)(timer->average_ticks_per_frame * timer->ticks->per_tick.microseconds);
-    timer->average_nanoseconds_per_frame = (u16)(timer->average_ticks_per_frame  * timer->ticks->per_tick.nanoseconds);
-    timer->accumulated_ticks = timer->accumulated_frame_count = 0;
-}
-
-INLINE void startFrameTimer(Timer *timer) {
-    timer->ticks_after = timer->ticks_before;
-    timer->ticks_before = timer->getTicks();
-    timer->ticks_diff = timer->ticks_before - timer->ticks_after;
-    timer->delta_time = (f32)(timer->ticks_diff * timer->ticks->per_tick.seconds);
-}
-
-INLINE void endFrameTimer(Timer *timer) {
-    timer->ticks_after = timer->getTicks();
-    accumulateTimer(timer);
-    if (timer->accumulated_ticks >= timer->ticks->per_second / 4)
-        averageTimer(timer);
-}
-
-#define FONT_HEIGHT 8
-#define FONT_WIDTH 8
-
-unsigned char Font[768] = {
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x3c, 0x3c, 0x18,
-        0x18, 0x00, 0x18, 0x00, 0x66, 0x66, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x6c, 0x6c, 0xfe, 0x6c, 0xfe, 0x6c, 0x6c, 0x00, 0x18, 0x3e, 0x60, 0x3c,
-        0x06, 0x7c, 0x18, 0x00, 0x00, 0xc6, 0xcc, 0x18, 0x30, 0x66, 0xc6, 0x00,
-        0x38, 0x6c, 0x38, 0x76, 0xdc, 0xcc, 0x76, 0x00, 0x18, 0x18, 0x30, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x0c, 0x18, 0x30, 0x30, 0x30, 0x18, 0x0c, 0x00,
-        0x30, 0x18, 0x0c, 0x0c, 0x0c, 0x18, 0x30, 0x00, 0x00, 0x66, 0x3c, 0xff,
-        0x3c, 0x66, 0x00, 0x00, 0x00, 0x18, 0x18, 0x7e, 0x18, 0x18, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x30, 0x00, 0x00, 0x00, 0x7e,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00,
-        0x06, 0x0c, 0x18, 0x30, 0x60, 0xc0, 0x80, 0x00, 0x38, 0x6c, 0xc6, 0xd6,
-        0xc6, 0x6c, 0x38, 0x00, 0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7e, 0x00,
-        0x7c, 0xc6, 0x06, 0x1c, 0x30, 0x66, 0xfe, 0x00, 0x7c, 0xc6, 0x06, 0x3c,
-        0x06, 0xc6, 0x7c, 0x00, 0x1c, 0x3c, 0x6c, 0xcc, 0xfe, 0x0c, 0x1e, 0x00,
-        0xfe, 0xc0, 0xc0, 0xfc, 0x06, 0xc6, 0x7c, 0x00, 0x38, 0x60, 0xc0, 0xfc,
-        0xc6, 0xc6, 0x7c, 0x00, 0xfe, 0xc6, 0x0c, 0x18, 0x30, 0x30, 0x30, 0x00,
-        0x7c, 0xc6, 0xc6, 0x7c, 0xc6, 0xc6, 0x7c, 0x00, 0x7c, 0xc6, 0xc6, 0x7e,
-        0x06, 0x0c, 0x78, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x18, 0x18, 0x00,
-        0x00, 0x18, 0x18, 0x00, 0x00, 0x18, 0x18, 0x30, 0x06, 0x0c, 0x18, 0x30,
-        0x18, 0x0c, 0x06, 0x00, 0x00, 0x00, 0x7e, 0x00, 0x00, 0x7e, 0x00, 0x00,
-        0x60, 0x30, 0x18, 0x0c, 0x18, 0x30, 0x60, 0x00, 0x7c, 0xc6, 0x0c, 0x18,
-        0x18, 0x00, 0x18, 0x00, 0x7c, 0xc6, 0xde, 0xde, 0xde, 0xc0, 0x78, 0x00,
-        0x38, 0x6c, 0xc6, 0xfe, 0xc6, 0xc6, 0xc6, 0x00, 0xfc, 0x66, 0x66, 0x7c,
-        0x66, 0x66, 0xfc, 0x00, 0x3c, 0x66, 0xc0, 0xc0, 0xc0, 0x66, 0x3c, 0x00,
-        0xf8, 0x6c, 0x66, 0x66, 0x66, 0x6c, 0xf8, 0x00, 0xfe, 0x62, 0x68, 0x78,
-        0x68, 0x62, 0xfe, 0x00, 0xfe, 0x62, 0x68, 0x78, 0x68, 0x60, 0xf0, 0x00,
-        0x3c, 0x66, 0xc0, 0xc0, 0xce, 0x66, 0x3a, 0x00, 0xc6, 0xc6, 0xc6, 0xfe,
-        0xc6, 0xc6, 0xc6, 0x00, 0x3c, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3c, 0x00,
-        0x1e, 0x0c, 0x0c, 0x0c, 0xcc, 0xcc, 0x78, 0x00, 0xe6, 0x66, 0x6c, 0x78,
-        0x6c, 0x66, 0xe6, 0x00, 0xf0, 0x60, 0x60, 0x60, 0x62, 0x66, 0xfe, 0x00,
-        0xc6, 0xee, 0xfe, 0xfe, 0xd6, 0xc6, 0xc6, 0x00, 0xc6, 0xe6, 0xf6, 0xde,
-        0xce, 0xc6, 0xc6, 0x00, 0x7c, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x7c, 0x00,
-        0xfc, 0x66, 0x66, 0x7c, 0x60, 0x60, 0xf0, 0x00, 0x7c, 0xc6, 0xc6, 0xc6,
-        0xc6, 0xce, 0x7c, 0x0e, 0xfc, 0x66, 0x66, 0x7c, 0x6c, 0x66, 0xe6, 0x00,
-        0x3c, 0x66, 0x30, 0x18, 0x0c, 0x66, 0x3c, 0x00, 0x7e, 0x7e, 0x5a, 0x18,
-        0x18, 0x18, 0x3c, 0x00, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x7c, 0x00,
-        0xc6, 0xc6, 0xc6, 0xc6, 0xc6, 0x6c, 0x38, 0x00, 0xc6, 0xc6, 0xc6, 0xd6,
-        0xd6, 0xfe, 0x6c, 0x00, 0xc6, 0xc6, 0x6c, 0x38, 0x6c, 0xc6, 0xc6, 0x00,
-        0x66, 0x66, 0x66, 0x3c, 0x18, 0x18, 0x3c, 0x00, 0xfe, 0xc6, 0x8c, 0x18,
-        0x32, 0x66, 0xfe, 0x00, 0x3c, 0x30, 0x30, 0x30, 0x30, 0x30, 0x3c, 0x00,
-        0xc0, 0x60, 0x30, 0x18, 0x0c, 0x06, 0x02, 0x00, 0x3c, 0x0c, 0x0c, 0x0c,
-        0x0c, 0x0c, 0x3c, 0x00, 0x10, 0x38, 0x6c, 0xc6, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x30, 0x18, 0x0c, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0x0c, 0x7c, 0xcc, 0x76, 0x00,
-        0xe0, 0x60, 0x7c, 0x66, 0x66, 0x66, 0xdc, 0x00, 0x00, 0x00, 0x7c, 0xc6,
-        0xc0, 0xc6, 0x7c, 0x00, 0x1c, 0x0c, 0x7c, 0xcc, 0xcc, 0xcc, 0x76, 0x00,
-        0x00, 0x00, 0x7c, 0xc6, 0xfe, 0xc0, 0x7c, 0x00, 0x3c, 0x66, 0x60, 0xf8,
-        0x60, 0x60, 0xf0, 0x00, 0x00, 0x00, 0x76, 0xcc, 0xcc, 0x7c, 0x0c, 0xf8,
-        0xe0, 0x60, 0x6c, 0x76, 0x66, 0x66, 0xe6, 0x00, 0x18, 0x00, 0x38, 0x18,
-        0x18, 0x18, 0x3c, 0x00, 0x06, 0x00, 0x06, 0x06, 0x06, 0x66, 0x66, 0x3c,
-        0xe0, 0x60, 0x66, 0x6c, 0x78, 0x6c, 0xe6, 0x00, 0x38, 0x18, 0x18, 0x18,
-        0x18, 0x18, 0x3c, 0x00, 0x00, 0x00, 0xec, 0xfe, 0xd6, 0xd6, 0xd6, 0x00,
-        0x00, 0x00, 0xdc, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00, 0x00, 0x7c, 0xc6,
-        0xc6, 0xc6, 0x7c, 0x00, 0x00, 0x00, 0xdc, 0x66, 0x66, 0x7c, 0x60, 0xf0,
-        0x00, 0x00, 0x76, 0xcc, 0xcc, 0x7c, 0x0c, 0x1e, 0x00, 0x00, 0xdc, 0x76,
-        0x60, 0x60, 0xf0, 0x00, 0x00, 0x00, 0x7e, 0xc0, 0x7c, 0x06, 0xfc, 0x00,
-        0x30, 0x30, 0xfc, 0x30, 0x30, 0x36, 0x1c, 0x00, 0x00, 0x00, 0xcc, 0xcc,
-        0xcc, 0xcc, 0x76, 0x00, 0x00, 0x00, 0xc6, 0xc6, 0xc6, 0x6c, 0x38, 0x00,
-        0x00, 0x00, 0xc6, 0xd6, 0xd6, 0xfe, 0x6c, 0x00, 0x00, 0x00, 0xc6, 0x6c,
-        0x38, 0x6c, 0xc6, 0x00, 0x00, 0x00, 0xc6, 0xc6, 0xc6, 0x7e, 0x06, 0xfc,
-        0x00, 0x00, 0x7e, 0x4c, 0x18, 0x32, 0x7e, 0x00, 0x0e, 0x18, 0x18, 0x70,
-        0x18, 0x18, 0x0e, 0x00, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00,
-        0x70, 0x18, 0x18, 0x0e, 0x18, 0x18, 0x70, 0x00, 0x76, 0xdc, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x38, 0x6c, 0xc6, 0xc6, 0xfe, 0x00
-};
-
-#define LINE_HEIGHT 12
-#define FIRST_CHARACTER_CODE 32
-#define LAST_CHARACTER_CODE 127
-
-void drawText(PixelGrid *canvas, RGBA color, char *str, i32 x, i32 y) {
-    if (x < 0 || x > canvas->dimensions.width - FONT_WIDTH ||
-        y < 0 || y > canvas->dimensions.height - FONT_HEIGHT)
-        return;
-
-    u16 current_x = x;
-    u16 current_y = y;
-    u16 t_offset;
-    u16 pixel_line_step = canvas->dimensions.width - FONT_WIDTH;
-    u32 char_line_step  = canvas->dimensions.width * LINE_HEIGHT;
-    Pixel* pixel = canvas->pixels + canvas->dimensions.width * y + x;
-    Pixel* character_pixel;
-    u8* byte;
-    char character = *str;
-
-    while (character) {
-        if (character == '\n') {
-            if (current_y + FONT_HEIGHT > canvas->dimensions.height)
-                break;
-
-            pixel += char_line_step - current_x + x;
-            current_x = x;
-            current_y += LINE_HEIGHT;
-        } else if (character == '\t') {
-            t_offset = FONT_WIDTH * (4 - ((current_x / FONT_WIDTH) & 3));
-            current_x += t_offset;
-            pixel += t_offset;
-        } else if (character >= FIRST_CHARACTER_CODE &&
-                   character <= LAST_CHARACTER_CODE) {
-            byte = Font + FONT_WIDTH*(character - FIRST_CHARACTER_CODE);
-            character_pixel = pixel;
-            for (int h = 0; h < FONT_HEIGHT ; h++) {
-                for (int w = 0; w < FONT_WIDTH; w++) {
-                    /* skip background bits */
-                    if (*byte & (0x80 >> w))
-                        character_pixel->color = color;
-
-                    character_pixel++;
+        for (u8 i = 0; i < 11; i++) {
+            temp = number;
+            number /= 10;
+            number_string->string.length++;
+            *buffer-- = (char)('0' + temp - number * 10);
+            if (!number) {
+                if (is_negative) {
+                    *buffer = '-';
+                    number_string->string.char_ptr--;
+                    number_string->string.length++;
                 }
-                byte++;
-                character_pixel += pixel_line_step;
-            }
 
-            pixel += FONT_WIDTH;
-            current_x += FONT_WIDTH;
-            if (current_x + FONT_WIDTH > canvas->dimensions.width)
-                return;
+                break;
+            }
+            number_string->string.char_ptr--;
         }
-        character = *++str;
+    } else {
+        buffer[11] = '0';
+        number_string->string.length = 1;
+        number_string->string.char_ptr = buffer + 11;
     }
 }
 
-void drawNumber(PixelGrid *canvas, RGBA color, i32 number, i32 x, i32 y) {
-    static NumberString number_string;
-    printNumberIntoString(number, &number_string);
-    drawText(canvas, color, number_string.string.char_ptr, x - number_string.string.length * FONT_WIDTH, y);
+void printFloatIntoString(f32 number, NumberString *number_string, u8 float_digits_count) {
+    f32 factor = 1;
+    for (u8 i = 0; i < float_digits_count; i++) factor *= 10;
+    i32 int_num = (i32)(number * factor);
+    if (int_num == 0) {
+        printNumberIntoString((i32)factor, number_string);
+        number_string->string.length++;
+        number_string->string.char_ptr[0] = '.';
+        number_string->string.char_ptr--;
+        number_string->string.char_ptr[0] = '0';
+        return;
+    }
+
+    bool is_negative = number < 0;
+    bool is_fraction = is_negative ? number > -1 : number < 1;
+
+    printNumberIntoString(int_num, number_string);
+
+    if (is_fraction) {
+        u32 len = number_string->string.length;
+        number_string->string.length++;
+        number_string->string.char_ptr--;
+        if (is_negative) {
+            number_string->string.char_ptr[0] = '-';
+            number_string->string.char_ptr[1] = '0';
+        } else {
+            number_string->string.char_ptr[0] = '0';
+        }
+        if (len < float_digits_count) {
+            for (u32 i = 0; i < (float_digits_count - len); i++) {
+                number_string->string.length++;
+                number_string->string.char_ptr--;
+                number_string->string.char_ptr[0] = '0';
+            }
+        }
+    }
+    //    if (number_string->string.length <= float_digits_count) return;
+    char tmp[13];
+    tmp[number_string->string.length + 1] = 0;
+    for (u8 i = 0; i < (u8)number_string->string.length; i++) {
+        u8 char_count_from_right_to_left = (u8)number_string->string.length - i - 1;
+        if (char_count_from_right_to_left >= float_digits_count) tmp[i] = number_string->string.char_ptr[i];
+        else                                                     tmp[i + 1] = number_string->string.char_ptr[i];
+    }
+    tmp[number_string->string.length - float_digits_count] = '.';
+    copyToString(&number_string->string, tmp, 0);
+    if (is_negative) number_string->string.length++;
+}
+
+INLINE vec2 getVec2Of(f32 value) {
+    vec2 out;
+
+    out.x = out.y = value;
+
+    return out;
+}
+
+INLINE vec2 invertedVec2(vec2 in) {
+    vec2 out;
+
+    out.x = -in.x;
+    out.y = -in.y;
+
+    return out;
+}
+
+INLINE vec2 oneOverVec2(vec2 v) {
+    vec2 out;
+
+    out.x = 1.0f / v.x;
+    out.y = 1.0f / v.y;
+
+    return out;
+}
+
+INLINE vec2 approachVec2(vec2 src, vec2 trg, f32 diff) {
+    vec2 out;
+
+    out.x = approach(src.x, trg.x, diff);
+    out.y = approach(src.y, trg.y, diff);
+
+    return out;
+}
+
+INLINE bool nonZeroVec2(vec2 v) {
+    return v.x != 0 ||
+    v.y != 0;
+}
+
+INLINE vec2 minVec2(vec2 a, vec2 b) {
+    vec2 out;
+
+    out.x = a.x < b.x ? a.x : b.x;
+    out.y = a.y < b.y ? a.y : b.y;
+
+    return out;
+}
+
+INLINE vec2 maxVec2(vec2 a, vec2 b) {
+    vec2 out;
+
+    out.x = a.x > b.x ? a.x : b.x;
+    out.y = a.y > b.y ? a.y : b.y;
+
+    return out;
+}
+
+INLINE f32 minCoordVec2(vec2 v) {
+    f32 out = v.x;
+    if (v.y < out) out = v.y;
+    return out;
+}
+
+INLINE f32 maxCoordVec2(vec2 v) {
+    f32 out = v.x;
+    if (v.y > out) out = v.y;
+    return out;
+}
+
+INLINE vec2 subVec2(vec2 a, vec2 b) {
+    vec2 out;
+
+    out.x = a.x - b.x;
+    out.y = a.y - b.y;
+
+    return out;
+}
+
+INLINE vec2 addVec2(vec2 a, vec2 b) {
+    vec2 out;
+
+    out.x = a.x + b.x;
+    out.y = a.y + b.y;
+
+    return out;
+}
+
+INLINE vec2 mulVec2(vec2 a, vec2 b) {
+    vec2 out;
+
+    out.x = a.x * b.x;
+    out.y = a.y * b.y;
+
+    return out;
+}
+
+INLINE vec2 mulAddVec2(vec2 v, vec2 factors, vec2 to_be_added) {
+    vec2 out;
+
+    out.x = fast_mul_add(v.x, factors.x, to_be_added.x);
+    out.y = fast_mul_add(v.y, factors.y, to_be_added.y);
+
+    return out;
+}
+
+INLINE vec2 scaleAddVec2(vec2 v, f32 factor, vec2 to_be_added) {
+    vec2 out;
+
+    out.x = fast_mul_add(v.x, factor, to_be_added.x);
+    out.y = fast_mul_add(v.y, factor, to_be_added.y);
+
+    return out;
+}
+
+INLINE vec2 scaleVec2(vec2 a, f32 factor) {
+    vec2 out;
+
+    out.x = a.x * factor;
+    out.y = a.y * factor;
+
+    return out;
+}
+
+INLINE vec2 mulVec2Mat2(vec2 in, mat2 m) {
+    vec2 out;
+
+    out.x = in.x * m.X.x + in.y * m.Y.x;
+    out.y = in.x * m.X.y + in.y * m.Y.y;
+
+    return out;
+}
+
+INLINE f32 dotVec2(vec2 a, vec2 b) {
+    return (
+            (a.x * b.x) +
+            (a.y * b.y)
+            );
+}
+
+INLINE f32 squaredLengthVec2(vec2 v) {
+    return (
+            (v.x * v.x) +
+            (v.y * v.y)
+            );
+}
+
+INLINE f32 lengthVec2(vec2 v) {
+    return sqrtf(squaredLengthVec2(v));
+}
+
+INLINE vec2 normVec2(vec2 v) {
+    return scaleVec2(v, 1.0f / lengthVec2(v));
+}
+
+INLINE f32 DotVec2(vec2 a, vec2 b) { return clampValue(dotVec2(a, b)); }
+
+INLINE mat2 outerVec2(vec2 a, vec2 b) {
+    mat2 out;
+
+    out.X = scaleVec2(a, b.x);
+    out.Y = scaleVec2(a, b.y);
+
+    return out;
+}
+
+INLINE vec2 reflectVec2(vec2 V, vec2 N) {
+    vec2 out = scaleVec2(N, -2 * dotVec2(N, V));
+    out = addVec2(out, V);
+    return out;
 }
 
 INLINE mat2 getMat2Identity() {
@@ -1433,7 +1491,7 @@ INLINE mat2 invMat2(mat2 m) {
     mat2 out;
 
     f32 a = m.X.x,  b = m.X.y,
-            c = m.Y.x,  d = m.Y.y;
+    c = m.Y.x,  d = m.Y.y;
 
     f32 det = a*d - b*c;
     f32 one_over_det = 1.0f / det;
@@ -1448,7 +1506,7 @@ INLINE mat2 invMat2(mat2 m) {
 
 INLINE bool safeInvertMat2(mat2 *m) {
     f32 a = m->X.x,  b = m->X.y,
-            c = m->Y.x,  d = m->Y.y;
+    c = m->Y.x,  d = m->Y.y;
 
     f32 det = a*d - b*c;
     if (!det) return false;
@@ -1481,6 +1539,10 @@ INLINE void setRotationMat2(f32 roll, mat2* roll_matrix) {
     roll_matrix->X.x = roll_matrix->Y.y = xy.x;
     roll_matrix->X.y = -xy.y;
     roll_matrix->Y.x = +xy.y;
+}
+
+INLINE bool isEqualVec3(vec3 a, vec3 b) {
+    return a.x == b.x && a.y == b.y && a.z == b.z;
 }
 
 INLINE vec3 getVec3Of(f32 value) {
@@ -1523,8 +1585,8 @@ INLINE vec3 approachVec3(vec3 src, vec3 trg, f32 diff) {
 
 INLINE bool nonZeroVec3(vec3 v) {
     return v.x != 0 ||
-           v.y != 0 ||
-           v.z != 0;
+    v.y != 0 ||
+    v.z != 0;
 }
 
 INLINE vec3 minVec3(vec3 a, vec3 b) {
@@ -1650,7 +1712,7 @@ INLINE f32 dotVec3(vec3 a, vec3 b) {
             (a.x * b.x) +
             (a.y * b.y) +
             (a.z * b.z)
-    );
+            );
 }
 
 INLINE vec3 crossVec3(vec3 a, vec3 b) {
@@ -1668,7 +1730,7 @@ INLINE f32 squaredLengthVec3(vec3 v) {
             (v.x * v.x) +
             (v.y * v.y) +
             (v.z * v.z)
-    );
+            );
 }
 
 INLINE f32 lengthVec3(vec3 v) {
@@ -1695,6 +1757,10 @@ INLINE vec3 reflectVec3(vec3 V, vec3 N) {
     vec3 out = scaleVec3(N, -2 * dotVec3(N, V));
     out = addVec3(out, V);
     return out;
+}
+
+INLINE vec3 lerpVec3(vec3 from, vec3 to, f32 by) {
+    return scaleAddVec3(subVec3(to, from), by, from);
 }
 
 INLINE mat3 getMat3Identity() {
@@ -1796,7 +1862,7 @@ INLINE mat3 invMat3(mat3 m) {
             + m.X.x * (m.Y.y * m.Z.z - m.Z.y * m.Y.z)
             - m.Y.x * (m.X.y * m.Z.z - m.Z.y * m.X.z)
             + m.Z.x * (m.X.y * m.Y.z - m.Y.y * m.X.z)
-    );
+            );
 
     out.X.x = + (m.Y.y * m.Z.z - m.Z.y * m.Y.z) * one_over_determinant;
     out.Y.x = - (m.Y.x * m.Z.z - m.Z.x * m.Y.z) * one_over_determinant;
@@ -1813,41 +1879,41 @@ INLINE mat3 invMat3(mat3 m) {
 
 INLINE bool safeInvertMat3(mat3 *m) {
     f32 m11 = m->X.x,  m12 = m->X.y,  m13 = m->X.z,
-            m21 = m->Y.x,  m22 = m->Y.y,  m23 = m->Y.z,
-            m31 = m->Z.x,  m32 = m->Z.y,  m33 = m->Z.z,
+    m21 = m->Y.x,  m22 = m->Y.y,  m23 = m->Y.z,
+    m31 = m->Z.x,  m32 = m->Z.y,  m33 = m->Z.z,
 
-            c11 = m22*m33 -
-                  m23*m32,
+    c11 = m22*m33 -
+            m23*m32,
 
             c12 = m13*m32 -
-                  m12*m33,
+                    m12*m33,
 
-            c13 = m12*m23 -
-                  m13*m22,
-
-
-            c21 = m23*m31 -
-                  m21*m33,
-
-            c22 = m11*m33 -
-                  m13*m31,
-
-            c23 = m13*m21 -
-                  m11*m23,
+                    c13 = m12*m23 -
+                            m13*m22,
 
 
-            c31 = m21*m32 -
-                  m22*m31,
+                            c21 = m23*m31 -
+                                    m21*m33,
 
-            c32 = m12*m31 -
-                  m11*m32,
+                                    c22 = m11*m33 -
+                                            m13*m31,
 
-            c33 = m11*m22 -
-                  m12*m21,
+                                            c23 = m13*m21 -
+                                                    m11*m23,
 
-            d = c11 + c12 + c13 +
-                c21 + c22 + c23 +
-                c31 + c32 + c33;
+
+                                                    c31 = m21*m32 -
+                                                            m22*m31,
+
+                                                            c32 = m12*m31 -
+                                                                    m11*m32,
+
+                                                                    c33 = m11*m22 -
+                                                                            m12*m21,
+
+                                                                            d = c11 + c12 + c13 +
+                                                                                    c21 + c22 + c23 +
+                                                                                    c31 + c32 + c33;
 
     if (!d) return false;
 
@@ -1932,6 +1998,159 @@ INLINE void setRollMat3(f32 roll, mat3* roll_matrix) {
     roll_matrix->Y.x = +xy.y;
 }
 
+INLINE quat getIdentityQuaternion() {
+    quat out;
+
+    out.axis = getVec3Of(0);
+    out.amount = 1;
+
+    return out;
+}
+
+INLINE quat normQuat(quat q) {
+    quat out;
+
+    f32 factor = 1.0f / sqrtf(q.axis.x * q.axis.x + q.axis.y * q.axis.y + q.axis.z * q.axis.z + q.amount * q.amount);
+    out.axis = scaleVec3(q.axis, factor);
+    out.amount = q.amount * factor;
+
+    return out;
+}
+
+INLINE vec3 mulVec3Quat(const vec3 v, quat q) {
+    vec3 out = crossVec3(q.axis, v);
+    vec3 qqv = crossVec3(q.axis, out);
+    out = scaleAddVec3(out, q.amount, qqv);
+    out = scaleAddVec3(out, 2, v);
+    return out;
+}
+
+INLINE quat mulQuat(quat a, quat b) {
+    quat out;
+
+    out.amount = a.amount * b.amount - a.axis.x * b.axis.x - a.axis.y * b.axis.y - a.axis.z * b.axis.z;
+    out.axis.x = a.amount * b.axis.x + a.axis.x * b.amount + a.axis.y * b.axis.z - a.axis.z * b.axis.y;
+    out.axis.y = a.amount * b.axis.y - a.axis.x * b.axis.z + a.axis.y * b.amount + a.axis.z * b.axis.x;
+    out.axis.z = a.amount * b.axis.z + a.axis.x * b.axis.y - a.axis.y * b.axis.x + a.axis.z * b.amount;
+
+    return out;
+}
+
+INLINE quat conjugate(quat q) {
+    quat out;
+
+    out.amount = q.amount;
+    out.axis = invertedVec3(q.axis);
+
+    return out;
+}
+
+INLINE quat convertRotationMatrixToQuaternion(mat3 rotation_matrix) {
+    quat out;
+
+    f32 fourXSquaredMinus1 = rotation_matrix.X.x - rotation_matrix.Y.y - rotation_matrix.Z.z;
+    f32 fourYSquaredMinus1 = rotation_matrix.Y.y - rotation_matrix.X.x - rotation_matrix.Z.z;
+    f32 fourZSquaredMinus1 = rotation_matrix.Z.z - rotation_matrix.X.x - rotation_matrix.Y.y;
+    f32 fourWSquaredMinus1 = rotation_matrix.X.x + rotation_matrix.Y.y + rotation_matrix.Z.z;
+
+    int biggestIndex = 0;
+    f32 fourBiggestSquaredMinus1 = fourWSquaredMinus1;
+    if (fourXSquaredMinus1 > fourBiggestSquaredMinus1) {
+        fourBiggestSquaredMinus1 = fourXSquaredMinus1;
+        biggestIndex = 1;
+    }
+    if (fourYSquaredMinus1 > fourBiggestSquaredMinus1) {
+        fourBiggestSquaredMinus1 = fourYSquaredMinus1;
+        biggestIndex = 2;
+    }
+    if (fourZSquaredMinus1 > fourBiggestSquaredMinus1) {
+        fourBiggestSquaredMinus1 = fourZSquaredMinus1;
+        biggestIndex = 3;
+    }
+
+    f32 biggestVal = sqrtf(fourBiggestSquaredMinus1 + 1.0f) * 0.5f;
+    f32 mult = 0.25f / biggestVal;
+
+    switch(biggestIndex) {
+        case 0:
+            out.amount = biggestVal;
+            out.axis.x = (rotation_matrix.Y.z - rotation_matrix.Z.y) * mult;
+            out.axis.y = (rotation_matrix.Z.x - rotation_matrix.X.z) * mult;
+            out.axis.z = (rotation_matrix.X.y - rotation_matrix.Y.x) * mult;
+            break;
+            case 1:
+                out.amount = (rotation_matrix.Y.z - rotation_matrix.Z.y) * mult;
+                out.axis.x = biggestVal;
+                out.axis.y = (rotation_matrix.X.y + rotation_matrix.Y.x) * mult;
+                out.axis.z = (rotation_matrix.Z.x + rotation_matrix.X.z) * mult;
+                break;
+                case 2:
+                    out.amount = (rotation_matrix.Z.x - rotation_matrix.X.z) * mult;
+                    out.axis.x = (rotation_matrix.X.y + rotation_matrix.Y.x) * mult;
+                    out.axis.y = biggestVal;
+                    out.axis.z = (rotation_matrix.Y.z + rotation_matrix.Z.y) * mult;
+                    break;
+                    case 3:
+                        out.amount = (rotation_matrix.X.y - rotation_matrix.Y.x) * mult;
+                        out.axis.x = (rotation_matrix.Z.x + rotation_matrix.X.z) * mult;
+                        out.axis.y = (rotation_matrix.Y.z + rotation_matrix.Z.y) * mult;
+                        out.axis.z = biggestVal;
+                        break;
+    }
+
+    return out;
+}
+
+INLINE mat3 convertQuaternionToRotationMatrix(quat q) {
+    mat3 out;
+
+    f32 q0 = q.amount;
+    f32 q1 = q.axis.x;
+    f32 q2 = q.axis.y;
+    f32 q3 = q.axis.z;
+
+    out.X.x = 2 * (q0 * q0 + q1 * q1) - 1;
+    out.X.y = 2 * (q1 * q2 - q0 * q3);
+    out.X.z = 2 * (q1 * q3 + q0 * q2);
+
+    out.Y.x = 2 * (q1 * q2 + q0 * q3);
+    out.Y.y = 2 * (q0 * q0 + q2 * q2) - 1;
+    out.Y.z = 2 * (q2 * q3 - q0 * q1);
+
+    out.Z.x = 2 * (q1 * q3 - q0 * q2);
+    out.Z.y = 2 * (q2 * q3 + q0 * q1);
+    out.Z.z = 2 * (q0 * q0 + q3 * q3) - 1;
+
+    return out;
+}
+
+INLINE quat getRotationAroundAxis(vec3 axis, f32 amount) {
+    vec2 sin_cos = getPointOnUnitCircle(amount);
+    quat out;
+    out.axis = scaleVec3(axis, sin_cos.y);
+    out.amount = sin_cos.x;
+
+    return normQuat(out);
+}
+
+INLINE quat getRotationAroundAxisBySinCon(vec3 axis, vec2 sin_cos) {
+    quat out;
+    out.axis = scaleVec3(axis, sin_cos.y);
+    out.amount = sin_cos.x;
+
+    return normQuat(out);
+}
+
+INLINE quat rotateAroundAxisBySinCos(quat q, vec3 axis, vec2 sin_cos) {
+    quat rotation = getRotationAroundAxisBySinCon(axis, sin_cos);
+    return mulQuat(q, rotation);
+}
+
+INLINE quat rotateAroundAxis(quat q, vec3 axis, f32 amount) {
+    quat rotation = getRotationAroundAxis(axis, amount);
+    return mulQuat(q, rotation);
+}
+
 INLINE vec4 getVec4Of(f32 value) {
     vec4 out;
 
@@ -1964,9 +2183,9 @@ INLINE vec4 approachVec4(vec4 src, vec4 trg, f32 diff) {
 
 INLINE bool nonZeroVec4(vec4 v) {
     return v.x != 0 ||
-           v.y != 0 ||
-           v.z != 0 ||
-           v.w != 0;
+    v.y != 0 ||
+    v.z != 0 ||
+    v.w != 0;
 }
 
 INLINE vec4 subVec4(vec4 a, vec4 b) {
@@ -2012,6 +2231,16 @@ INLINE vec4 scaleVec4(vec4 a, f32 factor) {
 
     return out;
 }
+INLINE vec4 scaleAddVec4(vec4 v, f32 factor, vec4 to_be_added) {
+    vec4 out;
+
+    out.x = fast_mul_add(v.x, factor, to_be_added.x);
+    out.y = fast_mul_add(v.y, factor, to_be_added.y);
+    out.z = fast_mul_add(v.z, factor, to_be_added.z);
+    out.w = fast_mul_add(v.w, factor, to_be_added.w);
+
+    return out;
+}
 
 INLINE vec4 mulVec4Mat4(vec4 in, mat4 m) {
     vec4 out;
@@ -2030,7 +2259,7 @@ INLINE f32 dotVec4(vec4 a, vec4 b) {
             (a.y * b.y) +
             (a.z * b.z) +
             (a.w * b.w)
-    );
+            );
 }
 
 INLINE f32 squaredLengthVec4(vec4 v) {
@@ -2039,7 +2268,7 @@ INLINE f32 squaredLengthVec4(vec4 v) {
             (v.y * v.y) +
             (v.z * v.z) +
             (v.w * v.w)
-    );
+            );
 }
 
 INLINE f32 lengthVec4(vec4 v) {
@@ -2050,6 +2279,15 @@ INLINE vec4 norm4(vec4 v) {
     return scaleVec4(v, 1.0f / lengthVec4(v));
 }
 
+INLINE f32 mulVec3Mat4(vec3 in, f32 w, mat4 M, vec3 *out) {
+    vec4 v4 = mulVec4Mat4(Vec4fromVec3(in, w), M);
+    *out = Vec3fromVec4(v4);
+    return v4.w;
+}
+
+INLINE vec4 lerpVec4(vec4 from, vec4 to, f32 by) {
+    return scaleAddVec4(subVec4(to, from), by, from);
+}
 INLINE mat4 getMat4Identity() {
     mat4 out;
 
@@ -2180,9 +2418,9 @@ INLINE mat4 invMat4(mat4 m) {
     mat4 out;
 
     f32 m11 = m.X.x,  m12 = m.X.y,  m13 = m.X.z, m14 = m.X.w,
-            m21 = m.Y.x,  m22 = m.Y.y,  m23 = m.Y.z, m24 = m.Y.w,
-            m31 = m.Z.x,  m32 = m.Z.y,  m33 = m.Z.z, m34 = m.Z.w,
-            m41 = m.W.x,  m42 = m.W.y,  m43 = m.W.z, m44 = m.W.w;
+    m21 = m.Y.x,  m22 = m.Y.y,  m23 = m.Y.z, m24 = m.Y.w,
+    m31 = m.Z.x,  m32 = m.Z.y,  m33 = m.Z.z, m34 = m.Z.w,
+    m41 = m.W.x,  m42 = m.W.y,  m43 = m.W.z, m44 = m.W.w;
 
     out.X.x = +m22*m33*m44 - m22*m34*m43 - m32*m23*m44 + m32*m24*m43 + m42*m23*m34 - m42*m24*m33;
     out.X.y = -m12*m33*m44 + m12*m34*m43 + m32*m13*m44 - m32*m14*m43 - m42*m13*m34 + m42*m14*m33;
@@ -2284,145 +2522,544 @@ INLINE void setRollMat4(f32 roll, mat4 *roll_matrix) {
     roll_matrix->Y.x = +xy.y;
 }
 
-INLINE quat getIdentityQuaternion() {
-    quat out;
-
-    out.axis = getVec3Of(0);
-    out.amount = 1;
-
-    return out;
-}
-
-INLINE quat normQuat(quat q) {
-    quat out;
-
-    f32 factor = 1.0f / sqrtf(q.axis.x * q.axis.x + q.axis.y * q.axis.y + q.axis.z * q.axis.z + q.amount * q.amount);
-    out.axis = scaleVec3(q.axis, factor);
-    out.amount = q.amount * factor;
+INLINE mat4 mat4fromMat3(mat3 m3) {
+    mat4 out = getMat4Identity();
+    for (u8 row = 0; row < 3; row++)
+        for (u8 col = 0; col < 3; col++)
+            out.axis[row].components[col] = m3.axis[row].components[col];
 
     return out;
 }
 
-INLINE vec3 mulVec3Quat(const vec3 v, quat q) {
-    vec3 out = crossVec3(q.axis, v);
-    vec3 qqv = crossVec3(q.axis, out);
-    out = scaleAddVec3(out, q.amount, qqv);
-    out = scaleAddVec3(out, 2, v);
-    return out;
+void initMouse(Mouse *mouse) {
+    mouse->is_captured = false;
+
+    mouse->moved = false;
+    mouse->move_handled = false;
+
+    mouse->double_clicked = false;
+    mouse->double_clicked_handled = false;
+
+    mouse->wheel_scrolled = false;
+    mouse->wheel_scroll_amount = 0;
+    mouse->wheel_scroll_handled = false;
+
+    mouse->pos.x = 0;
+    mouse->pos.y = 0;
+    mouse->pos_raw_diff.x = 0;
+    mouse->pos_raw_diff.y = 0;
+    mouse->raw_movement_handled = false;
+
+    mouse->middle_button.is_pressed = false;
+    mouse->middle_button.is_handled = false;
+    mouse->middle_button.up_pos.x = 0;
+    mouse->middle_button.down_pos.x = 0;
+
+    mouse->right_button.is_pressed = false;
+    mouse->right_button.is_handled = false;
+    mouse->right_button.up_pos.x = 0;
+    mouse->right_button.down_pos.x = 0;
+
+    mouse->left_button.is_pressed = false;
+    mouse->left_button.is_handled = false;
+    mouse->left_button.up_pos.x = 0;
+    mouse->left_button.down_pos.x = 0;
 }
 
-INLINE quat mulQuat(quat a, quat b) {
-    quat out;
+void initTimer(Timer *timer, GetTicks getTicks, Ticks *ticks) {
+    timer->getTicks = getTicks;
+    timer->ticks    = ticks;
 
-    out.amount = a.amount * b.amount - a.axis.x * b.axis.x - a.axis.y * b.axis.y - a.axis.z * b.axis.z;
-    out.axis.x = a.amount * b.axis.x + a.axis.x * b.amount + a.axis.y * b.axis.z - a.axis.z * b.axis.y;
-    out.axis.y = a.amount * b.axis.y - a.axis.x * b.axis.z + a.axis.y * b.amount + a.axis.z * b.axis.x;
-    out.axis.z = a.amount * b.axis.z + a.axis.x * b.axis.y - a.axis.y * b.axis.x + a.axis.z * b.amount;
+    timer->delta_time = 0;
+    timer->ticks_before = 0;
+    timer->ticks_after = 0;
+    timer->ticks_diff = 0;
 
-    return out;
+    timer->accumulated_ticks = 0;
+    timer->accumulated_frame_count = 0;
+
+    timer->ticks_of_last_report = 0;
+
+    timer->seconds = 0;
+    timer->milliseconds = 0;
+    timer->microseconds = 0;
+    timer->nanoseconds = 0;
+
+    timer->average_frames_per_tick = 0;
+    timer->average_ticks_per_frame = 0;
+    timer->average_frames_per_second = 0;
+    timer->average_milliseconds_per_frame = 0;
+    timer->average_microseconds_per_frame = 0;
+    timer->average_nanoseconds_per_frame = 0;
 }
 
-INLINE quat conjugate(quat q) {
-    quat out;
+void initTime(Time *time, GetTicks getTicks, u64 ticks_per_second) {
+    time->getTicks = getTicks;
+    time->ticks.per_second = ticks_per_second;
 
-    out.amount = q.amount;
-    out.axis = invertedVec3(q.axis);
+    time->ticks.per_tick.seconds      = 1          / (f64)(time->ticks.per_second);
+    time->ticks.per_tick.milliseconds = 1000       / (f64)(time->ticks.per_second);
+    time->ticks.per_tick.microseconds = 1000000    / (f64)(time->ticks.per_second);
+    time->ticks.per_tick.nanoseconds  = 1000000000 / (f64)(time->ticks.per_second);
 
-    return out;
+    initTimer(&time->timers.update, getTicks, &time->ticks);
+    initTimer(&time->timers.render, getTicks, &time->ticks);
+    initTimer(&time->timers.aux,    getTicks, &time->ticks);
+
+    time->timers.update.ticks_before = time->timers.update.ticks_of_last_report = getTicks();
 }
 
-INLINE quat convertRotationMatrixToQuaternion(mat3 rotation_matrix) {
-    quat out;
+void initPixelGrid(PixelGrid *pixel_grid, void* memory, u32 max_width, u32 max_height) {
+    pixel_grid->pixels = (Pixel*)(memory);
+    pixel_grid->float_pixels = (FloatPixel*)(pixel_grid->pixels + max_width * max_height);
+    updateDimensions(&pixel_grid->dimensions, max_width, max_height);
+}
 
-    f32 fourXSquaredMinus1 = rotation_matrix.X.x - rotation_matrix.Y.y - rotation_matrix.Z.z;
-    f32 fourYSquaredMinus1 = rotation_matrix.Y.y - rotation_matrix.X.x - rotation_matrix.Z.z;
-    f32 fourZSquaredMinus1 = rotation_matrix.Z.z - rotation_matrix.X.x - rotation_matrix.Y.y;
-    f32 fourWSquaredMinus1 = rotation_matrix.X.x + rotation_matrix.Y.y + rotation_matrix.Z.z;
-
-    int biggestIndex = 0;
-    f32 fourBiggestSquaredMinus1 = fourWSquaredMinus1;
-    if (fourXSquaredMinus1 > fourBiggestSquaredMinus1) {
-        fourBiggestSquaredMinus1 = fourXSquaredMinus1;
-        biggestIndex = 1;
+void fillPixelGrid(PixelGrid *pixel_grid, vec3 color, f32 opacity) {
+    Pixel pixel;
+    pixel.color.R = (u8)color.r;
+    pixel.color.G = (u8)color.g;
+    pixel.color.B = (u8)color.b;
+    pixel.color.A = (u8)((f32)MAX_COLOR_VALUE * opacity);
+    FloatPixel float_pixel;
+    float_pixel.color = color;
+    float_pixel.opacity = opacity;
+    float_pixel.depth = INFINITY;
+    for (u32 i = 0; i < pixel_grid->dimensions.width_times_height; i++) {
+        pixel_grid->pixels[i]             = pixel;
+        pixel_grid->float_pixels[i] = float_pixel;
     }
-    if (fourYSquaredMinus1 > fourBiggestSquaredMinus1) {
-        fourBiggestSquaredMinus1 = fourYSquaredMinus1;
-        biggestIndex = 2;
+}
+
+void initXform3(xform3 *xform) {
+    mat3 I;
+    I.X.x = 1; I.Y.x = 0; I.Z.x = 0;
+    I.X.y = 0; I.Y.y = 1; I.Z.y = 0;
+    I.X.z = 0; I.Y.z = 0; I.Z.z = 1;
+    xform->matrix = xform->yaw_matrix = xform->pitch_matrix = xform->roll_matrix = xform->rotation_matrix = xform->rotation_matrix_inverted = I;
+    xform->right_direction   = &xform->rotation_matrix.X;
+    xform->up_direction      = &xform->rotation_matrix.Y;
+    xform->forward_direction = &xform->rotation_matrix.Z;
+    xform->scale.x = 1;
+    xform->scale.y = 1;
+    xform->scale.z = 1;
+    xform->position.x = 0;
+    xform->position.y = 0;
+    xform->position.z = 0;
+    xform->rotation.axis.x = 0;
+    xform->rotation.axis.y = 0;
+    xform->rotation.axis.z = 0;
+    xform->rotation.amount = 1;
+    xform->rotation_inverted = xform->rotation;
+}
+
+void initCamera(Camera* camera) {
+    camera->focal_length = camera->zoom = CAMERA_DEFAULT__FOCAL_LENGTH;
+    camera->target_distance = CAMERA_DEFAULT__TARGET_DISTANCE;
+    camera->dolly = 0;
+    camera->current_velocity.x = 0;
+    camera->current_velocity.y = 0;
+    camera->current_velocity.z = 0;
+    initXform3(&camera->transform);
+}
+
+void initBox(Box *box) {
+    box->vertices.corners.front_top_left.x    = -1;
+    box->vertices.corners.back_top_left.x     = -1;
+    box->vertices.corners.front_bottom_left.x = -1;
+    box->vertices.corners.back_bottom_left.x  = -1;
+
+    box->vertices.corners.front_top_right.x    = 1;
+    box->vertices.corners.back_top_right.x     = 1;
+    box->vertices.corners.front_bottom_right.x = 1;
+    box->vertices.corners.back_bottom_right.x  = 1;
+
+
+    box->vertices.corners.front_bottom_left.y  = -1;
+    box->vertices.corners.front_bottom_right.y = -1;
+    box->vertices.corners.back_bottom_left.y   = -1;
+    box->vertices.corners.back_bottom_right.y  = -1;
+
+    box->vertices.corners.front_top_left.y  = 1;
+    box->vertices.corners.front_top_right.y = 1;
+    box->vertices.corners.back_top_left.y   = 1;
+    box->vertices.corners.back_top_right.y  = 1;
+
+
+    box->vertices.corners.front_top_left.z     = 1;
+    box->vertices.corners.front_top_right.z    = 1;
+    box->vertices.corners.front_bottom_left.z  = 1;
+    box->vertices.corners.front_bottom_right.z = 1;
+
+    box->vertices.corners.back_top_left.z     = -1;
+    box->vertices.corners.back_top_right.z    = -1;
+    box->vertices.corners.back_bottom_left.z  = -1;
+    box->vertices.corners.back_bottom_right.z = -1;
+
+    setBoxEdgesFromVertices(&box->edges, &box->vertices);
+}
+
+void initHUD(HUD *hud, HUDLine *lines, u32 line_count, f32 line_height, enum ColorID default_color, i32 position_x, i32 position_y) {
+    hud->lines = lines;
+    hud->line_count = line_count;
+    hud->line_height = line_height;
+    hud->position.x = position_x;
+    hud->position.y = position_y;
+
+    if (lines) {
+        HUDLine *line = lines;
+        for (u32 i = 0; i < line_count; i++, line++) {
+            line->use_alternate = null;
+            line->invert_alternate_use = false;
+            line->title_color = line->value_color = line->alternate_value_color = default_color;
+            initNumberString(&line->value);
+            line->title.char_ptr = line->alternate_value.char_ptr = (char*)("");
+            line->title.length = line->alternate_value.length = 0;
+        }
     }
-    if (fourZSquaredMinus1 > fourBiggestSquaredMinus1) {
-        fourBiggestSquaredMinus1 = fourZSquaredMinus1;
-        biggestIndex = 3;
+}
+
+void setDefaultNavigationSettings(NavigationSettings *settings) {
+    settings->max_velocity  = NAVIGATION_DEFAULT__MAX_VELOCITY;
+    settings->acceleration  = NAVIGATION_DEFAULT__ACCELERATION;
+    settings->speeds.turn   = NAVIGATION_SPEED_DEFAULT__TURN;
+    settings->speeds.orient = NAVIGATION_SPEED_DEFAULT__ORIENT;
+    settings->speeds.orbit  = NAVIGATION_SPEED_DEFAULT__ORBIT;
+    settings->speeds.zoom   = NAVIGATION_SPEED_DEFAULT__ZOOM;
+    settings->speeds.dolly  = NAVIGATION_SPEED_DEFAULT__DOLLY;
+    settings->speeds.pan    = NAVIGATION_SPEED_DEFAULT__PAN;
+}
+
+void initNavigation(Navigation *navigation, NavigationSettings *navigation_settings) {
+    navigation->settings = *navigation_settings;
+
+    navigation->turned = false;
+    navigation->moved = false;
+    navigation->zoomed = false;
+
+    navigation->move.right = false;
+    navigation->move.left = false;
+    navigation->move.up = false;
+    navigation->move.down = false;
+    navigation->move.forward = false;
+    navigation->move.backward = false;
+
+    navigation->turn.right = false;
+    navigation->turn.left = false;
+}
+
+void setDefaultViewportSettings(ViewportSettings *settings) {
+    settings->near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
+    settings->far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
+    settings->hud_default_color = White;
+    settings->hud_line_count = 0;
+    settings->hud_lines = null;
+    settings->show_hud = false;
+    settings->antialias = false;
+    settings->depth_sort = false;
+    settings->use_cube_NDC = false;
+    settings->flip_z = false;
+    settings->position.x = 0;
+    settings->position.y = 0;
+}
+
+void setPreProjectionMatrix(Viewport *viewport) {
+    f32 n = viewport->settings.near_clipping_plane_distance;
+    f32 f = viewport->settings.far_clipping_plane_distance;
+
+    viewport->pre_projection_matrix.X.y = viewport->pre_projection_matrix.X.z = viewport->pre_projection_matrix.X.w = 0;
+    viewport->pre_projection_matrix.Y.x = viewport->pre_projection_matrix.Y.z = viewport->pre_projection_matrix.Y.w = 0;
+    viewport->pre_projection_matrix.W.x = viewport->pre_projection_matrix.W.y = viewport->pre_projection_matrix.W.w = 0;
+    viewport->pre_projection_matrix.Z.x = viewport->pre_projection_matrix.Z.y = 0;
+    viewport->pre_projection_matrix.X.x = viewport->camera->focal_length * viewport->frame_buffer->dimensions.height_over_width;
+    viewport->pre_projection_matrix.Y.y = viewport->camera->focal_length;
+    viewport->pre_projection_matrix.Z.z = viewport->pre_projection_matrix.W.z = 1.0f / (f - n);
+    viewport->pre_projection_matrix.Z.z *= viewport->settings.use_cube_NDC ? (f + n) : f;
+    viewport->pre_projection_matrix.W.z *= viewport->settings.use_cube_NDC ? (-2 * f * n) : (-n * f);
+    viewport->pre_projection_matrix.Z.w = 1.0f;
+
+    viewport->pre_projection_matrix_inverted = invMat4(viewport->pre_projection_matrix);
+}
+
+void initViewport(Viewport *viewport,
+                  ViewportSettings *viewport_settings,
+                  NavigationSettings *navigation_settings,
+                  Camera *camera,
+                  PixelGrid *frame_buffer) {
+    viewport->camera = camera;
+    viewport->settings = *viewport_settings;
+    viewport->frame_buffer = frame_buffer;
+    initBox(&viewport->default_box);
+    initHUD(&viewport->hud, viewport_settings->hud_lines, viewport_settings->hud_line_count, 1, viewport_settings->hud_default_color, 0, 0);
+    initNavigation(&viewport->navigation, navigation_settings);
+    setPreProjectionMatrix(viewport);
+}
+
+void setDefaultSceneSettings(SceneSettings *settings) {
+    settings->cameras = 1;
+    settings->primitives = 0;
+    settings->meshes = 0;
+    settings->curves = 0;
+    settings->boxes = 0;
+    settings->grids = 0;
+    settings->mesh_files = null;
+    settings->file.char_ptr = null;
+    settings->file.length = 0;
+    settings->autoload = false;
+}
+
+void initCurve(Curve *curve) {
+    curve->thickness = 0.1f;
+    curve->revolution_count = 1;
+}
+
+void initPrimitive(Primitive *primitive) {
+    primitive->id = 0;
+    primitive->type = PrimitiveType_None;
+    primitive->color = White;
+    primitive->flags = ALL_FLAGS;
+    primitive->scale.x = 1;
+    primitive->scale.y = 1;
+    primitive->scale.z = 1;
+    primitive->position.x = 0;
+    primitive->position.y = 0;
+    primitive->position.z = 0;
+    primitive->rotation.axis.x = 0;
+    primitive->rotation.axis.y = 0;
+    primitive->rotation.axis.z = 0;
+    primitive->rotation.amount = 1;
+}
+
+bool initGrid(Grid *grid, u8 u_segments, u8 v_segments) {
+    if (!u_segments || u_segments > GRID__MAX_SEGMENTS ||
+    !v_segments || v_segments > GRID__MAX_SEGMENTS)
+        return false;
+
+    grid->u_segments = u_segments;
+    grid->v_segments = v_segments;
+
+    f32 u_step = u_segments > 1 ? (2.0f / (u_segments - 1)) : 0;
+    f32 v_step = v_segments > 1 ? (2.0f / (v_segments - 1)) : 0;
+
+    for (u8 u = 0; u < grid->u_segments; u++) {
+        grid->vertices.uv.u.from[u].y = grid->vertices.uv.u.to[u].y = 0;
+        grid->vertices.uv.u.from[u].x = grid->vertices.uv.u.to[u].x = -1 + u * u_step;
+        grid->vertices.uv.u.from[u].z = -1;
+        grid->vertices.uv.u.to[  u].z = +1;
+    }
+    for (u8 v = 0; v < grid->v_segments; v++) {
+        grid->vertices.uv.v.from[v].y = grid->vertices.uv.v.to[v].y = 0;
+        grid->vertices.uv.v.from[v].z = grid->vertices.uv.v.to[v].z = -1 + v * v_step;
+        grid->vertices.uv.v.from[v].x = -1;
+        grid->vertices.uv.v.to[  v].x = +1;
     }
 
-    f32 biggestVal = sqrtf(fourBiggestSquaredMinus1 + 1.0f) * 0.5f;
-    f32 mult = 0.25f / biggestVal;
+    setGridEdgesFromVertices(grid->edges.uv.u, grid->u_segments, grid->vertices.uv.u.from, grid->vertices.uv.u.to);
+    setGridEdgesFromVertices(grid->edges.uv.v, grid->v_segments, grid->vertices.uv.v.from, grid->vertices.uv.v.to);
 
-    switch(biggestIndex) {
-        case 0:
-            out.amount = biggestVal;
-            out.axis.x = (rotation_matrix.Y.z - rotation_matrix.Z.y) * mult;
-            out.axis.y = (rotation_matrix.Z.x - rotation_matrix.X.z) * mult;
-            out.axis.z = (rotation_matrix.X.y - rotation_matrix.Y.x) * mult;
-            break;
-        case 1:
-            out.amount = (rotation_matrix.Y.z - rotation_matrix.Z.y) * mult;
-            out.axis.x = biggestVal;
-            out.axis.y = (rotation_matrix.X.y + rotation_matrix.Y.x) * mult;
-            out.axis.z = (rotation_matrix.Z.x + rotation_matrix.X.z) * mult;
-            break;
-        case 2:
-            out.amount = (rotation_matrix.Z.x - rotation_matrix.X.z) * mult;
-            out.axis.x = (rotation_matrix.X.y + rotation_matrix.Y.x) * mult;
-            out.axis.y = biggestVal;
-            out.axis.z = (rotation_matrix.Y.z + rotation_matrix.Z.y) * mult;
-            break;
-        case 3:
-            out.amount = (rotation_matrix.X.y - rotation_matrix.Y.x) * mult;
-            out.axis.x = (rotation_matrix.Z.x + rotation_matrix.X.z) * mult;
-            out.axis.y = (rotation_matrix.Y.z + rotation_matrix.Z.y) * mult;
-            out.axis.z = biggestVal;
-            break;
+    return true;
+}
+
+void accumulateTimer(Timer* timer) {
+    timer->ticks_diff = timer->ticks_after - timer->ticks_before;
+    timer->accumulated_ticks += timer->ticks_diff;
+    timer->accumulated_frame_count++;
+
+    timer->seconds      = (u64)(timer->ticks->per_tick.seconds      * (f64)(timer->ticks_diff));
+    timer->milliseconds = (u64)(timer->ticks->per_tick.milliseconds * (f64)(timer->ticks_diff));
+    timer->microseconds = (u64)(timer->ticks->per_tick.microseconds * (f64)(timer->ticks_diff));
+    timer->nanoseconds  = (u64)(timer->ticks->per_tick.nanoseconds  * (f64)(timer->ticks_diff));
+}
+
+void averageTimer(Timer *timer) {
+    timer->average_frames_per_tick = (f64)timer->accumulated_frame_count / timer->accumulated_ticks;
+    timer->average_ticks_per_frame = (f64)timer->accumulated_ticks / timer->accumulated_frame_count;
+    timer->average_frames_per_second = (u16)(timer->average_frames_per_tick      * timer->ticks->per_second);
+    timer->average_milliseconds_per_frame = (u16)(timer->average_ticks_per_frame * timer->ticks->per_tick.milliseconds);
+    timer->average_microseconds_per_frame = (u16)(timer->average_ticks_per_frame * timer->ticks->per_tick.microseconds);
+    timer->average_nanoseconds_per_frame = (u16)(timer->average_ticks_per_frame  * timer->ticks->per_tick.nanoseconds);
+    timer->accumulated_ticks = timer->accumulated_frame_count = 0;
+}
+
+INLINE void startFrameTimer(Timer *timer) {
+    timer->ticks_after = timer->ticks_before;
+    timer->ticks_before = timer->getTicks();
+    timer->ticks_diff = timer->ticks_before - timer->ticks_after;
+    timer->delta_time = (f32)(timer->ticks_diff * timer->ticks->per_tick.seconds);
+}
+
+INLINE void endFrameTimer(Timer *timer) {
+    timer->ticks_after = timer->getTicks();
+    accumulateTimer(timer);
+    if (timer->accumulated_ticks >= timer->ticks->per_second / 4)
+        averageTimer(timer);
+}
+
+#define FONT_WIDTH 18
+#define FONT_HEIGHT 24
+#define LINE_HEIGHT 30
+#define FIRST_CHARACTER_CODE 32
+#define LAST_CHARACTER_CODE 126
+
+// Header File for SSD1306 characters
+// Generated with TTF2BMH
+// Font JetBrains Mono Regular
+// Font Size: 24
+u8 bitmap_32[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_33[] = {0,0,0,0,0,0,62,254,254,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,63,63,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,14,14,14,4,0,0,0,0,0,0,0,0};
+u8 bitmap_34[] = {0,0,0,0,254,254,0,0,0,254,254,254,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_35[] = {0,0,192,192,192,252,254,192,192,192,192,252,254,192,192,0,0,0,0,96,96,240,255,111,96,96,96,240,255,111,96,96,0,0,0,0,0,0,12,15,1,0,0,0,12,15,1,0,0,0,0,0,0,0};
+u8 bitmap_36[] = {0,0,112,248,252,14,6,255,255,6,14,60,56,32,0,0,0,0,0,0,128,129,3,7,6,255,255,12,28,248,240,192,0,0,0,0,0,0,3,7,14,12,12,255,255,12,12,15,7,1,0,0,0,0};
+u8 bitmap_37[] = {0,252,206,2,2,6,252,120,0,0,0,128,192,64,96,0,0,0,0,192,97,49,17,25,13,4,246,59,9,9,24,240,224,0,0,0,0,0,0,0,0,0,0,0,7,14,8,8,12,7,3,0,0,0};
+u8 bitmap_38[] = {0,0,0,252,252,142,6,6,6,14,28,24,0,0,0,0,0,0,0,248,252,254,3,3,15,28,120,240,224,248,60,12,4,0,0,0,0,1,7,7,14,12,12,14,6,7,1,7,14,12,8,0,0,0};
+u8 bitmap_39[] = {0,0,0,0,0,0,126,254,254,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_40[] = {0,0,0,0,0,240,252,62,7,3,1,1,0,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,7,15,28,56,112,96,96,0,0,0,0,0};
+u8 bitmap_41[] = {0,0,0,0,1,1,3,15,254,248,192,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,0,0,0,0,96,112,48,56,30,15,3,0,0,0,0,0,0,0,0};
+u8 bitmap_42[] = {0,0,0,0,0,0,0,240,240,0,0,0,0,0,0,0,0,0,0,3,3,131,198,246,124,15,61,118,230,199,131,3,2,0,0,0,0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0};
+u8 bitmap_43[] = {0,0,0,0,0,0,0,224,224,0,0,0,0,0,0,0,0,0,0,0,24,24,24,24,24,255,255,24,24,24,24,24,0,0,0,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,0};
+u8 bitmap_44[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,240,255,63,15,1,0,0,0,0,0,0,0,0};
+u8 bitmap_45[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,6,6,6,6,6,6,6,6,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_46[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,128,128,128,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15,15,15,7,0,0,0,0,0,0,0,0};
+u8 bitmap_47[] = {0,0,0,0,0,0,0,0,224,248,127,15,1,0,0,0,0,0,0,0,0,0,0,224,248,127,15,1,0,0,0,0,0,0,0,0,0,0,96,120,127,15,1,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_48[] = {0,0,240,248,60,14,6,134,134,14,12,252,248,192,0,0,0,0,0,0,255,255,128,0,31,63,63,0,0,255,255,127,0,0,0,0,0,0,1,3,7,14,12,12,12,14,6,7,3,0,0,0,0,0};
+u8 bitmap_49[] = {0,0,0,56,24,28,14,254,254,254,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,0,0,0,0,12,12,12,12,12,15,15,15,12,12,12,12,0,0,0,0};
+u8 bitmap_50[] = {0,0,56,60,28,14,6,6,6,14,28,252,248,0,0,0,0,0,0,0,0,0,128,192,224,112,48,28,15,7,3,0,0,0,0,0,0,0,14,15,15,13,12,12,12,12,12,12,12,12,0,0,0,0};
+u8 bitmap_51[] = {0,0,6,6,6,6,134,198,102,54,62,30,14,0,0,0,0,0,0,0,128,128,0,3,3,3,3,7,14,254,252,96,0,0,0,0,0,0,1,3,7,14,12,12,12,14,7,7,3,0,0,0,0,0};
+u8 bitmap_52[] = {0,0,0,0,0,128,192,240,120,30,14,2,0,0,0,0,0,0,0,0,240,252,254,199,195,192,192,192,192,254,254,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15,15,0,0,0,0,0};
+u8 bitmap_53[] = {0,0,254,254,254,6,6,6,6,6,6,6,6,0,0,0,0,0,0,0,7,7,7,6,3,3,3,3,7,254,252,240,0,0,0,0,0,0,1,7,7,14,12,12,12,14,14,7,3,0,0,0,0,0};
+u8 bitmap_54[] = {0,0,0,0,128,224,240,60,30,6,2,0,0,0,0,0,0,0,0,0,248,254,15,5,2,3,3,3,7,254,252,240,0,0,0,0,0,0,1,3,7,14,12,12,12,14,6,7,3,0,0,0,0,0};
+u8 bitmap_55[] = {0,0,62,62,6,6,6,6,6,6,230,254,126,14,0,0,0,0,0,0,0,0,0,0,128,224,252,63,15,1,0,0,0,0,0,0,0,0,0,0,8,14,15,7,1,0,0,0,0,0,0,0,0,0};
+u8 bitmap_56[] = {0,0,112,248,252,14,6,6,6,14,12,252,248,0,0,0,0,0,0,0,240,249,29,15,6,6,6,7,15,253,248,224,0,0,0,0,0,0,1,7,7,14,12,12,12,14,6,7,3,0,0,0,0,0};
+u8 bitmap_57[] = {0,0,240,248,28,14,6,6,6,6,12,252,248,224,0,0,0,0,0,0,3,7,15,14,12,140,204,244,126,31,7,1,0,0,0,0,0,0,0,0,0,8,14,15,3,1,0,0,0,0,0,0,0,0};
+u8 bitmap_58[] = {0,0,0,0,0,0,224,224,224,192,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15,15,15,6,0,0,0,0,0,0,0,0};
+u8 bitmap_59[] = {0,0,0,0,0,0,224,224,224,192,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,240,255,63,7,1,0,0,0,0,0,0,0,0};
+u8 bitmap_60[] = {0,0,0,0,0,128,128,192,192,224,96,112,48,0,0,0,0,0,0,0,14,15,27,27,49,49,96,96,192,192,128,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0};
+u8 bitmap_61[] = {0,0,192,192,192,192,192,192,192,192,192,192,192,192,0,0,0,0,0,0,96,96,96,96,96,96,96,96,96,96,96,96,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_62[] = {0,0,48,112,96,96,192,192,128,128,0,0,0,0,0,0,0,0,0,0,128,192,192,224,96,112,49,57,27,27,14,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_63[] = {0,0,0,0,6,6,6,6,6,12,252,248,224,0,0,0,0,0,0,0,0,0,0,124,124,124,12,14,7,3,0,0,0,0,0,0,0,0,0,0,0,14,14,14,4,0,0,0,0,0,0,0,0,0};
+u8 bitmap_64[] = {0,192,240,120,28,14,6,6,134,134,142,12,252,248,192,0,0,0,0,255,255,0,0,0,252,255,7,1,1,3,253,255,255,0,0,0,0,15,63,120,224,192,193,131,135,134,6,2,1,7,7,0,0,0};
+u8 bitmap_65[] = {0,0,0,0,128,240,254,14,62,254,224,0,0,0,0,0,0,0,0,0,128,248,255,127,97,96,96,99,127,254,224,0,0,0,0,0,0,8,15,15,1,0,0,0,0,0,0,3,15,15,0,0,0,0};
+u8 bitmap_66[] = {0,0,254,254,254,6,6,6,6,14,14,252,248,32,0,0,0,0,0,0,255,255,255,6,6,6,6,6,15,253,249,240,0,0,0,0,0,0,15,15,15,12,12,12,12,12,14,7,3,1,0,0,0,0};
+u8 bitmap_67[] = {0,0,224,248,252,14,6,6,6,6,14,60,56,32,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,128,128,128,0,0,0,0,0,0,0,3,7,14,12,12,12,12,14,7,3,0,0,0,0,0};
+u8 bitmap_68[] = {0,0,254,254,254,6,6,6,6,14,28,252,248,192,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,255,255,127,0,0,0,0,0,0,15,15,15,12,12,12,12,14,7,7,3,0,0,0,0,0};
+u8 bitmap_69[] = {0,0,254,254,254,6,6,6,6,6,6,6,6,6,0,0,0,0,0,0,255,255,255,6,6,6,6,6,6,6,6,0,0,0,0,0,0,0,15,15,15,12,12,12,12,12,12,12,12,12,0,0,0,0};
+u8 bitmap_70[] = {0,0,254,254,254,6,6,6,6,6,6,6,6,6,0,0,0,0,0,0,255,255,255,6,6,6,6,6,6,6,6,0,0,0,0,0,0,0,15,15,15,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_71[] = {0,0,240,248,60,14,6,6,6,14,14,60,56,32,0,0,0,0,0,0,255,255,128,0,0,12,12,12,12,252,252,124,0,0,0,0,0,0,1,3,7,14,12,12,12,14,6,7,3,0,0,0,0,0};
+u8 bitmap_72[] = {0,0,254,254,254,0,0,0,0,0,0,254,254,0,0,0,0,0,0,0,255,255,255,6,6,6,6,6,6,255,255,0,0,0,0,0,0,0,15,15,15,0,0,0,0,0,0,15,15,0,0,0,0,0};
+u8 bitmap_73[] = {0,0,6,6,6,6,6,254,254,6,6,6,6,0,0,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,12,12,12,12,12,15,15,12,12,12,12,0,0,0,0,0};
+u8 bitmap_74[] = {0,0,0,6,6,6,6,6,6,6,6,254,254,0,0,0,0,0,0,128,128,128,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,3,7,14,12,12,12,12,14,7,3,1,0,0,0,0,0};
+u8 bitmap_75[] = {0,0,254,254,254,0,0,0,128,224,240,124,30,6,2,0,0,0,0,0,255,255,255,6,6,6,31,127,248,224,128,0,0,0,0,0,0,0,15,15,15,0,0,0,0,0,1,7,15,14,8,0,0,0};
+u8 bitmap_76[] = {0,0,0,254,254,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15,15,12,12,12,12,12,12,12,12,12,0,0,0,0};
+u8 bitmap_77[] = {0,0,254,254,14,248,192,0,0,224,124,230,254,254,0,0,0,0,0,0,255,255,0,0,7,14,15,3,0,255,255,255,0,0,0,0,0,0,15,15,0,0,0,0,0,0,0,15,15,15,0,0,0,0};
+u8 bitmap_78[] = {0,0,254,254,14,124,240,128,0,0,0,254,254,0,0,0,0,0,0,0,255,255,0,0,3,15,126,240,128,255,255,0,0,0,0,0,0,0,15,15,0,0,0,0,0,3,15,15,15,0,0,0,0,0};
+u8 bitmap_79[] = {0,0,240,248,60,14,6,6,6,14,12,252,248,192,0,0,0,0,0,0,255,255,128,0,0,0,0,0,0,255,255,127,0,0,0,0,0,0,1,3,7,14,12,12,12,14,6,7,3,0,0,0,0,0};
+u8 bitmap_80[] = {0,0,254,254,254,6,6,6,6,6,14,28,252,248,0,0,0,0,0,0,255,255,255,12,12,12,12,12,14,7,7,1,0,0,0,0,0,0,15,15,15,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_81[] = {0,0,240,248,60,14,6,6,6,14,12,252,248,192,0,0,0,0,0,0,255,255,128,0,0,0,0,0,0,255,255,127,0,0,0,0,0,0,1,3,7,14,12,12,12,62,254,231,131,0,0,0,0,0};
+u8 bitmap_82[] = {0,0,254,254,254,6,6,6,6,6,14,188,248,240,0,0,0,0,0,0,255,255,255,12,12,12,28,252,254,199,3,1,0,0,0,0,0,0,15,15,15,0,0,0,0,0,3,15,15,12,0,0,0,0};
+u8 bitmap_83[] = {0,0,96,248,252,14,6,6,6,6,14,60,56,32,0,0,0,0,0,0,128,129,3,7,7,6,14,12,28,248,248,224,0,0,0,0,0,0,1,7,7,14,12,12,12,12,14,7,3,1,0,0,0,0};
+u8 bitmap_84[] = {0,6,6,6,6,6,6,254,254,6,6,6,6,6,0,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15,15,0,0,0,0,0,0,0,0,0};
+u8 bitmap_85[] = {0,0,254,254,254,0,0,0,0,0,0,254,254,0,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,1,3,7,14,12,12,12,14,6,7,3,0,0,0,0,0};
+u8 bitmap_86[] = {0,2,62,254,224,0,0,0,0,0,128,248,254,30,0,0,0,0,0,0,0,3,63,254,224,0,128,248,255,15,0,0,0,0,0,0,0,0,0,0,0,3,15,14,15,15,0,0,0,0,0,0,0,0};
+u8 bitmap_87[] = {0,254,254,0,0,0,252,62,254,224,0,0,240,254,62,0,0,0,0,3,255,255,0,252,63,0,1,255,224,0,255,255,0,0,0,0,0,0,15,15,8,15,0,0,0,3,15,15,15,0,0,0,0,0};
+u8 bitmap_88[] = {0,2,6,30,124,240,192,0,128,224,248,62,14,2,0,0,0,0,0,0,0,0,192,241,127,31,63,249,224,192,0,0,0,0,0,0,0,8,14,15,3,1,0,0,0,0,1,7,15,12,8,0,0,0};
+u8 bitmap_89[] = {0,6,30,124,240,192,0,0,0,128,224,248,62,14,2,0,0,0,0,0,0,0,1,7,31,252,252,15,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15,15,0,0,0,0,0,0,0,0,0};
+u8 bitmap_90[] = {0,0,6,6,6,6,6,6,134,230,246,62,14,0,0,0,0,0,0,0,0,0,192,240,124,30,7,1,0,0,0,0,0,0,0,0,0,0,14,15,15,12,12,12,12,12,12,12,12,0,0,0,0,0};
+u8 bitmap_91[] = {0,0,0,0,0,255,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,63,63,63,48,48,48,48,0,0,0,0,0,0};
+u8 bitmap_92[] = {0,0,0,3,31,254,240,192,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,31,254,240,192,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,31,126,112,64,0,0,0,0};
+u8 bitmap_93[] = {0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,0,48,48,48,48,63,63,0,0,0,0,0,0,0,0};
+u8 bitmap_94[] = {0,0,0,0,224,248,62,7,15,60,240,192,0,0,0,0,0,0,0,0,4,7,3,0,0,0,0,0,1,7,6,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_95[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,96,96,96,96,96,96,96,96,96,96,96,96,0,0,0,0};
+u8 bitmap_96[] = {0,0,0,0,0,0,1,7,6,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_97[] = {0,0,0,192,192,224,96,96,96,224,192,192,128,0,0,0,0,0,0,0,225,241,57,24,24,24,24,24,24,255,255,0,0,0,0,0,0,0,3,7,14,12,12,12,12,6,3,15,15,0,0,0,0,0};
+u8 bitmap_98[] = {0,0,254,254,254,192,64,96,96,224,224,192,128,0,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,255,255,124,0,0,0,0,0,0,15,15,15,6,12,12,12,14,14,7,3,0,0,0,0,0};
+u8 bitmap_99[] = {0,0,0,128,192,224,96,96,96,96,224,192,128,0,0,0,0,0,0,0,254,255,255,0,0,0,0,0,0,131,131,130,0,0,0,0,0,0,0,3,7,14,12,12,12,12,14,7,3,0,0,0,0,0};
+u8 bitmap_100[] = {0,0,0,192,192,224,96,96,96,192,128,254,254,0,0,0,0,0,0,0,255,255,131,0,0,0,0,0,1,255,255,0,0,0,0,0,0,0,1,7,7,14,12,12,12,6,3,15,15,0,0,0,0,0};
+u8 bitmap_101[] = {0,0,0,128,192,224,96,96,96,96,224,192,128,0,0,0,0,0,0,0,255,255,155,24,24,24,24,24,24,31,31,28,0,0,0,0,0,0,1,3,7,14,12,12,12,12,14,7,3,0,0,0,0,0};
+u8 bitmap_102[] = {0,0,128,128,128,128,252,254,142,134,134,134,134,134,0,0,0,0,0,0,1,1,1,1,255,255,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,15,15,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_103[] = {0,0,0,192,192,224,96,96,96,192,128,224,224,0,0,0,0,0,0,0,255,255,129,0,0,0,0,0,129,255,255,0,0,0,0,0,0,0,0,3,135,135,134,134,134,194,225,255,127,0,0,0,0,0};
+u8 bitmap_104[] = {0,0,254,254,254,192,64,96,96,224,224,192,128,0,0,0,0,0,0,0,255,255,255,0,0,0,0,0,1,255,255,0,0,0,0,0,0,0,15,15,15,0,0,0,0,0,0,15,15,0,0,0,0,0};
+u8 bitmap_105[] = {0,0,0,96,96,96,98,103,231,231,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,12,12,12,12,12,12,15,15,12,12,12,12,0,0,0,0};
+u8 bitmap_106[] = {0,0,0,96,96,96,96,96,103,231,231,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,128,128,128,128,128,192,224,127,63,0,0,0,0,0,0,0};
+u8 bitmap_107[] = {0,0,254,254,254,0,0,0,0,0,128,192,224,96,32,0,0,0,0,0,255,255,255,48,48,48,124,254,199,3,0,0,0,0,0,0,0,0,15,15,15,0,0,0,0,1,3,7,14,12,8,0,0,0};
+u8 bitmap_108[] = {0,6,6,6,6,6,254,254,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,7,14,12,12,12,12,12,0,0,0,0};
+u8 bitmap_109[] = {0,0,224,224,64,96,224,192,0,192,96,224,224,192,0,0,0,0,0,0,255,255,0,0,0,255,255,0,0,0,255,255,0,0,0,0,0,0,15,15,0,0,0,15,15,0,0,0,15,15,0,0,0,0};
+u8 bitmap_110[] = {0,0,224,224,224,192,64,96,96,224,224,192,128,0,0,0,0,0,0,0,255,255,255,0,0,0,0,0,1,255,255,0,0,0,0,0,0,0,15,15,15,0,0,0,0,0,0,15,15,0,0,0,0,0};
+u8 bitmap_111[] = {0,0,0,128,192,224,96,96,96,224,192,192,128,0,0,0,0,0,0,0,255,255,131,0,0,0,0,0,0,255,255,124,0,0,0,0,0,0,1,3,7,14,12,12,12,14,6,7,3,0,0,0,0,0};
+u8 bitmap_112[] = {0,0,224,224,224,192,64,96,96,224,224,192,128,0,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,255,255,124,0,0,0,0,0,0,255,255,255,6,12,12,12,14,14,7,3,0,0,0,0,0};
+u8 bitmap_113[] = {0,0,0,128,192,224,96,96,96,192,128,224,224,224,0,0,0,0,0,0,254,255,255,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,0,3,7,14,12,12,12,6,2,255,255,255,0,0,0,0};
+u8 bitmap_114[] = {0,0,0,224,224,128,192,96,96,96,224,224,192,128,0,0,0,0,0,0,0,255,255,1,0,0,0,0,0,1,7,7,0,0,0,0,0,0,0,15,15,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_115[] = {0,0,0,192,192,224,96,96,96,96,224,192,128,0,0,0,0,0,0,0,3,15,31,24,24,24,56,48,48,241,225,0,0,0,0,0,0,0,3,7,7,14,12,12,12,12,14,7,3,0,0,0,0,0};
+u8 bitmap_116[] = {0,0,96,96,96,96,254,254,96,96,96,96,96,96,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,7,14,12,12,12,12,0,0,0,0,0};
+u8 bitmap_117[] = {0,0,224,224,224,0,0,0,0,0,0,224,224,0,0,0,0,0,0,0,255,255,255,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,3,7,14,12,12,12,14,7,7,3,0,0,0,0,0};
+u8 bitmap_118[] = {0,32,224,224,128,0,0,0,0,0,0,192,224,96,0,0,0,0,0,0,0,7,63,252,224,0,128,240,254,31,3,0,0,0,0,0,0,0,0,0,0,1,15,15,15,7,0,0,0,0,0,0,0,0};
+u8 bitmap_119[] = {0,224,224,0,0,0,192,224,224,0,0,0,128,224,96,0,0,0,0,3,255,252,0,224,255,1,15,254,0,128,255,127,0,0,0,0,0,0,3,15,8,15,0,0,0,7,15,15,15,0,0,0,0,0};
+u8 bitmap_120[] = {0,0,32,224,224,128,0,0,0,0,192,224,96,32,0,0,0,0,0,0,0,0,129,199,255,124,126,239,195,1,0,0,0,0,0,0,0,8,12,14,7,3,0,0,0,1,3,15,14,8,0,0,0,0};
+u8 bitmap_121[] = {0,32,224,224,128,0,0,0,0,0,0,192,224,96,0,0,0,0,0,0,0,7,31,254,240,128,128,240,254,31,3,0,0,0,0,0,0,0,0,0,0,128,243,255,63,7,0,0,0,0,0,0,0,0};
+u8 bitmap_122[] = {0,0,96,96,96,96,96,96,96,96,96,224,224,0,0,0,0,0,0,0,0,0,192,224,112,56,28,14,7,3,1,0,0,0,0,0,0,0,14,15,15,13,12,12,12,12,12,12,12,12,0,0,0,0};
+u8 bitmap_123[] = {0,0,0,0,0,0,0,135,255,255,0,0,0,0,0,0,0,0,0,0,3,3,3,3,3,7,253,248,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,31,31,56,48,48,0,0,0,0,0};
+u8 bitmap_124[] = {0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,255,255,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,127,127,0,0,0,0,0,0,0,0,0};
+u8 bitmap_125[] = {0,0,0,0,0,0,255,255,128,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,252,255,7,3,3,3,3,0,0,0,0,0,0,0,48,48,48,56,31,15,0,0,0,0,0,0,0,0,0,0};
+u8 bitmap_126[] = {0,0,0,128,128,128,128,0,0,0,0,0,128,128,0,0,0,0,0,0,15,15,1,1,3,7,14,12,12,14,15,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+u8 *char_addr[] = {bitmap_32,bitmap_33,bitmap_34,bitmap_35,bitmap_36,bitmap_37,bitmap_38,bitmap_39,bitmap_40,bitmap_41,bitmap_42,bitmap_43,bitmap_44,bitmap_45,bitmap_46,bitmap_47,bitmap_48,bitmap_49,bitmap_50,bitmap_51,bitmap_52,bitmap_53,bitmap_54,bitmap_55,bitmap_56,bitmap_57,bitmap_58,bitmap_59,bitmap_60,bitmap_61,bitmap_62,bitmap_63,bitmap_64,bitmap_65,bitmap_66,bitmap_67,bitmap_68,bitmap_69,bitmap_70,bitmap_71,bitmap_72,bitmap_73,bitmap_74,bitmap_75,bitmap_76,bitmap_77,bitmap_78,bitmap_79,bitmap_80,bitmap_81,bitmap_82,bitmap_83,bitmap_84,bitmap_85,bitmap_86,bitmap_87,bitmap_88,bitmap_89,bitmap_90,bitmap_91,bitmap_92,bitmap_93,bitmap_94,bitmap_95,bitmap_96,bitmap_97,bitmap_98,bitmap_99,bitmap_100,bitmap_101,bitmap_102,bitmap_103,bitmap_104,bitmap_105,bitmap_106,bitmap_107,bitmap_108,bitmap_109,bitmap_110,bitmap_111,bitmap_112,bitmap_113,bitmap_114,bitmap_115,bitmap_116,bitmap_117,bitmap_118,bitmap_119,bitmap_120,bitmap_121,bitmap_122,bitmap_123,bitmap_124,bitmap_125,bitmap_126};
+
+void drawText(PixelGrid *canvas, RGBA color, char *str, i32 x, i32 y) {
+    if (x < 0 || x > canvas->dimensions.width - FONT_WIDTH ||
+    y < 0 || y > canvas->dimensions.height - FONT_HEIGHT)
+        return;
+
+    u16 current_x = x;
+    u16 current_y = y;
+    u16 t_offset;
+    u16 pixel_line_step = canvas->dimensions.width * FONT_HEIGHT / 3;
+    u32 char_line_step  = canvas->dimensions.width * LINE_HEIGHT;
+    Pixel* pixel = canvas->pixels + canvas->dimensions.width * y + x;
+    Pixel* character_pixel;
+    u8* byte;
+    char character = *str;
+    while (character) {
+        if (character == '\n') {
+            if (current_y + FONT_HEIGHT > canvas->dimensions.height)
+                break;
+
+            pixel += char_line_step - current_x + x;
+            current_x = x;
+            current_y += LINE_HEIGHT;
+        } else if (character == '\t') {
+            t_offset = FONT_WIDTH * (4 - ((current_x / FONT_WIDTH) & 3));
+            current_x += t_offset;
+            pixel += t_offset;
+        } else if (character >= FIRST_CHARACTER_CODE &&
+        character <= LAST_CHARACTER_CODE) {
+            byte = char_addr[character - FIRST_CHARACTER_CODE];
+            for (int i = 1; i < 4; i++) {
+                character_pixel = pixel + pixel_line_step * i;
+                for (int w = 0; w < FONT_WIDTH ; w++) {
+                    for (int h = 0; h < FONT_HEIGHT/3; h++) {
+                        /* skip background bits */
+                        if (*byte & (0x80  >> h))
+                            character_pixel->color = color;
+
+                        character_pixel -= canvas->dimensions.width;
+                    }
+                    byte++;
+                    character_pixel += pixel_line_step + 1;
+                }
+            }
+            pixel += FONT_WIDTH;
+            current_x += FONT_WIDTH;
+            if (current_x + FONT_WIDTH > canvas->dimensions.width)
+                return;
+        }
+        character = *++str;
     }
-
-    return out;
 }
 
-INLINE mat3 convertQuaternionToRotationMatrix(quat q) {
-    mat3 out;
-
-    f32 q0 = q.amount;
-    f32 q1 = q.axis.x;
-    f32 q2 = q.axis.y;
-    f32 q3 = q.axis.z;
-
-    out.X.x = 2 * (q0 * q0 + q1 * q1) - 1;
-    out.X.y = 2 * (q1 * q2 - q0 * q3);
-    out.X.z = 2 * (q1 * q3 + q0 * q2);
-
-    out.Y.x = 2 * (q1 * q2 + q0 * q3);
-    out.Y.y = 2 * (q0 * q0 + q2 * q2) - 1;
-    out.Y.z = 2 * (q2 * q3 - q0 * q1);
-
-    out.Z.x = 2 * (q1 * q3 - q0 * q2);
-    out.Z.y = 2 * (q2 * q3 + q0 * q1);
-    out.Z.z = 2 * (q0 * q0 + q3 * q3) - 1;
-
-    return out;
+void drawNumber(PixelGrid *canvas, RGBA color, i32 number, i32 x, i32 y) {
+    static NumberString number_string;
+    printNumberIntoString(number, &number_string);
+    drawText(canvas, color, number_string.string.char_ptr, x - number_string.string.length * FONT_WIDTH, y);
 }
 
-INLINE quat getRotationAroundAxis(vec3 axis, f32 amount) {
-    vec2 sin_cos = getPointOnUnitCircle(amount);
-    quat out;
-    out.axis = scaleVec3(axis, sin_cos.y);
-    out.amount = sin_cos.x;
-
-    return normQuat(out);
-}
-
-INLINE quat rotateAroundAxis(quat q, vec3 axis, f32 amount) {
-    quat rotation = getRotationAroundAxis(axis, amount);
-    return mulQuat(q, rotation);
-}
 
 void drawCircle(PixelGrid *canvas, RGBA color, i32 center_x, i32 center_y, i32 radius) {
     if (radius <= 1) {
@@ -2552,31 +3189,472 @@ void fillCircle(PixelGrid *canvas, RGBA color, i32 center_x, i32 center_y, i32 r
     }
 }
 
-void projectEdge(Edge *edge, Viewport *viewport) {
-    Dimensions *dimensions = &viewport->frame_buffer->dimensions;
-    f32 focal_length = viewport->camera->focal_length;
-    f32 n = viewport->settings.near_clipping_plane_distance;
 
-    bool from_is_out = edge->from.z < n;
-    bool to_is_out = edge->to.z < n;
+void drawHLine(PixelGrid *canvas, RGBA color, i32 from, i32 to, i32 at) {
+    if (!inRange(at, canvas->dimensions.height, 0)) return;
 
-    // Cull:
-    if (from_is_out && to_is_out) {
-        edge->to = edge->from = getVec3Of(-1);
+    i32 offset = at * (i32)canvas->dimensions.width;
+    i32 first, last;
+    subRange(from, to, canvas->dimensions.width, 0, &first, &last);
+    first += offset;
+    last += offset;
+    for (i32 i = first; i <= last; i++) canvas->pixels[i].color = color;
+}
+void drawHLineF(PixelGrid *canvas, vec3 color, f32 opacity, i32 from, i32 to, i32 at) {
+    if (!inRange(at, canvas->dimensions.height, 0)) return;
+
+    i32 first, last;
+    subRange(from, to, canvas->dimensions.width, 0, &first, &last);
+    for (i32 i = first; i <= last; i++) setPixel(canvas, color, opacity, i, at, 0);
+}
+
+void drawVLine(PixelGrid *canvas, RGBA color, i32 from, i32 to, i32 at) {
+    if (!inRange(at, canvas->dimensions.width, 0)) return;
+    i32 first, last;
+
+    subRange(from, to, canvas->dimensions.height, 0, &first, &last);
+    first *= canvas->dimensions.width; first += at;
+    last  *= canvas->dimensions.width; last  += at;
+    for (i32 i = first; i <= last; i += canvas->dimensions.width) canvas->pixels[i].color = color;
+}
+void drawVLineF(PixelGrid *canvas, vec3 color, f32 opacity, i32 from, i32 to, i32 at) {
+    if (!inRange(at, canvas->dimensions.width, 0)) return;
+    i32 first, last;
+
+    subRange(from, to, canvas->dimensions.height, 0, &first, &last);
+    for (i32 i = first; i <= last; i++) setPixel(canvas, color, opacity, at, i, 0);
+}
+
+void drawLine(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
+    if (x0 < 0 &&
+    y0 < 0 &&
+    x1 < 0 &&
+    y1 < 0)
+        return;
+
+    if (x0 == x1) {
+        drawVLine(canvas, color, y0, y1, x1);
         return;
     }
 
+    if (y0 == y1) {
+        drawHLine(canvas, color, x0, x1, y1);
+        return;
+    }
+
+    i32 width  = (i32)canvas->dimensions.width;
+    i32 height = (i32)canvas->dimensions.height;
+
+    i32 pitch = width;
+    i32 index = x0 + y0 * pitch;
+
+    i32 run  = x1 - x0;
+    i32 rise = y1 - y0;
+
+    i32 dx = 1;
+    i32 dy = 1;
+    if (run < 0) {
+        dx = -dx;
+        run = -run;
+    }
+    if (rise < 0) {
+        dy = -dy;
+        rise = -rise;
+        pitch = -pitch;
+    }
+
+    // Configure for a shallow line:
+    i32 end = x1 + dx;
+    i32 start1 = x0;  i32 inc1 = dx;  i32 index_inc1 = dx;
+    i32 start2 = y0;  i32 inc2 = dy;  i32 index_inc2 = pitch;
+    i32 rise_twice = rise + rise;
+    i32 run_twice = run + run;
+    i32 threshold = run;
+    i32 error_dec = run_twice;
+    i32 error_inc = rise_twice;
+    bool is_steap = rise > run;
+    if (is_steap) { // Reconfigure for a steep line:
+        swap(&inc1, &inc2);
+        swap(&start1, &start2);
+        swap(&index_inc1, &index_inc2);
+        swap(&error_dec, &error_inc);
+        end = y1 + dy;
+        threshold = rise;
+    }
+
+    i32 error = 0;
+    i32 current1 = start1;
+    i32 current2 = start2;
+    while (current1 != end) {
+        if (inRange(index, canvas->dimensions.width_times_height, 0)) {
+            if (is_steap) {
+                if (inRange(current1, height, 0) &&
+                inRange(current2, width, 0))
+                    canvas->pixels[index].color = color;
+            } else {
+                if (inRange(current2, height, 0) &&
+                inRange(current1, width, 0))
+                    canvas->pixels[index].color = color;
+            }
+        }
+        index += index_inc1;
+        error += error_inc;
+        current1 += inc1;
+        if (error > threshold) {
+            error -= error_dec;
+            index += index_inc2;
+            current2 += inc2;
+        }
+    }
+}
+
+INLINE f32 fpart(f32 x) {
+    return x - floorf(x);
+}
+
+INLINE f32 rfpart(f32 x) {
+    return 1 - fpart(x);
+}
+
+void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x2, f32 y2, u8 line_width) {
+    if (x1 < 0 &&
+    y1 < 0 &&
+    x2 < 0 &&
+    y2 < 0)
+        return;
+
+    f32 dx = x2 - x1;
+    f32 dy = y2 - y1;
+    f32 tmp, gap, grad;
+    i32 x, y;
+    vec3 first, last;
+    vec2i start, end;
+    if (fabsf(dx) > fabsf(dy)) { // Shallow:
+        if (x2 < x1) { // Left to right:
+            tmp = x2; x2 = x1; x1 = tmp;
+            tmp = y2; y2 = y1; y1 = tmp;
+        }
+
+        grad = dy / dx;
+
+        first.x = roundf(x1);
+        last.x  = roundf(x2);
+
+        first.y = y1 + grad * (first.x - x1);
+        last.y  = y2 + grad * (last.x  - x2);
+
+        start.x = (i32)first.x;
+        start.y = (i32)first.y;
+        end.x   = (i32)last.x;
+        end.y   = (i32)last.y;
+
+        x = start.x;
+        y = start.y;
+        gap = rfpart(x1 + 0.5f);
+        setPixel(canvas, color, rfpart(first.y) * gap * opacity, x, y++, 0);
+        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, 0);
+        setPixel(canvas, color, fpart(first.y) * gap * opacity, x, y, 0);
+
+        x = end.x;
+        y = end.y;
+        gap = fpart(x2 + 0.5f);
+        setPixel(canvas, color, rfpart(last.y) * gap * opacity, x, y++, 0);
+        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, 0);
+        setPixel(canvas, color, fpart(last.y) * gap * opacity, x, y, 0);
+
+        gap = first.y + grad;
+        for (x = start.x + 1; x < end.x; x++) {
+            y = (i32)gap;
+            setPixel(canvas, color, rfpart(gap) * opacity, x, y++, 0);
+            for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, 0);
+            setPixel(canvas, color, fpart(gap) * opacity, x, y, 0);
+            gap += grad;
+        }
+    } else { // Steep:
+        if (y2 < y1) { // Bottom up:
+            tmp = x2; x2 = x1; x1 = tmp;
+            tmp = y2; y2 = y1; y1 = tmp;
+        }
+
+        grad = dx / dy;
+
+        first.y = roundf(y1);
+        last.y  = roundf(y2);
+
+        first.x = x1 + grad * (first.y - y1);
+        last.x  = x2 + grad * (last.y  - y2);
+
+        start.y = (i32)first.y;
+        start.x = (i32)first.x;
+
+        end.y = (i32)last.y;
+        end.x = (i32)last.x;
+
+        x = start.x;
+        y = start.y;
+        gap = rfpart(y1 + 0.5f);
+        setPixel(canvas, color, rfpart(first.x) * gap * opacity, x++, y, 0);
+        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, 0);
+        setPixel(canvas, color, fpart(first.x) * gap * opacity, x, y, 0);
+
+        x = end.x;
+        y = end.y;
+        gap = fpart(y2 + 0.5f);
+        setPixel(canvas, color, rfpart(last.x) * gap * opacity, x++, y, 0);
+        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, 0);
+        setPixel(canvas, color, fpart(last.x) * gap * opacity, x, y, 0);
+
+        gap = first.x + grad;
+        for (y = start.y + 1; y < end.y; y++) {
+            x = (i32)gap;
+            setPixel(canvas, color, rfpart(gap) * opacity, x++, y, 0);
+            for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, 0);
+            setPixel(canvas, color, fpart(gap) * opacity, x, y, 0);
+            gap += grad;
+        }
+    }
+}
+
+void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
+                f32 x1, f32 y1, f64 z1,
+                f32 x2, f32 y2, f64 z2,
+                u8 line_width) {
+    if (x1 < 0 &&
+    y1 < 0 &&
+    x2 < 0 &&
+    y2 < 0)
+        return;
+
+    f64 tmp;
+    f32 dx = x2 - x1;
+    f32 dy = y2 - y1;
+    f32 gap, grad;
+    i32 x, y;
+    f64 z, z_curr, z_step;
+    vec3 first, last;
+    vec2i start, end;
+    if (fabsf(dx) > fabsf(dy)) { // Shallow:
+        if (x2 < x1) { // Left to right:
+            tmp = x2; x2 = x1; x1 = (f32)tmp;
+            tmp = y2; y2 = y1; y1 = (f32)tmp;
+            tmp = z2; z2 = z1; z1 = tmp;
+        }
+
+        grad = dy / dx;
+
+        first.x = roundf(x1);
+        last.x  = roundf(x2);
+
+        first.y = y1 + grad * (first.x - x1);
+        last.y  = y2 + grad * (last.x  - x2);
+
+        start.x = (i32)first.x;
+        start.y = (i32)first.y;
+        end.x   = (i32)last.x;
+        end.y   = (i32)last.y;
+
+        x = start.x;
+        y = start.y;
+        gap = rfpart(x1 + 0.5f);
+        setPixel(canvas, color, rfpart(first.y) * gap * opacity, x, y++, z1);
+        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, z1);
+        setPixel(canvas, color, fpart(first.y) * gap * opacity, x, y, z1);
+
+        x = end.x;
+        y = end.y;
+        gap = fpart(x2 + 0.5f);
+        setPixel(canvas, color, rfpart(last.y) * gap * opacity, x, y++, z2);
+        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, z1);
+        setPixel(canvas, color, fpart(last.y) * gap * opacity, x, y, z2);
+
+        z_step = (z2 - z1) / (f64)(end.x - start.x + 1);
+        z_curr = z1 + z_step;
+        gap = first.y + grad;
+        for (x = start.x + 1; x < end.x; x++) {
+            y = (i32)gap;
+            z = z_curr;
+            setPixel(canvas, color, rfpart(gap) * opacity, x, y++, z);
+            for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, z);
+            setPixel(canvas, color, fpart(gap) * opacity, x, y, z);
+            gap += grad;
+            z_curr += z_step;
+        }
+    } else { // Steep:
+        if (y2 < y1) { // Bottom up:
+            tmp = x2; x2 = x1; x1 = (f32)tmp;
+            tmp = y2; y2 = y1; y1 = (f32)tmp;
+            tmp = z2; z2 = z1; z1 = tmp;
+        }
+
+        grad = dx / dy;
+
+        first.y = roundf(y1);
+        last.y  = roundf(y2);
+
+        first.x = x1 + grad * (first.y - y1);
+        last.x  = x2 + grad * (last.y  - y2);
+
+        start.y = (i32)first.y;
+        start.x = (i32)first.x;
+
+        end.y = (i32)last.y;
+        end.x = (i32)last.x;
+
+        x = start.x;
+        y = start.y;
+        gap = rfpart(y1 + 0.5f);
+        setPixel(canvas, color, rfpart(first.x) * gap * opacity, x++, y, z1);
+        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, z1);
+        setPixel(canvas, color, fpart(first.x) * gap * opacity, x, y, z1);
+
+        x = end.x;
+        y = end.y;
+        gap = fpart(y2 + 0.5f);
+        setPixel(canvas, color, rfpart(last.x) * gap * opacity, x++, y, z2);
+        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, z2);
+        setPixel(canvas, color, fpart(last.x) * gap * opacity, x, y, z2);
+
+        z1 = 1.0 / z1;
+        z2 = 1.0 / z2;
+        z_step = (z2 - z1) / (f64)(end.y - start.y + 1);
+        z_curr = z1 + z_step;
+        gap = first.x + grad;
+        for (y = start.y + 1; y < end.y; y++) {
+            x = (i32)gap;
+            z = 1.0 / z_curr;
+            setPixel(canvas, color, rfpart(gap) * opacity, x++, y, z);
+            for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, z);
+            setPixel(canvas, color, fpart(gap) * opacity, x, y, z);
+            gap += grad;
+            z_curr += z_step;
+        }
+    }
+}
+
+
+bool cullAndClipEdge(Edge *edge, Viewport *viewport) {
+    f32 n = viewport->settings.near_clipping_plane_distance;
+    f32 f = viewport->settings.far_clipping_plane_distance;
+
+    bool from_is_out_n = edge->from.z < n;
+    bool to_is_out_n   = edge->to.z < n;
+
+    bool from_is_out_f = edge->from.z > f;
+    bool to_is_out_f   = edge->to.z > f;
+
+    // Cull:
+    if ((from_is_out_n && to_is_out_n) ||
+    (from_is_out_f && to_is_out_f))
+        return false;
+
+    f32 z_Range = fabsf(edge->to.z - edge->from.z);
+
+    vec3 forward = subVec3(edge->to, edge->from);
+    vec3 backward = invertedVec3(forward);
+
     // Clip:
-    if (from_is_out) {
-        edge->from = scaleAddVec3(
-                subVec3(edge->from, edge->to),
-                (edge->to.z - n) / (edge->to.z - edge->from.z),
-                edge->to);
-    } else if (to_is_out) {
-        edge->to = scaleAddVec3(
-                subVec3(edge->to, edge->from),
-                (edge->from.z - n) / (edge->from.z - edge->to.z),
-                edge->from);
+    if (   from_is_out_n) edge->from = scaleAddVec3(backward, (edge->to.z - n)   / z_Range, edge->to);
+    else if (to_is_out_n) edge->to   = scaleAddVec3(forward,  (edge->from.z - n) / z_Range, edge->from);
+
+    if (   from_is_out_f) edge->from = scaleAddVec3(backward, (f - edge->to.z)   / z_Range, edge->to);
+    else if (to_is_out_f) edge->to   = scaleAddVec3(forward,  (f - edge->from.z) / z_Range, edge->from);
+
+    vec4 A = mulVec4Mat4(Vec4fromVec3(edge->from, 1.0f), viewport->pre_projection_matrix);
+    vec4 B = mulVec4Mat4(Vec4fromVec3(edge->to,   1.0f), viewport->pre_projection_matrix);
+    f32 t;
+
+    if (fabsf(B.z) > B.w) {
+        vec4 AB = subVec4(B, A);
+        if (B.z > 0) {
+            t = A.z - A.w;
+            t /= AB.w - AB.z;
+        } else {
+            t = A.z + A.w;
+            t /= -(AB.w + AB.z);
+        }
+        B = scaleAddVec4(AB, t, A);
+    }
+    if (fabsf(A.z) > A.w) {
+        vec4 BA = subVec4(A, B);
+        if (A.z > 0) {
+            t = B.z - B.w;
+            t /= BA.w - BA.z;
+        } else {
+            t = B.z + B.w;
+            t /= -(BA.w + BA.z);
+        }
+        A = scaleAddVec4(BA, t, B);
+    }
+
+    if (fabsf(B.x) > B.w) {
+        vec4 AB = subVec4(B, A);
+        if (B.x > 0) {
+            t = A.x - A.w;
+            t /= AB.w - AB.x;
+        } else {
+            t = A.x + A.w;
+            t /= -(AB.w + AB.x);
+        }
+        B = scaleAddVec4(AB, t, A);
+    }
+    if (fabsf(A.x) > A.w) {
+        vec4 BA = subVec4(A, B);
+        if (A.x > 0) {
+            t = B.x - B.w;
+            t /= BA.w - BA.x;
+        } else {
+            t = B.x + B.w;
+            t /= -(BA.w + BA.x);
+        }
+        A = scaleAddVec4(BA, t, B);
+    }
+
+    if (fabsf(B.y) > B.w) {
+        vec4 AB = subVec4(B, A);
+        if (B.y > 0) {
+            t = A.y - A.w;
+            t /= AB.w - AB.y;
+        } else {
+            t = A.y + A.w;
+            t /= -(AB.w + AB.y);
+        }
+        B = scaleAddVec4(AB, t, A);
+    }
+    if (fabsf(A.y) > A.w) {
+        vec4 BA = subVec4(A, B);
+        if (A.y > 0) {
+            t = B.y - B.w;
+            t /= BA.w - BA.y;
+        } else {
+            t = B.y + B.w;
+            t /= -(BA.w + BA.y);
+        }
+        A = scaleAddVec4(BA, t, B);
+    }
+
+    bool A_is_out_x = fabsf(A.x) >= fabsf(A.w);
+    bool A_is_out_y = fabsf(A.y) >= fabsf(A.w);
+    bool A_is_out_z = fabsf(A.z) >= fabsf(A.w);
+    bool B_is_out_x = fabsf(B.x) >= fabsf(B.w);
+    bool B_is_out_y = fabsf(B.y) >= fabsf(B.w);
+    bool B_is_out_z = fabsf(B.z) >= fabsf(B.w);
+    if ((A_is_out_x && A_is_out_y && A_is_out_z) ||
+    (B_is_out_x && B_is_out_y && B_is_out_z))
+        return false;
+
+    edge->from = Vec3fromVec4(mulVec4Mat4(A, viewport->pre_projection_matrix_inverted));
+    edge->to   = Vec3fromVec4(mulVec4Mat4(B, viewport->pre_projection_matrix_inverted));
+
+    return true;
+}
+
+void projectEdge(Edge *edge, Viewport *viewport) {
+    Dimensions *dimensions = &viewport->frame_buffer->dimensions;
+    f32 focal_length = viewport->camera->focal_length;
+
+    if (!cullAndClipEdge(edge, viewport)) {
+        edge->to = edge->from = getVec3Of(-1);
+        return;
     }
 
     // Project:
@@ -2598,16 +3676,126 @@ void projectEdge(Edge *edge, Viewport *viewport) {
     edge->to.y   = dimensions->f_height - edge->to.y;
 }
 
+void drawEdge(Viewport *viewport, RGBA color, Edge *edge) {
+    projectEdge(edge, viewport);
+    drawLine(viewport->frame_buffer, color,
+             (i32)edge->from.x,
+             (i32)edge->from.y,
+             (i32)edge->to.x,
+             (i32)edge->to.y);
+}
+void drawEdgeF(Viewport *viewport, vec3 color, f32 opacity, Edge *edge, u8 line_width) {
+    projectEdge(edge, viewport);
+    drawLineF(viewport->frame_buffer, color, opacity,
+              edge->from.x, edge->from.y,
+              edge->to.x,   edge->to.y,
+              line_width);
+}
+void drawEdge3D(Viewport *viewport, vec3 color, f32 opacity, Edge *edge, u8 line_width) {
+    projectEdge(edge, viewport);
+    drawLine3D(viewport->frame_buffer, color, opacity,
+               edge->from.x, edge->from.y, edge->from.z,
+               edge->to.x,   edge->to.y,   edge->to.z,
+               line_width);
+}
+
+void drawRect(PixelGrid *canvas, RGBA color, Rect *rect) {
+    if (rect->max.x < 0 || rect->min.x >= canvas->dimensions.width ||
+    rect->max.y < 0 || rect->min.y >= canvas->dimensions.height)
+        return;
+
+    drawHLine(canvas, color, rect->min.x, rect->max.x, rect->min.y);
+    drawHLine(canvas, color, rect->min.x, rect->max.x, rect->max.y);
+    drawVLine(canvas, color, rect->min.y, rect->max.y, rect->min.x);
+    drawVLine(canvas, color, rect->min.y, rect->max.y, rect->max.x);
+}
+void drawRectF(PixelGrid *canvas, vec3 color, f32 opacity, Rect *rect) {
+    if (rect->max.x < 0 || rect->min.x >= canvas->dimensions.width ||
+    rect->max.y < 0 || rect->min.y >= canvas->dimensions.height)
+        return;
+
+    drawHLineF(canvas, color, opacity, rect->min.x, rect->max.x, rect->min.y);
+    drawHLineF(canvas, color, opacity, rect->min.x, rect->max.x, rect->max.y);
+    drawVLineF(canvas, color, opacity, rect->min.y, rect->max.y, rect->min.x);
+    drawVLineF(canvas, color, opacity, rect->min.y, rect->max.y, rect->max.x);
+}
+
+void fillRect(PixelGrid *canvas, RGBA color, Rect *rect) {
+    if (rect->max.x < 0 || rect->min.x >= canvas->dimensions.width ||
+    rect->max.y < 0 || rect->min.y >= canvas->dimensions.height)
+        return;
+
+    i32 min_x, min_y, max_x, max_y;
+    subRange(rect->min.x, rect->max.x, canvas->dimensions.width,  0, &min_x, &max_x);
+    subRange(rect->min.y, rect->max.y, canvas->dimensions.height, 0, &min_y, &max_y);
+    for (u16 y = min_y; y <= max_y; y++)
+        drawHLine(canvas, color, min_x, max_x, y);
+}
+void fillRectF(PixelGrid *canvas, vec3 color, f32 opacity, Rect *rect) {
+    if (rect->max.x < 0 || rect->min.x >= canvas->dimensions.width ||
+    rect->max.y < 0 || rect->min.y >= canvas->dimensions.height)
+        return;
+
+    i32 min_x, min_y, max_x, max_y;
+    subRange(rect->min.x, rect->max.x, canvas->dimensions.width,  0, &min_x, &max_x);
+    subRange(rect->min.y, rect->max.y, canvas->dimensions.height, 0, &min_y, &max_y);
+    for (u16 y = min_y; y <= max_y; y++)
+        drawHLineF(canvas, color, opacity, min_x, max_x, y);
+}
+
+void fillTriangle(PixelGrid *canvas, RGBA color, f32 *X, f32 *Y, f32 *Z) {
+    u16 W = canvas->dimensions.width;
+    u16 H = canvas->dimensions.height;
+    f32 dx1, x1, y1, z1, xs,
+    dx2, x2, y2, z2, xe,
+    dx3, x3, y3, z3, dy;
+    i32 offset,
+    x, x1i, y1i, x2i, xsi, ysi = 0,
+    y, y2i, x3i, y3i, xei, yei = 0;
+    for (u8 i = 1; i <= 2; i++) {
+        if (Y[i] < Y[ysi]) ysi = i;
+        if (Y[i] > Y[yei]) yei = i;
+    }
+    u8* id = ysi ? (ysi == 1 ?
+            (u8[3]){1, 2, 0} :
+            (u8[3]){2, 0, 1}) :
+                    (u8[3]){0, 1, 2};
+    x1 = X[id[0]]; y1 = Y[id[0]]; z1 = Z[id[0]]; x1i = (i32)x1; y1i = (i32)y1;
+    x2 = X[id[1]]; y2 = Y[id[1]]; z2 = Z[id[1]]; x2i = (i32)x2; y2i = (i32)y2;
+    x3 = X[id[2]]; y3 = Y[id[2]]; z3 = Z[id[2]]; x3i = (i32)x3; y3i = (i32)y3;
+    dx1 = x1i == x2i || y1i == y2i ? 0 : (x2 - x1) / (y2 - y1);
+    dx2 = x2i == x3i || y2i == y3i ? 0 : (x3 - x2) / (y3 - y2);
+    dx3 = x1i == x3i || y1i == y3i ? 0 : (x3 - x1) / (y3 - y1);
+    dy = 1 - (y1 - (f32)y1);
+    xs = dx3 ? x1 + dx3 * dy : x1; ysi = (i32)Y[ysi];
+    xe = dx1 ? x1 + dx1 * dy : x1; yei = (i32)Y[yei];
+    offset = W * y1i;
+    for (y = ysi; y < yei; y++) {
+        if (y == y3i) xs = dx2 ? (x3 + dx2 * (1 - (y3 - (f32)y3i))) : x3;
+        if (y == y2i) xe = dx2 ? (x2 + dx2 * (1 - (y2 - (f32)y2i))) : x2;
+        xsi = (i32)xs;
+        xei = (i32)xe;
+        for (x = xsi; x < xei; x++) {
+            if (x > 0 && x < W && y > 0 && y < H)
+                canvas->pixels[offset + x].color = color;
+        }
+        offset += W;
+        xs += y < y3i ? dx3 : dx2;
+        xe += y < y2i ? dx1 : dx2;
+    }
+}
+
+
 INLINE void convertPositionAndDirectionToObjectSpace(
         vec3 position,
         vec3 dir,
         Primitive *primitive,
         vec3 *out_position,
         vec3 *out_direction
-) {
+        ) {
     *out_position = primitive->flags & IS_TRANSLATED ?
-                    subVec3(position, primitive->position) :
-                    position;
+            subVec3(position, primitive->position) :
+            position;
 
     if (primitive->flags & IS_ROTATED) {
         quat inv_rotation = conjugate(primitive->rotation);
@@ -2730,440 +3918,7 @@ void transformAABB(AABB *aabb, Primitive *primitive) {
     aabb->max.z = Z;
 }
 
-void drawHLine2D(PixelGrid *canvas, RGBA color, i32 from, i32 to, i32 at) {
-    if (!inRange(at, canvas->dimensions.height, 0)) return;
 
-    i32 offset = at * (i32)canvas->dimensions.width;
-    i32 first, last;
-    subRange(from, to, canvas->dimensions.width, 0, &first, &last);
-    first += offset;
-    last += offset;
-    for (i32 i = first; i <= last; i++) canvas->pixels[i].color = color;
-}
-
-void drawVLine2D(PixelGrid *canvas, RGBA color, i32 from, i32 to, i32 at) {
-    if (!inRange(at, canvas->dimensions.width, 0)) return;
-    i32 first, last;
-
-    subRange(from, to, canvas->dimensions.height, 0, &first, &last);
-    first *= canvas->dimensions.width; first += at;
-    last  *= canvas->dimensions.width; last  += at;
-    for (i32 i = first; i <= last; i += canvas->dimensions.width) canvas->pixels[i].color = color;
-}
-
-void drawLine2D(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
-    if (x0 < 0 &&
-        y0 < 0 &&
-        x1 < 0 &&
-        y1 < 0)
-        return;
-
-    if (x0 == x1) {
-        drawVLine2D(canvas, color, y0, y1, x1);
-        return;
-    }
-
-    if (y0 == y1) {
-        drawHLine2D(canvas, color, x0, x1, y1);
-        return;
-    }
-
-    i32 width  = (i32)canvas->dimensions.width;
-    i32 height = (i32)canvas->dimensions.height;
-
-    i32 pitch = width;
-    i32 index = x0 + y0 * pitch;
-
-    i32 run  = x1 - x0;
-    i32 rise = y1 - y0;
-
-    i32 dx = 1;
-    i32 dy = 1;
-    if (run < 0) {
-        dx = -dx;
-        run = -run;
-    }
-    if (rise < 0) {
-        dy = -dy;
-        rise = -rise;
-        pitch = -pitch;
-    }
-
-    // Configure for a shallow line:
-    i32 end = x1 + dx;
-    i32 start1 = x0;  i32 inc1 = dx;  i32 index_inc1 = dx;
-    i32 start2 = y0;  i32 inc2 = dy;  i32 index_inc2 = pitch;
-    i32 rise_twice = rise + rise;
-    i32 run_twice = run + run;
-    i32 threshold = run;
-    i32 error_dec = run_twice;
-    i32 error_inc = rise_twice;
-    bool is_steap = rise > run;
-    if (is_steap) { // Reconfigure for a steep line:
-        swap(&inc1, &inc2);
-        swap(&start1, &start2);
-        swap(&index_inc1, &index_inc2);
-        swap(&error_dec, &error_inc);
-        end = y1 + dy;
-        threshold = rise;
-    }
-
-    i32 error = 0;
-    i32 current1 = start1;
-    i32 current2 = start2;
-    while (current1 != end) {
-        if (inRange(index, canvas->dimensions.width_times_height, 0)) {
-            if (is_steap) {
-                if (inRange(current1, height, 0) &&
-                    inRange(current2, width, 0))
-                    canvas->pixels[index].color = color;
-            } else {
-                if (inRange(current2, height, 0) &&
-                    inRange(current1, width, 0))
-                    canvas->pixels[index].color = color;
-            }
-        }
-
-        index += index_inc1;
-        error += error_inc;
-        current1 += inc1;
-        if (error > threshold) {
-            error -= error_dec;
-            index += index_inc2;
-            current2 += inc2;
-        }
-    }
-}
-
-INLINE void setPixel(PixelGrid *canvas, RGBA color, f32 opacity, i32 x, i32 y, f64 z) {
-    if (!inRange(y, canvas->dimensions.height, 0) ||
-    !inRange(x, canvas->dimensions.width, 0))
-        return;
-
-    i32 index = canvas->dimensions.width * y + x;
-    FloatPixel pixel, foreground, background = canvas->float_pixels[index];
-    foreground.depth = z;
-    foreground.opacity = opacity;
-    foreground.color.x = (f32)color.R;
-    foreground.color.y = (f32)color.G;
-    foreground.color.z = (f32)color.B;
-    foreground.color = scaleVec3(foreground.color, foreground.opacity * COLOR_COMPONENT_TO_FLOAT);
-
-    if (foreground.depth > background.depth) {
-        pixel = foreground;
-        foreground = background;
-        background = pixel;
-    }
-
-    opacity = 1.0f - foreground.opacity;
-    pixel.color = scaleAddVec3(background.color, opacity, foreground.color);
-    pixel.opacity = foreground.opacity + background.opacity * opacity;
-    pixel.depth = foreground.depth;
-
-    canvas->float_pixels[index] = pixel;
-    canvas->pixels[index].color.R = (u8)((pixel.color.x > 1 ? 1 : pixel.color.x) * FLOAT_TO_COLOR_COMPONENT);
-    canvas->pixels[index].color.G = (u8)((pixel.color.y > 1 ? 1 : pixel.color.y) * FLOAT_TO_COLOR_COMPONENT);
-    canvas->pixels[index].color.B = (u8)((pixel.color.z > 1 ? 1 : pixel.color.z) * FLOAT_TO_COLOR_COMPONENT);
-}
-
-INLINE f32 fpart(f32 x) {
-    return x - floorf(x);
-}
-
-INLINE f32 rfpart(f32 x) {
-    return 1 - fpart(x);
-}
-
-void drawLineAA2D(PixelGrid *canvas, RGBA color, f32 x1, f32 y1, f32 x2, f32 y2) {
-    if (x1 < 0 &&
-    y1 < 0 &&
-    x2 < 0 &&
-    y2 < 0)
-        return;
-
-    f32 dx = x2 - x1;
-    f32 dy = y2 - y1;
-    f32 tmp, gap, grad;
-    i32 x, y;
-    vec3 first, last;
-    vec2i start, end;
-    if (fabsf(dx) > fabsf(dy)) { // Shallow:
-        if (x2 < x1) { // Left to right:
-            tmp = x2; x2 = x1; x1 = tmp;
-            tmp = y2; y2 = y1; y1 = tmp;
-        }
-
-        grad = dy / dx;
-
-        first.x = roundf(x1);
-        last.x  = roundf(x2);
-
-        first.y = y1 + grad * (first.x - x1);
-        last.y  = y2 + grad * (last.x  - x2);
-
-        start.x = (i32)first.x;
-        start.y = (i32)first.y;
-        end.x   = (i32)last.x;
-        end.y   = (i32)last.y;
-
-        x = start.x;
-        y = start.y;
-        gap = rfpart(x1 + 0.5f);
-        setPixel(canvas, color, rfpart(first.y) * gap, x, y++, 0);
-        setPixel(canvas, color,  fpart(first.y) * gap, x, y,   0);
-
-        x = end.x;
-        y = end.y;
-        gap = fpart(x2 + 0.5f);
-        setPixel(canvas, color,rfpart(last.y) * gap, x, y++, 0);
-        setPixel(canvas, color, fpart(last.y) * gap, x, y,   0);
-
-        gap = first.y + grad;
-        for (x = start.x + 1; x < end.x; x++) {
-            y = (i32)gap;
-            setPixel(canvas, color, rfpart(gap), x, y++, 0);
-            setPixel(canvas, color,  fpart(gap), x, y,    0);
-            gap += grad;
-        }
-    } else { // Steep:
-        if (y2 < y1) { // Bottom up:
-            tmp = x2; x2 = x1; x1 = tmp;
-            tmp = y2; y2 = y1; y1 = tmp;
-        }
-
-        grad = dx / dy;
-
-        first.y = roundf(y1);
-        last.y  = roundf(y2);
-
-        first.x = x1 + grad * (first.y - y1);
-        last.x  = x2 + grad * (last.y  - y2);
-
-        start.y = (i32)first.y;
-        start.x = (i32)first.x;
-
-        end.y = (i32)last.y;
-        end.x = (i32)last.x;
-
-        x = start.x;
-        y = start.y;
-        gap = rfpart(y1 + 0.5f);
-        setPixel(canvas, color, rfpart(first.x) * gap, x++, y, 0);
-        setPixel(canvas, color,  fpart(first.x) * gap, x,   y, 0);
-
-        x = end.x;
-        y = end.y;
-        gap = fpart(y2 + 0.5f);
-        setPixel(canvas, color, rfpart(last.x) * gap, x++, y, 0);
-        setPixel(canvas, color,  fpart(last.x) * gap, x,   y, 0);
-
-        gap = first.x + grad;
-        for (y = start.y + 1; y < end.y; y++) {
-            x = (i32)gap;
-            setPixel(canvas, color, rfpart(gap), x++, y, 0);
-            setPixel(canvas, color,  fpart(gap), x,   y, 0);
-            gap += grad;
-        }
-    }
-}
-
-void drawLine3D(PixelGrid *canvas, RGBA color, vec3 from, vec3 to) {
-    f32 x1 = from.x;
-    f32 y1 = from.y;
-    f32 x2 = to.x;
-    f32 y2 = to.y;
-
-    if (x1 < 0 &&
-    y1 < 0 &&
-    x2 < 0 &&
-    y2 < 0)
-        return;
-
-    f64 z1 = from.z;
-    f64 z2 = to.z;
-    f64 tmp;
-    f32 dx = x2 - x1;
-    f32 dy = y2 - y1;
-    f32 gap, grad;
-    i32 x, y;
-    f64 z, z_curr, z_step;
-    vec3 first, last;
-    vec2i start, end;
-    if (fabsf(dx) > fabsf(dy)) { // Shallow:
-        if (x2 < x1) { // Left to right:
-            tmp = x2; x2 = x1; x1 = (f32)tmp;
-            tmp = y2; y2 = y1; y1 = (f32)tmp;
-            tmp = z2; z2 = z1; z1 = tmp;
-        }
-
-        grad = dy / dx;
-
-        first.x = roundf(x1);
-        last.x  = roundf(x2);
-
-        first.y = y1 + grad * (first.x - x1);
-        last.y  = y2 + grad * (last.x  - x2);
-
-        start.x = (i32)first.x;
-        start.y = (i32)first.y;
-        end.x   = (i32)last.x;
-        end.y   = (i32)last.y;
-
-        x = start.x;
-        y = start.y;
-        gap = rfpart(x1 + 0.5f);
-        setPixel(canvas, color, rfpart(first.y) * gap, x, y++, z1);
-        setPixel(canvas, color,  fpart(first.y) * gap, x, y,   z1);
-
-        x = end.x;
-        y = end.y;
-        gap = fpart(x2 + 0.5f);
-        setPixel(canvas, color,rfpart(last.y) * gap, x, y++, z2);
-        setPixel(canvas, color, fpart(last.y) * gap, x, y,   z2);
-
-        z1 = 1.0 / z1;
-        z2 = 1.0 / z2;
-        z_step = (z2 - z1) / (f64)(end.x - start.x + 1);
-        z_curr = z1 + z_step;
-        gap = first.y + grad;
-        for (x = start.x + 1; x < end.x; x++) {
-            y = (i32)gap;
-            z = 1.0 / z_curr;
-            setPixel(canvas, color, rfpart(gap), x, y++, z);
-            setPixel(canvas, color,  fpart(gap), x, y,   z);
-            gap += grad;
-            z_curr += z_step;
-        }
-    } else { // Steep:
-        if (y2 < y1) { // Bottom up:
-            tmp = x2; x2 = x1; x1 = (f32)tmp;
-            tmp = y2; y2 = y1; y1 = (f32)tmp;
-            tmp = z2; z2 = z1; z1 = tmp;
-        }
-
-        grad = dx / dy;
-
-        first.y = roundf(y1);
-        last.y  = roundf(y2);
-
-        first.x = x1 + grad * (first.y - y1);
-        last.x  = x2 + grad * (last.y  - y2);
-
-        start.y = (i32)first.y;
-        start.x = (i32)first.x;
-
-        end.y = (i32)last.y;
-        end.x = (i32)last.x;
-
-        x = start.x;
-        y = start.y;
-        gap = rfpart(y1 + 0.5f);
-        setPixel(canvas, color, rfpart(first.x) * gap, x++, y, z1);
-        setPixel(canvas, color,  fpart(first.x) * gap, x,   y, z1);
-
-        x = end.x;
-        y = end.y;
-        gap = fpart(y2 + 0.5f);
-        setPixel(canvas, color, rfpart(last.x) * gap, x++, y, z2);
-        setPixel(canvas, color,  fpart(last.x) * gap, x,   y, z2);
-
-        z1 = 1.0 / z1;
-        z2 = 1.0 / z2;
-        z_step = (z2 - z1) / (f64)(end.y - start.y + 1);
-        z_curr = z1 + z_step;
-        gap = first.x + grad;
-        for (y = start.y + 1; y < end.y; y++) {
-            x = (i32)gap;
-            z = 1.0 / z_curr;
-            setPixel(canvas, color, rfpart(gap), x++, y, z);
-            setPixel(canvas, color,  fpart(gap), x,   y, z);
-            gap += grad;
-            z_curr += z_step;
-        }
-    }
-}
-
-void drawEdge(Viewport *viewport, RGBA color, Edge *edge) {
-    projectEdge(edge, viewport);
-    if (viewport->settings.depth_sort)
-        drawLine3D(viewport->frame_buffer, color, edge->from, edge->to);
-    else if (viewport->settings.antialias)
-        drawLineAA2D(viewport->frame_buffer, color,
-                     edge->from.x,
-                     edge->from.y,
-                     edge->to.x,
-                     edge->to.y);
-    else
-        drawLine2D(viewport->frame_buffer, color,
-                   (i32)edge->from.x,
-                   (i32)edge->from.y,
-                   (i32)edge->to.x,
-                   (i32)edge->to.y);
-}
-
-void drawRect(PixelGrid *canvas, RGBA color, Rect *rect) {
-    if (rect->max.x < 0 || rect->min.x >= canvas->dimensions.width ||
-        rect->max.y < 0 || rect->min.y >= canvas->dimensions.height)
-        return;
-
-    drawHLine2D(canvas, color, rect->min.x, rect->max.x, rect->min.y);
-    drawHLine2D(canvas, color, rect->min.x, rect->max.x, rect->max.y);
-    drawVLine2D(canvas, color, rect->min.y, rect->max.y, rect->min.x);
-    drawVLine2D(canvas, color, rect->min.y, rect->max.y, rect->max.x);
-}
-
-void fillRect(PixelGrid *canvas, RGBA color, Rect *rect) {
-    if (rect->max.x < 0 || rect->min.x >= canvas->dimensions.width ||
-        rect->max.y < 0 || rect->min.y >= canvas->dimensions.height)
-        return;
-
-    i32 min_x, min_y, max_x, max_y;
-    subRange(rect->min.x, rect->max.x, canvas->dimensions.width,  0, &min_x, &max_x);
-    subRange(rect->min.y, rect->max.y, canvas->dimensions.height, 0, &min_y, &max_y);
-    for (u16 y = min_y; y <= max_y; y++)
-        drawHLine2D(canvas, color, min_x, max_x, y);
-}
-
-void fillTriangle(PixelGrid *canvas, RGBA color, f32 *X, f32 *Y) {
-    u16 W = canvas->dimensions.width;
-    u16 H = canvas->dimensions.height;
-    f32 dx1, x1, y1, xs,
-            dx2, x2, y2, xe,
-            dx3, x3, y3, dy;
-    i32 offset,
-            x, x1i, y1i, x2i, xsi, ysi = 0,
-            y, y2i, x3i, y3i, xei, yei = 0;
-    for (u8 i = 1; i <= 2; i++) {
-        if (Y[i] < Y[ysi]) ysi = i;
-        if (Y[i] > Y[yei]) yei = i;
-    }
-    u8* id = ysi ? (ysi == 1 ?
-                    (u8[3]){1, 2, 0} :
-                    (u8[3]){2, 0, 1}) :
-             (u8[3]){0, 1, 2};
-    x1 = X[id[0]]; y1 = Y[id[0]]; x1i = (i32)x1; y1i = (i32)y1;
-    x2 = X[id[1]]; y2 = Y[id[1]]; x2i = (i32)x2; y2i = (i32)y2;
-    x3 = X[id[2]]; y3 = Y[id[2]]; x3i = (i32)x3; y3i = (i32)y3;
-    dx1 = x1i == x2i || y1i == y2i ? 0 : (x2 - x1) / (y2 - y1);
-    dx2 = x2i == x3i || y2i == y3i ? 0 : (x3 - x2) / (y3 - y2);
-    dx3 = x1i == x3i || y1i == y3i ? 0 : (x3 - x1) / (y3 - y1);
-    dy = 1 - (y1 - (f32)y1);
-    xs = dx3 ? x1 + dx3 * dy : x1; ysi = (i32)Y[ysi];
-    xe = dx1 ? x1 + dx1 * dy : x1; yei = (i32)Y[yei];
-    offset = W * y1i;
-    for (y = ysi; y < yei; y++){
-        if (y == y3i) xs = dx2 ? (x3 + dx2 * (1 - (y3 - (f32)y3i))) : x3;
-        if (y == y2i) xe = dx2 ? (x2 + dx2 * (1 - (y2 - (f32)y2i))) : x2;
-        xsi = (i32)xs;
-        xei = (i32)xe;
-        for (x = xsi; x < xei; x++)
-            if (x > 0 && x < W && y > 0 && y < H)
-                canvas->pixels[offset + x].color = color;
-        offset += W;
-        xs += y < y3i ? dx3 : dx2;
-        xe += y < y2i ? dx1 : dx2;
-    }
-}
 
 INLINE void rotateXform3(xform3 *xform, f32 yaw, f32 pitch, f32 roll) {
     if (yaw)   yawMat3(  yaw,   &xform->yaw_matrix);
@@ -3179,160 +3934,30 @@ INLINE void rotateXform3(xform3 *xform, f32 yaw, f32 pitch, f32 roll) {
     xform->matrix = mulMat3(xform->matrix, xform->rotation_matrix);
 }
 
-void drawHUD(PixelGrid *canvas, HUD *hud) {
-    i32 x = hud->position.x;
-    i32 y = hud->position.y;
 
-    HUDLine *line = hud->lines;
-    bool alt;
-    for (u32 i = 0; i < hud->line_count; i++, line++) {
-        if (line->use_alternate) {
-            alt = *line->use_alternate;
-            if (line->invert_alternate_use)
-                alt = !alt;
-        } else
-            alt = false;
-
-        drawText(canvas, Color(line->title_color), line->title.char_ptr, x, y);
-        drawText(canvas, Color(
-                alt ? line->alternate_value_color    : line->value_color),
-                 alt ? line->alternate_value.char_ptr : line->value.string.char_ptr,
-                 x + line->title.length * FONT_WIDTH, y);
-        y += (i32)(hud->line_height * (f32)FONT_HEIGHT);
-    }
+void setQuad3FromBox(Quad3 *quad, Box *box) {
+    quad->top_left     = box->vertices.corners.back_bottom_left;
+    quad->top_right    = box->vertices.corners.back_bottom_right;
+    quad->bottom_left  = box->vertices.corners.front_bottom_left;
+    quad->bottom_right = box->vertices.corners.front_bottom_right;
+    for (u8 i = 0; i < 4; i++) quad->corners[i].y = 0;
 }
 
-
-void zoomCamera(Camera *camera, f32 zoom) {
-    f32 new_zoom = camera->zoom + zoom;
-    camera->focal_length = new_zoom > 1 ? new_zoom : (new_zoom < -1 ? (-1 / new_zoom) : 1);
-    camera->zoom = new_zoom;
-}
-
-void dollyCamera(Camera *camera, f32 dolly) {
-    vec3 target_position = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
-    target_position = addVec3(camera->transform.position, target_position);
-
-    // Compute new target distance:
-    camera->dolly += dolly;
-    camera->target_distance = powf(2, camera->dolly / -200) * CAMERA_DEFAULT__TARGET_DISTANCE;
-
-    // Back-track from target position to new current position:
-    camera->transform.position = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
-    camera->transform.position = subVec3(target_position,camera->transform.position);
-}
-
-void orbitCamera(Camera *camera, Navigation *navigation, f32 azimuth, f32 altitude) {
-    // Move the camera forward to the position of it's target:
-    vec3 movement = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
-    camera->transform.position = addVec3(camera->transform.position, movement);
-
-    // Reorient the camera while it is at the position of it's target:
-    rotateXform3(&camera->transform, azimuth, altitude, 0);
-
-    // Back the camera away from it's target position using the updated forward direction:
-    movement = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
-    camera->transform.position = subVec3(camera->transform.position, movement);
-
-    navigation->turned = true;
-    navigation->moved = true;
-}
-
-void panCamera(Camera *camera, Navigation *navigation, f32 right, f32 up) {
-    vec3 up_movement    = scaleVec3(*camera->transform.up_direction, up);
-    vec3 right_movement = scaleVec3(*camera->transform.right_direction, right);
-    camera->transform.position = addVec3(camera->transform.position, up_movement);
-    camera->transform.position = addVec3(camera->transform.position, right_movement);
-
-    navigation->moved = true;
-}
-
-void panViewport(Viewport *viewport, Mouse *mouse) {
-    f32 x = viewport->navigation.settings.speeds.pan * -(f32)mouse->pos_raw_diff.x;
-    f32 y = viewport->navigation.settings.speeds.pan * +(f32)mouse->pos_raw_diff.y;
-    panCamera(viewport->camera, &viewport->navigation, x, y);
-
-    mouse->raw_movement_handled = true;
-    mouse->moved = false;
-}
-
-void zoomViewport(Viewport *viewport, Mouse *mouse) {
-    f32 z = viewport->navigation.settings.speeds.zoom * mouse->wheel_scroll_amount;
-    zoomCamera(viewport->camera, z);
-
-    viewport->navigation.zoomed = true;
-    mouse->wheel_scroll_handled = true;
-}
-
-void dollyViewport(Viewport *viewport, Mouse *mouse) {
-    f32 z = viewport->navigation.settings.speeds.dolly * mouse->wheel_scroll_amount;
-    dollyCamera(viewport->camera, z);
-    viewport->navigation.moved = true;
-    mouse->wheel_scroll_handled = true;
-}
-
-void orientViewport(Viewport *viewport, Mouse *mouse) {
-    f32 x = viewport->navigation.settings.speeds.orient * -(f32)mouse->pos_raw_diff.x;
-    f32 y = viewport->navigation.settings.speeds.orient * -(f32)mouse->pos_raw_diff.y;
-    rotateXform3(&viewport->camera->transform, x, y, 0);
-
-    mouse->moved = false;
-    mouse->raw_movement_handled = true;
-    viewport->navigation.turned = true;
-}
-
-void orbitViewport(Viewport *viewport, Mouse *mouse) {
-    f32 x = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.x;
-    f32 y = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.y;
-    orbitCamera(viewport->camera, &viewport->navigation, x, y);
-
-    mouse->raw_movement_handled = true;
-    mouse->moved = false;
-}
-
-void navigateViewport(Viewport *viewport, f32 delta_time) {
-    vec3 target_velocity = getVec3Of(0);
-    Navigation *navigation = &viewport->navigation;
-    Camera *camera = viewport->camera;
-
-    if (navigation->move.right) target_velocity.x += navigation->settings.max_velocity;
-    if (navigation->move.left) target_velocity.x -= navigation->settings.max_velocity;
-    if (navigation->move.up) target_velocity.y += navigation->settings.max_velocity;
-    if (navigation->move.down) target_velocity.y -= navigation->settings.max_velocity;
-    if (navigation->move.forward) target_velocity.z += navigation->settings.max_velocity;
-    if (navigation->move.backward) target_velocity.z -= navigation->settings.max_velocity;
-    if (navigation->turn.left) {
-        rotateXform3(&camera->transform, delta_time * +navigation->settings.speeds.turn, 0, 0);
-        navigation->turned = true;
-    }
-    if (navigation->turn.right) {
-        rotateXform3(&camera->transform, delta_time * -navigation->settings.speeds.turn, 0, 0);
-        navigation->turned = true;
-    }
-
-    // Update the current velocity:
-    f32 velocity_difference = navigation->settings.acceleration * delta_time;
-    camera->current_velocity = approachVec3(camera->current_velocity, target_velocity, velocity_difference);
-
-    navigation->moved = nonZeroVec3(camera->current_velocity);
-    if (navigation->moved) { // Update the current position:
-        vec3 movement = scaleVec3(camera->current_velocity, delta_time);
-        movement = mulVec3Mat3(movement, camera->transform.rotation_matrix);
-        camera->transform.position = addVec3(camera->transform.position, movement);
-    }
-}
-
-void drawBox(Viewport *viewport, RGBA color, Box *box, Primitive *primitive, u8 sides) {
-    // Transform vertices positions from local-space to world-space and then to view-space:
-    static BoxVertices vertices;
+void transformBoxVerticesFromObjectToViewSpace(Viewport *viewport, Primitive *primitive, BoxVertices *vertices, BoxVertices *transformed_vertices) {
     vec3 position;
     for (u8 i = 0; i < BOX__VERTEX_COUNT; i++) {
-        position = box->vertices.buffer[i];
+        position = vertices->buffer[i];
         position = convertPositionToWorldSpace(position, primitive);
         position = subVec3(    position, viewport->camera->transform.position);
         position = mulVec3Quat(position, viewport->camera->transform.rotation_inverted);
-        vertices.buffer[i] = position;
+        transformed_vertices->buffer[i] = position;
     }
+}
+
+void drawBox(Viewport *viewport, vec3 color, f32 opacity, Box *box, Primitive *primitive, u8 sides, u8 line_width) {
+    // Transform vertices positions from local-space to world-space and then to view-space:
+    static BoxVertices vertices;
+    transformBoxVerticesFromObjectToViewSpace(viewport, primitive, &box->vertices, &vertices);
 
     // Distribute transformed vertices positions to edges:
     static BoxEdges edges;
@@ -3340,20 +3965,200 @@ void drawBox(Viewport *viewport, RGBA color, Box *box, Primitive *primitive, u8 
 
     if (sides == BOX__ALL_SIDES) {
         for (u8 i = 0; i < BOX__EDGE_COUNT; i++)
-            drawEdge(viewport, color, edges.buffer + i);
+            drawEdge3D(viewport, color, opacity, edges.buffer + i, line_width);
     } else {
-        if (sides & Front | sides & Top   ) drawEdge(viewport, color, &edges.sides.front_top);
-        if (sides & Front | sides & Bottom) drawEdge(viewport, color, &edges.sides.front_bottom);
-        if (sides & Front | sides & Left  ) drawEdge(viewport, color, &edges.sides.front_left);
-        if (sides & Front | sides & Right ) drawEdge(viewport, color, &edges.sides.front_right);
-        if (sides & Back  | sides & Top   ) drawEdge(viewport, color, &edges.sides.back_top);
-        if (sides & Back  | sides & Bottom) drawEdge(viewport, color, &edges.sides.back_bottom);
-        if (sides & Back  | sides & Left  ) drawEdge(viewport, color, &edges.sides.back_left);
-        if (sides & Back  | sides & Right ) drawEdge(viewport, color, &edges.sides.back_right);
-        if (sides & Left  | sides & Top   ) drawEdge(viewport, color, &edges.sides.left_top);
-        if (sides & Left  | sides & Bottom) drawEdge(viewport, color, &edges.sides.left_bottom);
-        if (sides & Right | sides & Top   ) drawEdge(viewport, color, &edges.sides.right_top);
-        if (sides & Right | sides & Bottom) drawEdge(viewport, color, &edges.sides.right_bottom);
+        if (sides & Front | sides & Top   ) drawEdge3D(viewport, color, opacity, &edges.sides.front_top, line_width);
+        if (sides & Front | sides & Bottom) drawEdge3D(viewport, color, opacity, &edges.sides.front_bottom, line_width);
+        if (sides & Front | sides & Left  ) drawEdge3D(viewport, color, opacity, &edges.sides.front_left, line_width);
+        if (sides & Front | sides & Right ) drawEdge3D(viewport, color, opacity, &edges.sides.front_right, line_width);
+        if (sides & Back  | sides & Top   ) drawEdge3D(viewport, color, opacity, &edges.sides.back_top, line_width);
+        if (sides & Back  | sides & Bottom) drawEdge3D(viewport, color, opacity, &edges.sides.back_bottom, line_width);
+        if (sides & Back  | sides & Left  ) drawEdge3D(viewport, color, opacity, &edges.sides.back_left, line_width);
+        if (sides & Back  | sides & Right ) drawEdge3D(viewport, color, opacity, &edges.sides.back_right, line_width);
+        if (sides & Left  | sides & Top   ) drawEdge3D(viewport, color, opacity, &edges.sides.left_top, line_width);
+        if (sides & Left  | sides & Bottom) drawEdge3D(viewport, color, opacity, &edges.sides.left_bottom, line_width);
+        if (sides & Right | sides & Top   ) drawEdge3D(viewport, color, opacity, &edges.sides.right_top, line_width);
+        if (sides & Right | sides & Bottom) drawEdge3D(viewport, color, opacity, &edges.sides.right_bottom, line_width);
+    }
+}
+
+void drawCamera(Viewport *viewport, vec3 color, f32 opacity, Camera *camera, u8 line_width) {
+    static Box box;
+    static Primitive primitive;
+    initBox(&box);
+    primitive.flags = ALL_FLAGS;
+    primitive.rotation = camera->transform.rotation;
+    primitive.position = camera->transform.position;
+    primitive.scale.x  = primitive.scale.y = primitive.scale.z = 1;
+    drawBox(viewport, color, opacity, &box, &primitive, BOX__ALL_SIDES, line_width);
+    box.vertices.corners.back_bottom_left   = scaleVec3(box.vertices.corners.back_bottom_left,  0.5f);
+    box.vertices.corners.back_bottom_right  = scaleVec3(box.vertices.corners.back_bottom_right, 0.5f);
+    box.vertices.corners.back_top_left      = scaleVec3(box.vertices.corners.back_top_left,     0.5f);
+    box.vertices.corners.back_top_right     = scaleVec3(box.vertices.corners.back_top_right,    0.5f);
+    box.vertices.corners.front_bottom_left  = scaleVec3(box.vertices.corners.front_bottom_left,  2);
+    box.vertices.corners.front_bottom_right = scaleVec3(box.vertices.corners.front_bottom_right, 2);
+    box.vertices.corners.front_top_left     = scaleVec3(box.vertices.corners.front_top_left,     2);
+    box.vertices.corners.front_top_right    = scaleVec3(box.vertices.corners.front_top_right,    2);
+    for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
+        box.vertices.buffer[i].z += 1.5f;
+    drawBox(viewport, color, opacity, &box, &primitive, BOX__ALL_SIDES, line_width);
+}
+
+
+#define CURVE_STEPS 3600
+
+void drawCurve(Viewport *viewport, vec3 color, f32 opacity, Curve *curve, Primitive *primitive, u32 step_count, u8 line_width) {
+    f32 one_over_step_count = 1.0f / (f32)step_count;
+    f32 rotation_step = one_over_step_count * TAU;
+    f32 rotation_step_times_rev_count = rotation_step * (f32)curve->revolution_count;
+
+    if (primitive->type == PrimitiveType_Helix)
+        rotation_step = rotation_step_times_rev_count;
+
+    vec3 center_to_orbit;
+    center_to_orbit.x = 1;
+    center_to_orbit.y = center_to_orbit.z = 0;
+
+    vec3 orbit_to_curve;
+    orbit_to_curve.x = curve->thickness;
+    orbit_to_curve.y = orbit_to_curve.z = 0;
+
+    mat3 rotation;
+    rotation.X.x = rotation.Z.z = cosf(rotation_step);
+    rotation.X.z = sinf(rotation_step);
+    rotation.Z.x = -rotation.X.z;
+    rotation.X.y = rotation.Z.y = rotation.Y.x = rotation.Y.z =  0;
+    rotation.Y.y = 1;
+
+    mat3 orbit_to_curve_rotation;
+    if (primitive->type == PrimitiveType_Coil) {
+        orbit_to_curve_rotation.X.x = orbit_to_curve_rotation.Y.y = cosf(rotation_step_times_rev_count);
+        orbit_to_curve_rotation.X.y = sinf(rotation_step_times_rev_count);
+        orbit_to_curve_rotation.Y.x = -orbit_to_curve_rotation.X.y;
+        orbit_to_curve_rotation.X.z = orbit_to_curve_rotation.Y.z = orbit_to_curve_rotation.Z.x = orbit_to_curve_rotation.Z.y =  0;
+        orbit_to_curve_rotation.Z.z = 1;
+    }
+
+    // Transform vertices positions of edges from view-space to screen-space (w/ culling and clipping):
+    mat3 accumulated_orbit_rotation = rotation;
+    vec3 current_position, previous_position;
+    Edge edge;
+
+    for (u32 i = 0; i < step_count; i++) {
+        center_to_orbit = mulVec3Mat3(center_to_orbit, rotation);
+
+        switch (primitive->type) {
+            case PrimitiveType_Helix:
+                current_position = center_to_orbit;
+                current_position.y -= 1;
+                break;
+                case PrimitiveType_Coil:
+                    orbit_to_curve  = mulVec3Mat3(orbit_to_curve, orbit_to_curve_rotation);
+                    current_position = mulVec3Mat3(orbit_to_curve, accumulated_orbit_rotation);
+                    current_position = addVec3(center_to_orbit, current_position);
+                    break;
+                    default:
+                        break;
+        }
+
+        current_position = convertPositionToWorldSpace(current_position, primitive);
+        current_position = subVec3(    current_position, viewport->camera->transform.position);
+        current_position = mulVec3Quat(current_position, viewport->camera->transform.rotation_inverted);
+
+        if (i) {
+            edge.from = previous_position;
+            edge.to   = current_position;
+            drawEdge3D(viewport, color, opacity, &edge, line_width);
+        }
+
+        switch (primitive->type) {
+            case PrimitiveType_Helix:
+                center_to_orbit.y += 2 * one_over_step_count;
+                break;
+                case PrimitiveType_Coil:
+                    accumulated_orbit_rotation = mulMat3(accumulated_orbit_rotation, rotation);
+                    break;
+                    default:
+                        break;
+        }
+
+        previous_position = current_position;
+    }
+}
+
+void transformGridVerticesFromObjectToViewSpace(Viewport *viewport, Primitive *primitive, Grid *grid, GridVertices *transformed_vertices) {
+    vec3 position;
+    for (u8 side = 0; side < 2; side++) {
+        for (u8 axis = 0; axis < 2; axis++) {
+            u8 segment_count = axis ? grid->v_segments : grid->u_segments;
+            for (u8 segment = 0; segment < segment_count; segment++) {
+                position = grid->vertices.buffer[axis][side][segment];
+                position = convertPositionToWorldSpace(position, primitive);
+                position = subVec3(    position, viewport->camera->transform.position);
+                position = mulVec3Quat(position, viewport->camera->transform.rotation_inverted);
+                transformed_vertices->buffer[axis][side][segment] = position;
+            }
+        }
+    }
+}
+
+void drawGrid(Viewport *viewport, vec3 color, f32 opacity, Grid *grid, Primitive *primitive, u8 line_width) {
+    // Transform vertices positions from local-space to world-space and then to view-space:
+    static GridVertices vertices;
+
+    transformGridVerticesFromObjectToViewSpace(viewport, primitive, grid, &vertices);
+
+    // Distribute transformed vertices positions to edges:
+    static GridEdges edges;
+    setGridEdgesFromVertices(edges.uv.u, grid->u_segments, vertices.uv.u.from, vertices.uv.u.to);
+    setGridEdgesFromVertices(edges.uv.v, grid->v_segments, vertices.uv.v.from, vertices.uv.v.to);
+
+    for (u8 u = 0; u < grid->u_segments; u++) drawEdge3D(viewport, color, opacity, edges.uv.u + u, line_width);
+    for (u8 v = 0; v < grid->v_segments; v++) drawEdge3D(viewport, color, opacity, edges.uv.v + v, line_width);
+}
+
+void drawMesh(Viewport *viewport, vec3 color, f32 opacity, Mesh *mesh, Primitive *primitive, bool draw_normals, u8 line_width) {
+    EdgeVertexIndices *edge_vertex_indices = mesh->edge_vertex_indices;
+    quat cam_rot = viewport->camera->transform.rotation_inverted;
+    vec3 cam_pos = viewport->camera->transform.position;
+    vec3 *positions = mesh->vertex_positions;
+    vec3 position;
+    Edge edge;
+    for (u32 i = 0; i < mesh->edge_count; i++, edge_vertex_indices++) {
+        position = positions[edge_vertex_indices->from];
+        position = convertPositionToWorldSpace(position, primitive);
+        position = subVec3(position,     cam_pos);
+        position = mulVec3Quat(position, cam_rot);
+        edge.from = position;
+
+        position = positions[edge_vertex_indices->to];
+        position = convertPositionToWorldSpace(position, primitive);
+        position = subVec3(position,     cam_pos);
+        position = mulVec3Quat(position, cam_rot);
+        edge.to  = position;
+
+        drawEdge3D(viewport, color, opacity, &edge, line_width);
+    }
+
+    if (draw_normals && mesh->normals_count && mesh->vertex_normals && mesh->vertex_normal_indices) {
+        TriangleVertexIndices *vertex_normal_indices = mesh->vertex_normal_indices;
+        TriangleVertexIndices *vertex_position_indices = mesh->vertex_position_indices;
+        vec3 *normals = mesh->vertex_normals;
+        for (u32 t = 0; t < mesh->triangle_count; t++, vertex_normal_indices++, vertex_position_indices++) {
+            for (u8 i = 0; i < 3; i++) {
+                position = positions[vertex_position_indices->ids[i]];
+                edge.from = convertPositionToWorldSpace(position, primitive);
+                edge.from = subVec3(edge.from,     cam_pos);
+                edge.from = mulVec3Quat(edge.from, cam_rot);
+
+                edge.to = addVec3(position, scaleVec3(normals[vertex_normal_indices->ids[i]], 0.1f));
+                edge.to = convertPositionToWorldSpace(edge.to, primitive);
+                edge.to = subVec3(edge.to,     cam_pos);
+                edge.to = mulVec3Quat(edge.to, cam_rot);
+
+                drawEdge3D(viewport, Color(Red), opacity, &edge, line_width);
+            }
+        }
     }
 }
 
@@ -3385,7 +4190,7 @@ u32 getMeshMemorySize(Mesh *mesh, char *file_path, Platform *platform) {
     return memory_size;
 }
 
-void loadMeshFromFile(Mesh *mesh, char* file_path, Platform *platform, Memory *memory) {
+void loadMeshFromFile(Mesh *mesh, char *file_path, Platform *platform, Memory *memory) {
     void *file = platform->openFileForReading(file_path);
 
     mesh->vertex_normals          = null;
@@ -3555,179 +4360,147 @@ void saveSceneToFile(Scene *scene, char* file_path, Platform *platform) {
     platform->closeFile(file);
 }
 
-void drawMesh(Viewport *viewport, RGBA color, Mesh *mesh, Primitive *primitive, bool draw_normals) {
-    EdgeVertexIndices *edge_vertex_indices = mesh->edge_vertex_indices;
-    quat cam_rot = viewport->camera->transform.rotation_inverted;
-    vec3 cam_pos = viewport->camera->transform.position;
-    vec3 *positions = mesh->vertex_positions;
-    vec3 position;
-    Edge edge;
-    for (u32 i = 0; i < mesh->edge_count; i++, edge_vertex_indices++) {
-        position = positions[edge_vertex_indices->from];
-        position = convertPositionToWorldSpace(position, primitive);
-        position = subVec3(position,     cam_pos);
-        position = mulVec3Quat(position, cam_rot);
-        edge.from = position;
 
-        position = positions[edge_vertex_indices->to];
-        position = convertPositionToWorldSpace(position, primitive);
-        position = subVec3(position,     cam_pos);
-        position = mulVec3Quat(position, cam_rot);
-        edge.to  = position;
+void drawHUD(PixelGrid *canvas, HUD *hud) {
+    i32 x = hud->position.x;
+    i32 y = hud->position.y;
 
-        drawEdge(viewport, color, &edge);
-    }
+    HUDLine *line = hud->lines;
+    bool alt;
+    for (u32 i = 0; i < hud->line_count; i++, line++) {
+        if (line->use_alternate) {
+            alt = *line->use_alternate;
+            if (line->invert_alternate_use)
+                alt = !alt;
+        } else
+            alt = false;
 
-    if (draw_normals && mesh->normals_count && mesh->vertex_normals && mesh->vertex_normal_indices) {
-        TriangleVertexIndices *vertex_normal_indices = mesh->vertex_normal_indices;
-        TriangleVertexIndices *vertex_position_indices = mesh->vertex_position_indices;
-        vec3 *normals = mesh->vertex_normals;
-        for (u32 t = 0; t < mesh->triangle_count; t++, vertex_normal_indices++, vertex_position_indices++) {
-            for (u8 i = 0; i < 3; i++) {
-                position = positions[vertex_position_indices->ids[i]];
-                edge.from = convertPositionToWorldSpace(position, primitive);
-                edge.from = subVec3(edge.from,     cam_pos);
-                edge.from = mulVec3Quat(edge.from, cam_rot);
-
-                edge.to = addVec3(position, scaleVec3(normals[vertex_normal_indices->ids[i]], 0.1f));
-                edge.to = convertPositionToWorldSpace(edge.to, primitive);
-                edge.to = subVec3(edge.to,     cam_pos);
-                edge.to = mulVec3Quat(edge.to, cam_rot);
-
-                drawEdge(viewport, Color(Red), &edge);
-            }
-        }
+        drawText(canvas, ColorOf(line->title_color), line->title.char_ptr, x, y);
+        drawText(canvas, ColorOf(
+                alt ? line->alternate_value_color : line->value_color),
+                 alt ? line->alternate_value.char_ptr : line->value.string.char_ptr,
+                 x + line->title.length * FONT_WIDTH, y);
+        y += (i32)(hud->line_height * (f32)FONT_HEIGHT);
     }
 }
 
-void drawCamera(Viewport *viewport, RGBA color, Camera *camera) {
-    static Box box;
-    static Primitive primitive;
-    initBox(&box);
-    primitive.flags = ALL_FLAGS;
-    primitive.rotation = camera->transform.rotation;
-    primitive.position = camera->transform.position;
-    primitive.scale.x  = primitive.scale.y = primitive.scale.z = 1;
-    drawBox(viewport, color, &box, &primitive, BOX__ALL_SIDES);
-    box.vertices.corners.back_bottom_left   = scaleVec3(box.vertices.corners.back_bottom_left,  0.5f);
-    box.vertices.corners.back_bottom_right  = scaleVec3(box.vertices.corners.back_bottom_right, 0.5f);
-    box.vertices.corners.back_top_left      = scaleVec3(box.vertices.corners.back_top_left,     0.5f);
-    box.vertices.corners.back_top_right     = scaleVec3(box.vertices.corners.back_top_right,    0.5f);
-    box.vertices.corners.front_bottom_left  = scaleVec3(box.vertices.corners.front_bottom_left,  2);
-    box.vertices.corners.front_bottom_right = scaleVec3(box.vertices.corners.front_bottom_right, 2);
-    box.vertices.corners.front_top_left     = scaleVec3(box.vertices.corners.front_top_left,     2);
-    box.vertices.corners.front_top_right    = scaleVec3(box.vertices.corners.front_top_right,    2);
-    for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
-        box.vertices.buffer[i].z += 1.5f;
-    drawBox(viewport, color, &box, &primitive, BOX__ALL_SIDES);
+void zoomCamera(Camera *camera, f32 zoom) {
+    f32 new_zoom = camera->zoom + zoom;
+    camera->focal_length = new_zoom > 1 ? new_zoom : (new_zoom < -1 ? (-1 / new_zoom) : 1);
+    camera->zoom = new_zoom;
 }
 
-#define CURVE_STEPS 3600
+void dollyCamera(Camera *camera, f32 dolly) {
+    vec3 target_position = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
+    target_position = addVec3(camera->transform.position, target_position);
 
-void drawCurve(Viewport *viewport, RGBA color, Curve *curve, Primitive *primitive, u32 step_count) {
-    f32 one_over_step_count = 1.0f / (f32)step_count;
-    f32 rotation_step = one_over_step_count * TAU;
-    f32 rotation_step_times_rev_count = rotation_step * (f32)curve->revolution_count;
+    // Compute new target distance:
+    camera->dolly += dolly;
+    camera->target_distance = powf(2, camera->dolly / -200) * CAMERA_DEFAULT__TARGET_DISTANCE;
 
-    if (primitive->type == PrimitiveType_Helix)
-        rotation_step = rotation_step_times_rev_count;
+    // Back-track from target position to new current position:
+    camera->transform.position = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
+    camera->transform.position = subVec3(target_position,camera->transform.position);
+}
 
-    vec3 center_to_orbit;
-    center_to_orbit.x = 1;
-    center_to_orbit.y = center_to_orbit.z = 0;
+void orbitCamera(Camera *camera, f32 azimuth, f32 altitude) {
+    // Move the camera forward to the position of it's target:
+    vec3 movement = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
+    camera->transform.position = addVec3(camera->transform.position, movement);
 
-    vec3 orbit_to_curve;
-    orbit_to_curve.x = curve->thickness;
-    orbit_to_curve.y = orbit_to_curve.z = 0;
+    // Reorient the camera while it is at the position of it's target:
+    rotateXform3(&camera->transform, azimuth, altitude, 0);
 
-    mat3 rotation;
-    rotation.X.x = rotation.Z.z = cosf(rotation_step);
-    rotation.X.z = sinf(rotation_step);
-    rotation.Z.x = -rotation.X.z;
-    rotation.X.y = rotation.Z.y = rotation.Y.x = rotation.Y.z =  0;
-    rotation.Y.y = 1;
+    // Back the camera away from it's target position using the updated forward direction:
+    movement = scaleVec3(*camera->transform.forward_direction, camera->target_distance);
+    camera->transform.position = subVec3(camera->transform.position, movement);
+}
 
-    mat3 orbit_to_curve_rotation;
-    if (primitive->type == PrimitiveType_Coil) {
-        orbit_to_curve_rotation.X.x = orbit_to_curve_rotation.Y.y = cosf(rotation_step_times_rev_count);
-        orbit_to_curve_rotation.X.y = sinf(rotation_step_times_rev_count);
-        orbit_to_curve_rotation.Y.x = -orbit_to_curve_rotation.X.y;
-        orbit_to_curve_rotation.X.z = orbit_to_curve_rotation.Y.z = orbit_to_curve_rotation.Z.x = orbit_to_curve_rotation.Z.y =  0;
-        orbit_to_curve_rotation.Z.z = 1;
+void panCamera(Camera *camera, f32 right, f32 up) {
+    vec3 up_movement    = scaleVec3(*camera->transform.up_direction, up);
+    vec3 right_movement = scaleVec3(*camera->transform.right_direction, right);
+    camera->transform.position = addVec3(camera->transform.position, up_movement);
+    camera->transform.position = addVec3(camera->transform.position, right_movement);
+}
+
+void panViewport(Viewport *viewport, Mouse *mouse) {
+    f32 x = viewport->navigation.settings.speeds.pan * -(f32)mouse->pos_raw_diff.x;
+    f32 y = viewport->navigation.settings.speeds.pan * +(f32)mouse->pos_raw_diff.y;
+    panCamera(viewport->camera, x, y);
+
+    viewport->navigation.moved = true;
+    mouse->raw_movement_handled = true;
+    mouse->moved = false;
+}
+
+void zoomViewport(Viewport *viewport, Mouse *mouse) {
+    f32 z = viewport->navigation.settings.speeds.zoom * mouse->wheel_scroll_amount;
+    zoomCamera(viewport->camera, z);
+
+    viewport->navigation.zoomed = true;
+    mouse->wheel_scroll_handled = true;
+}
+
+void dollyViewport(Viewport *viewport, Mouse *mouse) {
+    f32 z = viewport->navigation.settings.speeds.dolly * mouse->wheel_scroll_amount;
+    dollyCamera(viewport->camera, z);
+    viewport->navigation.moved = true;
+    mouse->wheel_scroll_handled = true;
+}
+
+void orientViewport(Viewport *viewport, Mouse *mouse) {
+    f32 x = viewport->navigation.settings.speeds.orient * -(f32)mouse->pos_raw_diff.x;
+    f32 y = viewport->navigation.settings.speeds.orient * -(f32)mouse->pos_raw_diff.y;
+    rotateXform3(&viewport->camera->transform, x, y, 0);
+
+    mouse->moved = false;
+    mouse->raw_movement_handled = true;
+    viewport->navigation.turned = true;
+}
+
+void orbitViewport(Viewport *viewport, Mouse *mouse) {
+    f32 x = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.x;
+    f32 y = viewport->navigation.settings.speeds.orbit * -(f32)mouse->pos_raw_diff.y;
+    orbitCamera(viewport->camera, x, y);
+
+    viewport->navigation.turned = true;
+    viewport->navigation.moved = true;
+    mouse->raw_movement_handled = true;
+    mouse->moved = false;
+}
+
+void navigateViewport(Viewport *viewport, f32 delta_time) {
+    vec3 target_velocity = getVec3Of(0);
+    Navigation *navigation = &viewport->navigation;
+    Camera *camera = viewport->camera;
+
+    if (navigation->move.right)    target_velocity.x += navigation->settings.max_velocity;
+    if (navigation->move.left)     target_velocity.x -= navigation->settings.max_velocity;
+    if (navigation->move.up)       target_velocity.y += navigation->settings.max_velocity;
+    if (navigation->move.down)     target_velocity.y -= navigation->settings.max_velocity;
+    if (navigation->move.forward)  target_velocity.z += navigation->settings.max_velocity;
+    if (navigation->move.backward) target_velocity.z -= navigation->settings.max_velocity;
+    if (navigation->turn.left) {
+        rotateXform3(&camera->transform, delta_time * +navigation->settings.speeds.turn, 0, 0);
+        navigation->turned = true;
+    }
+    if (navigation->turn.right) {
+        rotateXform3(&camera->transform, delta_time * -navigation->settings.speeds.turn, 0, 0);
+        navigation->turned = true;
     }
 
-    // Transform vertices positions of edges from view-space to screen-space (w/ culling and clipping):
-    mat3 accumulated_orbit_rotation = rotation;
-    vec3 current_position, previous_position;
-    Edge edge;
+    // Update the current velocity:
+    f32 velocity_difference = navigation->settings.acceleration * delta_time;
+    camera->current_velocity = approachVec3(camera->current_velocity, target_velocity, velocity_difference);
 
-    for (u32 i = 0; i < step_count; i++) {
-        center_to_orbit = mulVec3Mat3(center_to_orbit, rotation);
-
-        switch (primitive->type) {
-            case PrimitiveType_Helix:
-                current_position = center_to_orbit;
-                current_position.y -= 1;
-                break;
-            case PrimitiveType_Coil:
-                orbit_to_curve  = mulVec3Mat3(orbit_to_curve, orbit_to_curve_rotation);
-                current_position = mulVec3Mat3(orbit_to_curve, accumulated_orbit_rotation);
-                current_position = addVec3(center_to_orbit, current_position);
-                break;
-            default:
-                break;
-        }
-
-        current_position = convertPositionToWorldSpace(current_position, primitive);
-        current_position = subVec3(    current_position, viewport->camera->transform.position);
-        current_position = mulVec3Quat(current_position, viewport->camera->transform.rotation_inverted);
-
-        if (i) {
-            edge.from = previous_position;
-            edge.to   = current_position;
-            drawEdge(viewport, color, &edge);
-        }
-
-        switch (primitive->type) {
-            case PrimitiveType_Helix:
-                center_to_orbit.y += 2 * one_over_step_count;
-                break;
-            case PrimitiveType_Coil:
-                accumulated_orbit_rotation = mulMat3(accumulated_orbit_rotation, rotation);
-                break;
-            default:
-                break;
-        }
-
-        previous_position = current_position;
+    navigation->moved = nonZeroVec3(camera->current_velocity);
+    if (navigation->moved) { // Update the current position:
+        vec3 movement = scaleVec3(camera->current_velocity, delta_time);
+        movement = mulVec3Mat3(movement, camera->transform.rotation_matrix);
+        camera->transform.position = addVec3(camera->transform.position, movement);
     }
 }
 
-void drawGrid(Viewport *viewport, RGBA color, Grid *grid, Primitive *primitive) {
-    // Transform vertices positions from local-space to world-space and then to view-space:
-    GridVertices vertices;
-    vec3 position;
-    for (u8 side = 0; side < 2; side++) {
-        for (u8 axis = 0; axis < 2; axis++) {
-            u8 segment_count = axis ? grid->v_segments : grid->u_segments;
-            for (u8 segment = 0; segment < segment_count; segment++) {
-                position = grid->vertices.buffer[axis][side][segment];
-                position = convertPositionToWorldSpace(position, primitive);
-                position = subVec3(    position, viewport->camera->transform.position);
-                position = mulVec3Quat(position, viewport->camera->transform.rotation_inverted);
-                vertices.buffer[axis][side][segment] = position;
-            }
-        }
-    }
-
-    // Distribute transformed vertices positions to edges:
-    GridEdges edges;
-    setGridEdgesFromVertices(edges.uv.u, grid->u_segments, vertices.uv.u.from, vertices.uv.u.to);
-    setGridEdgesFromVertices(edges.uv.v, grid->v_segments, vertices.uv.v.from, vertices.uv.v.to);
-
-    for (u8 u = 0; u < grid->u_segments; u++) drawEdge(viewport, color, edges.uv.u + u);
-    for (u8 v = 0; v < grid->v_segments; v++) drawEdge(viewport, color, edges.uv.v + v);
-}
 
 void setViewportProjectionPlane(Viewport *viewport) {
     Camera *camera = viewport->camera;
@@ -3918,13 +4691,15 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     RayHit *hit = &selection->hit;
     Ray ray, *local_ray = &selection->local_ray;
     Primitive primitive;
+    vec2i mouse_pos = Vec2i(mouse->pos.x - viewport->settings.position.x,
+                            mouse->pos.y - viewport->settings.position.y);
 
     if (mouse->left_button.is_pressed) {
         if (!mouse->left_button.is_handled) { // This is the first frame after the left mouse button went down:
             mouse->left_button.is_handled = true;
 
             // Cast a ray onto the scene to find the closest object behind the hovered pixel:
-            setRayFromCoords(&ray, mouse->pos, viewport);
+            setRayFromCoords(&ray, mouse_pos, viewport);
 
             hit->distance_squared = INFINITY;
             if (rayHitScene(&ray, &selection->local_hit, hit, scene)) {
@@ -3965,7 +4740,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                     mouse->right_button.is_pressed);
             if (selection->primitive && !any_mouse_button_is_pressed) {
                 // Cast a ray onto the bounding box of the currently selected object:
-                setRayFromCoords(&ray, mouse->pos, viewport);
+                setRayFromCoords(&ray, mouse_pos, viewport);
                 primitive = *selection->primitive;
                 if (primitive.type == PrimitiveType_Mesh)
                     primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
@@ -3987,7 +4762,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
             if (selection->box_side) {
                 if (selection->primitive) {
                     if (any_mouse_button_is_pressed) {
-                        setRayFromCoords(&ray, mouse->pos, viewport);
+                        setRayFromCoords(&ray, mouse_pos, viewport);
                         if (hitPlane(selection->transformation_plane_origin,
                                      selection->transformation_plane_normal,
                                      &ray.origin,
@@ -4008,7 +4783,7 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                                 hit->position = convertPositionToObjectSpace(hit->position, &primitive);
 
                                 selection->primitive->scale = mulVec3(selection->object_scale,
-                                                                      mulVec3(hit->position, oneOverVec3(position)));
+                                                                             mulVec3(hit->position, oneOverVec3(position)));
                                 selection->primitive->flags |= IS_SCALED | IS_SCALED_NON_UNIFORMLY;
                             } else if (mouse->right_button.is_pressed) {
                                 vec3 v1 = subVec3(hit->position,
@@ -4034,8 +4809,8 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                 position.z = selection->object_distance;
 
                 // Screen -> NDC:
-                position.x = (f32) mouse->pos.x / dimensions->h_width - 1;
-                position.y = (f32) mouse->pos.y / dimensions->h_height - 1;
+                position.x = (f32) mouse_pos.x / dimensions->h_width - 1;
+                position.y = (f32) mouse_pos.y / dimensions->h_height - 1;
                 position.y = -position.y;
 
                 // NDC -> View:
@@ -4069,19 +4844,20 @@ void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
             primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
 
         initBox(box);
-        drawBox(viewport, Color(Yellow), box, &primitive, BOX__ALL_SIDES);
+        drawBox(viewport, Color(Yellow), 1, box, &primitive, BOX__ALL_SIDES, 1);
         if (selection->box_side) {
-            RGBA color = Color(White);
+            vec3 color = Color(White);
             switch (selection->box_side) {
                 case Left:  case Right:  color = Color(Red);   break;
                 case Top:   case Bottom: color = Color(Green); break;
                 case Front: case Back:   color = Color(Blue);  break;
                 case NoSide: break;
             }
-            drawBox(viewport, color, box, &primitive, selection->box_side);
+            drawBox(viewport, color, 1, box, &primitive, selection->box_side, 1);
         }
     }
 }
+
 
 App *app;
 
@@ -4248,6 +5024,7 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
     scene->last_io_is_save = false;
 }
 
+
 void _initApp(Defaults *defaults, void* window_content_memory) {
     app->is_running = true;
     app->user_data = null;
@@ -4267,7 +5044,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
 
     initTime(&app->time, app->platform.getTicks, app->platform.ticks_per_second);
     initMouse(&app->controls.mouse);
-    initPixelGrid(&app->window_content, window_content_memory);
+    initPixelGrid(&app->window_content, window_content_memory, MAX_WIDTH, MAX_HEIGHT);
 
     defaults->title = "";
     defaults->width = 480;
@@ -4315,6 +5092,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
 #ifdef __linux__
 //linux code goes here
 #elif _WIN32
+
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
@@ -4387,9 +5165,9 @@ inline bool hasRawInput() {
 inline bool hasRawMouseInput(LPARAM lParam) {
     raw_input_handle = (HRAWINPUT)(lParam);
     return (
-            hasRawInput() &&
-            getRawInput((LPVOID)&raw_inputs) == raw_input_size &&
-            raw_inputs.header.dwType == RIM_TYPEMOUSE
+        hasRawInput() &&
+        getRawInput((LPVOID)&raw_inputs) == raw_input_size &&
+        raw_inputs.header.dwType == RIM_TYPEMOUSE
     );
 }
 
@@ -4505,8 +5283,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         case WM_INPUT:
             if ((hasRawMouseInput(lParam)) && (
-                    raw_inputs.data.mouse.lLastX != 0 ||
-                    raw_inputs.data.mouse.lLastY != 0))
+                raw_inputs.data.mouse.lLastX != 0 ||
+                raw_inputs.data.mouse.lLastY != 0))
                 _mouseRawMovementSet(
                         raw_inputs.data.mouse.lLastX,
                         raw_inputs.data.mouse.lLastY
@@ -4604,6 +5382,9 @@ int APIENTRY WinMain(HINSTANCE hInstance,
     win_dc = GetDC(window);
 
     SetICMMode(win_dc, ICM_OFF);
+
+
+
     ShowWindow(window, nCmdShow);
 
     MSG message;

@@ -21,7 +21,7 @@ void transformGridVerticesFromObjectToViewSpace(Viewport *viewport, Primitive *p
     }
 }
 
-void drawGrid(Viewport *viewport, RGBA color, Grid *grid, Primitive *primitive, u8 line_width) {
+void drawGrid(Viewport *viewport, vec3 color, f32 opacity, Grid *grid, Primitive *primitive, u8 line_width) {
     // Transform vertices positions from local-space to world-space and then to view-space:
     static GridVertices vertices;
 
@@ -32,6 +32,6 @@ void drawGrid(Viewport *viewport, RGBA color, Grid *grid, Primitive *primitive, 
     setGridEdgesFromVertices(edges.uv.u, grid->u_segments, vertices.uv.u.from, vertices.uv.u.to);
     setGridEdgesFromVertices(edges.uv.v, grid->v_segments, vertices.uv.v.from, vertices.uv.v.to);
 
-    for (u8 u = 0; u < grid->u_segments; u++) drawEdge(viewport, color, edges.uv.u + u, line_width);
-    for (u8 v = 0; v < grid->v_segments; v++) drawEdge(viewport, color, edges.uv.v + v, line_width);
+    for (u8 u = 0; u < grid->u_segments; u++) drawEdge3D(viewport, color, opacity, edges.uv.u + u, line_width);
+    for (u8 v = 0; v < grid->v_segments; v++) drawEdge3D(viewport, color, opacity, edges.uv.v + v, line_width);
 }

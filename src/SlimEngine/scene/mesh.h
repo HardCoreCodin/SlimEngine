@@ -5,7 +5,7 @@
 #include "../shapes/edge.h"
 #include "./primitive.h"
 
-void drawMesh(Viewport *viewport, RGBA color, Mesh *mesh, Primitive *primitive, bool draw_normals, u8 line_width) {
+void drawMesh(Viewport *viewport, vec3 color, f32 opacity, Mesh *mesh, Primitive *primitive, bool draw_normals, u8 line_width) {
     EdgeVertexIndices *edge_vertex_indices = mesh->edge_vertex_indices;
     quat cam_rot = viewport->camera->transform.rotation_inverted;
     vec3 cam_pos = viewport->camera->transform.position;
@@ -25,7 +25,7 @@ void drawMesh(Viewport *viewport, RGBA color, Mesh *mesh, Primitive *primitive, 
         position = mulVec3Quat(position, cam_rot);
         edge.to  = position;
 
-        drawEdge(viewport, color, &edge, line_width);
+        drawEdge3D(viewport, color, opacity, &edge, line_width);
     }
 
     if (draw_normals && mesh->normals_count && mesh->vertex_normals && mesh->vertex_normal_indices) {
@@ -44,7 +44,7 @@ void drawMesh(Viewport *viewport, RGBA color, Mesh *mesh, Primitive *primitive, 
                 edge.to = subVec3(edge.to,     cam_pos);
                 edge.to = mulVec3Quat(edge.to, cam_rot);
 
-                drawEdge(viewport, Color(Red), &edge, line_width);
+                drawEdge3D(viewport, Color(Red), opacity, &edge, line_width);
             }
         }
     }

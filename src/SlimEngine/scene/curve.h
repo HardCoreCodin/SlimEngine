@@ -9,7 +9,7 @@
 
 #define CURVE_STEPS 3600
 
-void drawCurve(Viewport *viewport, RGBA color, Curve *curve, Primitive *primitive, u32 step_count, u8 line_width) {
+void drawCurve(Viewport *viewport, vec3 color, f32 opacity, Curve *curve, Primitive *primitive, u32 step_count, u8 line_width) {
     f32 one_over_step_count = 1.0f / (f32)step_count;
     f32 rotation_step = one_over_step_count * TAU;
     f32 rotation_step_times_rev_count = rotation_step * (f32)curve->revolution_count;
@@ -70,7 +70,7 @@ void drawCurve(Viewport *viewport, RGBA color, Curve *curve, Primitive *primitiv
         if (i) {
             edge.from = previous_position;
             edge.to   = current_position;
-            drawEdge(viewport, color, &edge, line_width);
+            drawEdge3D(viewport, color, opacity, &edge, line_width);
         }
 
         switch (primitive->type) {

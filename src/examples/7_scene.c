@@ -9,6 +9,10 @@
 // Or using the single-header file:
 // #include "../SlimEngine.h"
 
+void setCountersInHUD(HUD *hud, Timer *timer) {
+    printNumberIntoString(timer->average_frames_per_second,      &hud->lines[0].value);
+    printNumberIntoString(timer->average_microseconds_per_frame, &hud->lines[1].value);
+}
 void onButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff = Vec2i(0, 0);
 }
@@ -21,28 +25,30 @@ void onDoubleClick(MouseButton *mouse_button) {
     }
 }
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer, Color(Black));
+    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
+    setPreProjectionMatrix(viewport);
+
     Primitive *primitive = scene->primitives;
     for (u32 i = 0; i < scene->settings.primitives; i++, primitive++)
         switch (primitive->type) {
             case PrimitiveType_Mesh:
-                drawMesh(viewport, Color(primitive->color),
+                drawMesh(viewport, Color(primitive->color), 1,
                          &scene->meshes[primitive->id], primitive, false, 0);
                 break;
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:
-                drawCurve(viewport, Color(primitive->color),
+                drawCurve(viewport, Color(primitive->color), 1,
                           &scene->curves[primitive->id], primitive,
-                          CURVE_STEPS, 0);
+                          CURVE_STEPS, 1);
                 break;
             case PrimitiveType_Box:
-                drawBox(viewport, Color(primitive->color),
+                drawBox(viewport, Color(primitive->color), 1,
                         &scene->boxes[primitive->id], primitive,
-                        BOX__ALL_SIDES, 0);
+                        BOX__ALL_SIDES, 1);
                 break;
             case PrimitiveType_Grid:
-                drawGrid(viewport, Color(primitive->color),
-                         &scene->grids[primitive->id], primitive, 0);
+                drawGrid(viewport, Color(primitive->color), 1,
+                         &scene->grids[primitive->id], primitive, 1);
                 break;
             default:
                 break;
@@ -52,17 +58,9 @@ void setupViewport(Viewport *viewport) {
     HUD *hud = &viewport->hud;
     hud->line_height = 1.2f;
     hud->position = Vec2i(10, 10);
-    HUDLine *line = hud->lines;
-    for (u8 i = 0; i < hud->line_count; i++, line++) {
-        setString(&line->alternate_value, "On");
-        setString(&line->value.string, "Off");
-        line->alternate_value_color = Green;
-        line->value_color = DarkGreen;
-        line->use_alternate = i ?
-                &viewport->settings.depth_sort :
-                &viewport->settings.antialias;
-        setString(&line->title, i ? "Z-Sort : " : "AALines: ");
-    }
+    setCountersInHUD(hud, &app->time.timers.update);
+    setString(&hud->lines[0].title, "Fps    : ");
+    setString(&hud->lines[1].title, "mic-s/f: ");
 }
 void updateViewport(Viewport *viewport, Mouse *mouse) {
     if (mouse->is_captured) {
@@ -95,9 +93,12 @@ void updateAndRender() {
     drawSceneToViewport(scene, viewport);
     drawSelection(scene, viewport, controls);
 
-    if (viewport->settings.show_hud)
-        drawHUD(viewport->frame_buffer, &viewport->hud);
+    preparePixelGridForDisplay(viewport->frame_buffer);
 
+    if (viewport->settings.show_hud) {
+        setCountersInHUD(&viewport->hud, timer);
+        drawHUD(viewport->frame_buffer, &viewport->hud);
+    }
     f64 now = (f64)app->time.getTicks();
     f64 tps = (f64)app->time.ticks.per_second;
     if ((now - (f64)scene->last_io_ticks) / tps <= 2.0) {
@@ -106,10 +107,10 @@ void updateAndRender() {
         RGBA color;
         if (scene->last_io_is_save) {
             message = "Scene saved to: this.scene";
-            color = Color(Yellow);
+            color = ColorOf(Yellow);
         } else {
             message = "Scene loaded from: this.scene";
-            color = Color(Cyan);
+            color = ColorOf(Cyan);
         }
         i32 x = canvas->dimensions.width / 2 - 150;
         i32 y = 20;
@@ -177,17 +178,13 @@ void onKeyChanged(u8 key, bool is_pressed) {
     if (key == 'D') move->right    = is_pressed;
 
     ViewportSettings *settings = &app->viewport.settings;
-    if (!is_pressed) {
-        u8 tab = app->controls.key_map.tab;
-        if (key == tab) settings->show_hud = !settings->show_hud;
-        if (key == '1') settings->antialias = !settings->antialias;
-        if (key == '2') settings->depth_sort = !settings->depth_sort;
-    }
+    if (!is_pressed && key == app->controls.key_map.tab)
+        settings->show_hud = !settings->show_hud;
 
     Scene *scene = &app->scene;
     Platform *platform = &app->platform;
     if (app->controls.is_pressed.ctrl &&
-        !is_pressed && key == 'S' || key == 'Z') {
+    !is_pressed && key == 'S' || key == 'Z') {
         scene->last_io_is_save = key == 'S';
         char *file = scene->settings.file.char_ptr;
         if (scene->last_io_is_save)

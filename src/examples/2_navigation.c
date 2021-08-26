@@ -41,9 +41,11 @@ void updateAndRender() {
 
     updateViewport(viewport, mouse);
 
-    fillPixelGrid(viewport->frame_buffer, Color(Black));
-    drawGrid(viewport, Color(scene->primitives->color),
-             &scene->grids[0], &scene->primitives[0], 0);
+    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
+    setPreProjectionMatrix(viewport);
+    drawGrid(viewport, Color(scene->primitives->color), 1,
+             &scene->grids[0], &scene->primitives[0], 1);
+    preparePixelGridForDisplay(viewport->frame_buffer);
     drawMouseAndKeyboard(viewport, mouse);
 
     resetMouseChanges(mouse);

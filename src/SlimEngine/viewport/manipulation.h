@@ -4,8 +4,6 @@
 #include "../math/vec3.h"
 #include "../math/quat.h"
 #include "../scene/primitive.h"
-//#include "../core/time.h"
-//#include "../scene/xform.h"
 #include "../scene/box.h"
 
 void setViewportProjectionPlane(Viewport *viewport) {
@@ -350,16 +348,16 @@ void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
             primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
 
         initBox(box);
-        drawBox(viewport, Color(Yellow), box, &primitive, BOX__ALL_SIDES, 1);
+        drawBox(viewport, Color(Yellow), 1, box, &primitive, BOX__ALL_SIDES, 1);
         if (selection->box_side) {
-            RGBA color = Color(White);
+            vec3 color = Color(White);
             switch (selection->box_side) {
                 case Left:  case Right:  color = Color(Red);   break;
                 case Top:   case Bottom: color = Color(Green); break;
                 case Front: case Back:   color = Color(Blue);  break;
                 case NoSide: break;
             }
-            drawBox(viewport, color, box, &primitive, selection->box_side, 1);
+            drawBox(viewport, color, 1, box, &primitive, selection->box_side, 1);
         }
     }
 }

@@ -24,19 +24,20 @@ void onDoubleClick(MouseButton *mouse_button) {
     }
 }
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer, Color(Black));
+    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
+    setPreProjectionMatrix(viewport);
 
     bool normals = app->controls.is_pressed.ctrl;
     Primitive *primitive = scene->primitives;
     for (u32 i = 0; i < scene->settings.primitives; i++, primitive++)
         switch (primitive->type) {
             case PrimitiveType_Mesh:
-                drawMesh(viewport, Color(primitive->color),
-                         &scene->meshes[primitive->id], primitive, normals);
+                drawMesh(viewport, Color(primitive->color), 1,
+                         &scene->meshes[primitive->id], primitive, normals, 0);
                 break;
             case PrimitiveType_Grid:
-                drawGrid(viewport, Color(primitive->color),
-                         &scene->grids[primitive->id], primitive);
+                drawGrid(viewport, Color(primitive->color), 1,
+                         &scene->grids[primitive->id], primitive, 1);
                 break;
             default:
                 break;
@@ -81,6 +82,8 @@ void updateAndRender() {
 
     drawSceneToViewport(scene, viewport);
     drawSelection(scene, viewport, controls);
+
+    preparePixelGridForDisplay(viewport->frame_buffer);
 
     if (viewport->settings.show_hud) {
         setCountersInHUD(&viewport->hud, timer);
