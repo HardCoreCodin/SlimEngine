@@ -85,33 +85,56 @@ void renderViewFrustum(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
     drawArrow(viewport, Color(BrightGreen), &arrowY, 2);
     drawArrow(viewport, Color(BrightBlue),  &arrowZ, 2);
 
+    mat4 M = getMat4Identity();
+
+    drawBox(viewport, Color(Yellow), &NDC_box, secondary_camera_prim, BOX__ALL_SIDES, 1);
+
     view_frustum_box.vertices.corners = getViewFrustumCorners(&secondary_viewport);
     setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
-    drawFrustum(viewport, &view_frustum_box, near_color, far_color, sides_color, 1);
+    transforming_view_frustum_box = view_frustum_box;
 
-    drawBox(viewport, Color(Grey), main_box, main_box_prim, BOX__ALL_SIDES, 0);
+    if (transitions.full_projection.active) {
+        if (incTransition(&transitions.full_projection, delta_time, true)) {
+            transitionBox(&transitions.full_projection, &view_frustum_box, &NDC_box);
+            sides_color = getColorInBetween(sides_color, Color(Yellow), transitions.full_projection.eased_t);
+            near_color = getColorInBetween(near_color,  Color(Yellow), transitions.full_projection.eased_t);
+            far_color  = getColorInBetween(far_color,   Color(Yellow), transitions.full_projection.eased_t);
+        }
+    }
+    drawFrustum(viewport, &transforming_view_frustum_box, near_color, far_color, sides_color, 1);
 
+    edge_color = Color(DarkYellow);
+    drawBox(viewport, edge_color, main_box, main_box_prim, BOX__ALL_SIDES, 0);
+
+    Edge *clipped_edge;
     transformGridVerticesFromObjectToViewSpace(&secondary_viewport, main_grid_prim, main_grid, &clipped_grid.vertices);
-    transformBoxVerticesFromObjectToViewSpace(&secondary_viewport, main_box_prim, &main_box->vertices, &clipped_box.vertices);
     setGridEdgesFromVertices(clipped_grid.edges.uv.u, main_grid->u_segments, clipped_grid.vertices.uv.u.from, clipped_grid.vertices.uv.u.to);
     setGridEdgesFromVertices(clipped_grid.edges.uv.v, main_grid->v_segments, clipped_grid.vertices.uv.v.from, clipped_grid.vertices.uv.v.to);
-    setBoxEdgesFromVertices(&clipped_box.edges, &clipped_box.vertices);
-    Edge *clipped_edge = clipped_grid.edges.uv.u;
-    for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++)
-        if (cullAndClipEdge(clipped_edge, &secondary_viewport))
-            drawClippedEdge(viewport, clipped_edge, Color(main_grid_prim->color));
+
+    edge_color = Color(main_grid_prim->color);
+    clipped_edge = clipped_grid.edges.uv.u;
+    for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++) {
+        if (cullAndClipEdge(clipped_edge, &secondary_viewport)) {
+            drawClippedEdge(viewport, transformedEdge(clipped_edge, M, M), edge_color);
+        }
+    }
 
     clipped_edge = clipped_grid.edges.uv.v;
-    for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++)
-        if (cullAndClipEdge(clipped_edge, &secondary_viewport))
-            drawClippedEdge(viewport, clipped_edge, Color(main_grid_prim->color));
+    for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++) {
+        if (cullAndClipEdge(clipped_edge, &secondary_viewport)) {
+            drawClippedEdge(viewport, transformedEdge(clipped_edge, M, M), edge_color);
+        }
+    }
 
     transformBoxVerticesFromObjectToViewSpace(&secondary_viewport, main_box_prim, &main_box->vertices, &clipped_box.vertices);
     setBoxEdgesFromVertices(&clipped_box.edges, &clipped_box.vertices);
     clipped_edge = clipped_box.edges.buffer;
-    for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++)
-        if (cullAndClipEdge(clipped_edge, &secondary_viewport))
-            drawClippedEdge(viewport, clipped_edge, Color(main_box_prim->color));
+    edge_color = Color(main_box_prim->color);
+    for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++) {
+        if (cullAndClipEdge(clipped_edge, &secondary_viewport)) {
+            drawClippedEdge(viewport, transformedEdge(clipped_edge, M, M), edge_color);
+        }
+    }
 }
 
 void renderProjection(Viewport *viewport, f32 delta_time) {

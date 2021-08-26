@@ -64,9 +64,9 @@ bool move_projective_point = true;
 
 typedef enum VIZ {
     INTRO,
-    VIEW_FRUSTUM,
-    PROJECTION,
     PROJECTIVE_SPACE,
+    PROJECTION,
+    VIEW_FRUSTUM,
     VIEW_FRUSTUM_SLICE,
     VIS_COUNT
 } VIZ;

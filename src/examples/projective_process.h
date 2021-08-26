@@ -857,14 +857,18 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
         edge_color = Color(main_grid_prim->color);
         edge_color.A = opacity;
         clipped_edge = clipped_grid.edges.uv.u;
-        for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++)
-            if (cullAndClipEdge(clipped_edge, &secondary_viewport))
+        for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++) {
+            if (cullAndClipEdge(clipped_edge, &secondary_viewport)) {
                 drawClippedEdge(viewport, transformedEdge(clipped_edge, M, src), edge_color);
+            }
+        }
 
         clipped_edge = clipped_grid.edges.uv.v;
-        for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++)
-            if (cullAndClipEdge(clipped_edge, &secondary_viewport))
+        for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++) {
+            if (cullAndClipEdge(clipped_edge, &secondary_viewport)) {
                 drawClippedEdge(viewport, transformedEdge(clipped_edge, M, src), edge_color);
+            }
+        }
 
         transformBoxVerticesFromObjectToViewSpace(&secondary_viewport, main_box_prim, &main_box->vertices, &clipped_box.vertices);
         setBoxEdgesFromVertices(&clipped_box.edges, &clipped_box.vertices);
@@ -879,8 +883,9 @@ void renderViewSpaceFrustumSlice(Viewport *viewport, f32 delta_time) {
                     clipped_edge == &clipped_box.edges.sides.back_bottom))
                 continue;
 
-            if (cullAndClipEdge(clipped_edge, &secondary_viewport))
+            if (cullAndClipEdge(clipped_edge, &secondary_viewport)) {
                 drawClippedEdge(viewport, transformedEdge(clipped_edge, M, src), edge_color);
+            }
         }
     }
 
