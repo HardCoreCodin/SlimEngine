@@ -92,6 +92,7 @@ void initTime(Time *time, GetTicks getTicks, u64 ticks_per_second) {
 void initPixelGrid(PixelGrid *pixel_grid, void* memory, u32 max_width, u32 max_height) {
     pixel_grid->pixels = (Pixel*)(memory);
     pixel_grid->float_pixels = (FloatPixel*)(pixel_grid->pixels + max_width * max_height);
+    pixel_grid->gamma_corrected_blending = true;
     updateDimensions(&pixel_grid->dimensions, max_width, max_height);
 }
 
@@ -235,8 +236,8 @@ void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->hud_line_count = 0;
     settings->hud_lines = null;
     settings->show_hud = false;
-    settings->antialias = false;
-    settings->depth_sort = false;
+    settings->antialias = true;
+    settings->depth_sort = true;
     settings->use_cube_NDC = false;
     settings->flip_z = false;
     settings->position.x = 0;

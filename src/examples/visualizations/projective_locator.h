@@ -6,7 +6,7 @@
 #define LOCATOR_GRID_SIZE_X 41
 #define LOCATOR_GRID_SIZE_Y 31
 #define LOCATOR_GRID_SIZE_Z 21
-#define LOCATOR_OPACITY (MAX_COLOR_VALUE / 8)
+#define LOCATOR_OPACITY 0.125f
 #define LOCATOR_SIZE 0.2f
 
 typedef union Locator {
@@ -27,7 +27,7 @@ void setLocator(Locator *locator, vec3 location) {
     locator->Z.to.z   += LOCATOR_SIZE;
 }
 
-void drawLocatorGrid(Viewport *viewport, RGBA color, RGBA out_color, Transition *transition) {
+void drawLocatorGrid(Viewport *viewport, vec3 color, vec3 out_color, f32 opacity, Transition *transition) {
     f32 from_w, to_w;
     f32 n = secondary_viewport.settings.near_clipping_plane_distance;
     f32 f = secondary_viewport.settings.far_clipping_plane_distance;
@@ -39,7 +39,6 @@ void drawLocatorGrid(Viewport *viewport, RGBA color, RGBA out_color, Transition 
     vec3 start = view_frustum_box.vertices.corners.front_bottom_left;
     vec3 location = start;
     Locator locator;
-    out_color.A /= 8;
     bool is_out;
 
     for (i32 z = 0; z < LOCATOR_GRID_SIZE_Z; z++) {
@@ -72,7 +71,7 @@ void drawLocatorGrid(Viewport *viewport, RGBA color, RGBA out_color, Transition 
                     edge->to   = lerpVec3(edge->to,   trg_edge.to,   transition->eased_t);
 
                     convertEdgeFromSecondaryToMain(edge);
-                    drawEdge(viewport, is_out ? out_color : color, edge, 4);
+                    drawEdge3D(viewport, is_out ? out_color : color, opacity, edge, 4);
                 }
                 location.x += x_step;
             }

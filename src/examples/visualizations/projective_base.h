@@ -9,7 +9,7 @@
 #include "../../SlimEngine/viewport/navigation.h"
 #include "../../SlimEngine/viewport/manipulation.h"
 
-RGBA sides_color,
+vec3 sides_color,
      near_color,
      far_color,
      focal_length_color,
@@ -52,8 +52,9 @@ Box NDC_box,
     *main_box;
 
 Edge view_space_edge;
-RGBA edge_color;
-RGBA camera_color;
+vec3 edge_color;
+f32 camera_opacity = 0.5f;
+vec3 camera_color;
 
 bool orbit = false;
 bool collapse_final_matrix = false;
@@ -126,24 +127,24 @@ void drawSecondaryViewportToFrameBuffer(PixelGrid *frame_buffer) {
     i32 y1 = secondary_viewport.settings.position.y;
     i32 y2 = secondary_viewport.frame_buffer->dimensions.height + y1;
 
-    edge_color = Color(White);
+    RGBA color = ColorOf(White);
 
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y1-1);
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y1+0);
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y1+1);
+    drawHLine(frame_buffer, color, x1-1, x2+1, y1-1);
+    drawHLine(frame_buffer, color, x1-1, x2+1, y1+0);
+    drawHLine(frame_buffer, color, x1-1, x2+1, y1+1);
 
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y2-1);
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y2+0);
-    drawHLine2D(frame_buffer, edge_color, x1-1, x2+1, y2+1);
+    drawHLine(frame_buffer, color, x1-1, x2+1, y2-1);
+    drawHLine(frame_buffer, color, x1-1, x2+1, y2+0);
+    drawHLine(frame_buffer, color, x1-1, x2+1, y2+1);
 
 
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x1-1);
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x1+0);
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x1+1);
+    drawVLine(frame_buffer, color, y1-1, y2+1, x1-1);
+    drawVLine(frame_buffer, color, y1-1, y2+1, x1+0);
+    drawVLine(frame_buffer, color, y1-1, y2+1, x1+1);
 
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x2-1);
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x2+0);
-    drawVLine2D(frame_buffer, edge_color, y1-1, y2+1, x2+1);
+    drawVLine(frame_buffer, color, y1-1, y2+1, x2-1);
+    drawVLine(frame_buffer, color, y1-1, y2+1, x2+0);
+    drawVLine(frame_buffer, color, y1-1, y2+1, x2+1);
 }
 
 INLINE vec3 vec3wUp(vec4 v) {
@@ -175,22 +176,22 @@ BoxCorners getViewFrustumCorners(Viewport *viewport) {
     return corners;
 }
 
-void drawFrustum(Viewport *viewport, Box *view_frustum, RGBA near_col, RGBA far_col, RGBA side_col, u8 line_width) {
+void drawFrustum(Viewport *viewport, Box *view_frustum, vec3 near_col, vec3 far_col, vec3 side_col, f32 opacity, u8 line_width) {
     transformBoxVerticesFromObjectToViewSpace(viewport, secondary_camera_prim, &view_frustum->vertices, &view_frustum->vertices);
     setBoxEdgesFromVertices(&view_frustum->edges, &view_frustum->vertices);
 
-    drawEdge(viewport, far_col,  &view_frustum->edges.sides.front_top,    line_width);
-    drawEdge(viewport, far_col,  &view_frustum->edges.sides.front_bottom, line_width);
-    drawEdge(viewport, far_col,  &view_frustum->edges.sides.front_left,   line_width);
-    drawEdge(viewport, far_col,  &view_frustum->edges.sides.front_right,  line_width);
-    drawEdge(viewport, near_col, &view_frustum->edges.sides.back_top,     line_width);
-    drawEdge(viewport, near_col, &view_frustum->edges.sides.back_bottom,  line_width);
-    drawEdge(viewport, near_col, &view_frustum->edges.sides.back_left,    line_width);
-    drawEdge(viewport, near_col, &view_frustum->edges.sides.back_right,   line_width);
-    drawEdge(viewport, side_col, &view_frustum->edges.sides.left_top,     line_width);
-    drawEdge(viewport, side_col, &view_frustum->edges.sides.left_bottom,  line_width);
-    drawEdge(viewport, side_col, &view_frustum->edges.sides.right_top,    line_width);
-    drawEdge(viewport, side_col, &view_frustum->edges.sides.right_bottom, line_width);
+    drawEdge3D(viewport, far_col,  1, &view_frustum->edges.sides.front_top,    line_width);
+    drawEdge3D(viewport, far_col,  1, &view_frustum->edges.sides.front_bottom, line_width);
+    drawEdge3D(viewport, far_col,  1, &view_frustum->edges.sides.front_left,   line_width);
+    drawEdge3D(viewport, far_col,  1, &view_frustum->edges.sides.front_right,  line_width);
+    drawEdge3D(viewport, near_col, 1, &view_frustum->edges.sides.back_top,     line_width);
+    drawEdge3D(viewport, near_col, 1, &view_frustum->edges.sides.back_bottom,  line_width);
+    drawEdge3D(viewport, near_col, 1, &view_frustum->edges.sides.back_left,    line_width);
+    drawEdge3D(viewport, near_col, 1, &view_frustum->edges.sides.back_right,   line_width);
+    drawEdge3D(viewport, side_col, 1, &view_frustum->edges.sides.left_top,     line_width);
+    drawEdge3D(viewport, side_col, 1, &view_frustum->edges.sides.left_bottom,  line_width);
+    drawEdge3D(viewport, side_col, 1, &view_frustum->edges.sides.right_top,    line_width);
+    drawEdge3D(viewport, side_col, 1, &view_frustum->edges.sides.right_bottom, line_width);
 }
 
 void convertEdgeFromSecondaryToMain(Edge *edge) {
@@ -200,17 +201,22 @@ void convertEdgeFromSecondaryToMain(Edge *edge) {
     edge->to   = convertPositionToObjectSpace(edge->to,   main_camera_prim);
 }
 
-void drawLocalEdge(Edge edge, RGBA color, u8 line_width) {
+void drawLocalEdge(Edge edge, vec3 color, f32 opacity, u8 line_width) {
     convertEdgeFromSecondaryToMain(&edge);
-    drawEdge(&app->viewport, color, &edge, line_width);
+    drawEdge3D(&app->viewport, color, opacity, &edge, line_width);
 }
 
-void drawClippedEdge(Viewport *viewport, Edge *clipped_edge, RGBA color) {
+void drawClippedEdge(Viewport *viewport, Edge *clipped_edge, vec3 color, f32 opacity) {
     convertEdgeFromSecondaryToMain(clipped_edge);
     projectEdge(clipped_edge, viewport);
     clipped_edge->from.z -= 0.1f;
     clipped_edge->to.z -= 0.1f;
-    drawLine3D(viewport->frame_buffer, color, clipped_edge->from, clipped_edge->to, 1);
+    drawLineF(viewport->frame_buffer, color, opacity,
+              clipped_edge->from.x,
+              clipped_edge->from.y,
+              clipped_edge->to.x,
+              clipped_edge->to.y,
+               1);
 }
 
 void updateProjectionBoxes(Viewport *viewport) {

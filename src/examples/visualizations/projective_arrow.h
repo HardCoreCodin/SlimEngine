@@ -26,25 +26,30 @@ bool updateArrow(Arrow *arrow) {
     return true;
 }
 
-void drawArrow(Viewport *viewport, RGBA color, Arrow *arrow, u8 line_width) {
+void drawArrow(Viewport *viewport, vec3 color, f32 opacity, Arrow *arrow, u8 line_width) {
     xform3 *xform = &viewport->camera->transform;
 
     Edge edge;
     transformEdge(&arrow->body, &edge, xform);
-    drawEdge(viewport, color, &edge, line_width);
+    drawEdgeF(viewport, color, opacity, &edge, line_width);
 
     transformEdge(&arrow->head.left, &edge, xform);
-    drawEdge(viewport, color, &edge, line_width);
+    drawEdgeF(viewport, color, opacity, &edge, line_width);
 
     transformEdge(&arrow->head.right, &edge, xform);
-    drawEdge(viewport, color, &edge, line_width);
+    drawEdgeF(viewport, color, opacity, &edge, line_width);
 
     if (arrow->label) {
         edge = arrow->body;
         edge.to = scaleAddVec3(subVec3(edge.to, edge.from), 1.2f, edge.from);
         transformEdge(&edge, &edge, xform);
         projectEdge(&edge, viewport);
-        drawText(viewport->frame_buffer, color, arrow->label, (i32)edge.to.x, (i32)edge.to.y);
+        RGBA arrow_label_color;
+        arrow_label_color.A = 255;
+        arrow_label_color.R = (u8)color.r;
+        arrow_label_color.G = (u8)color.g;
+        arrow_label_color.B = (u8)color.b;
+        addLabel(arrow_label_color, arrow->label, (i32)edge.to.x, (i32)edge.to.y);
     }
 }
 
@@ -63,7 +68,7 @@ void updateCameraArrows(xform3 *camera_xform) {
     updateArrow(&arrowZ);
 }
 
-void drawCoordinateArrowsToPoint(Viewport *viewport, RGBA x_color, RGBA y_color, RGBA z_color, vec3 location, u8 line_width) {
+void drawCoordinateArrowsToPoint(Viewport *viewport, vec3 x_color, vec3 y_color, vec3 z_color, f32 opacity, vec3 location, u8 line_width) {
     arrowX.body.to = arrowY.body.to = arrowZ.body.to = getVec3Of(0);
     arrowX.body.to.x = arrowY.body.to.x = arrowZ.body.to.x = location.x;
     arrowY.body.to.y = location.y;
@@ -76,7 +81,7 @@ void drawCoordinateArrowsToPoint(Viewport *viewport, RGBA x_color, RGBA y_color,
     updateArrow(&arrowY);
     updateArrow(&arrowZ);
 
-    drawArrow(viewport, x_color, &arrowX, line_width);
-    drawArrow(viewport, y_color, &arrowY, line_width);
-    drawArrow(viewport, z_color, &arrowZ, line_width);
+    drawArrow(viewport, x_color, opacity, &arrowX, line_width);
+    drawArrow(viewport, y_color, opacity, &arrowY, line_width);
+    drawArrow(viewport, z_color, opacity, &arrowZ, line_width);
 }

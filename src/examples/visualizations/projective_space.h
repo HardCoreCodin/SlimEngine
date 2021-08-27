@@ -4,7 +4,7 @@
 #include "./projective_transition.h"
 
 #define PROJECTION_LINES_COUNT 36
-#define PROJECTION_LINES_OPACITY (MAX_COLOR_VALUE / 8)
+#define PROJECTION_LINES_OPACITY 0.125f
 #define PROJECTION_LINE_INC_SPEED 0.3f
 
 void drawProjectiveSpace(Viewport *viewport, Transition *transition, bool colorize) {
@@ -12,9 +12,8 @@ void drawProjectiveSpace(Viewport *viewport, Transition *transition, bool colori
     f32 step = TAU / (PROJECTION_LINES_COUNT * 2);
     vec2 sin_cos = Vec2(cosf(step), sinf(step));
 
-    RGBA color;
-    color.A = PROJECTION_LINES_OPACITY;
-    color.R = color.G = color.B = MAX_COLOR_VALUE / 2;
+    f32 opacity = PROJECTION_LINES_OPACITY;
+    vec3 color = getVec3Of(((f32)MAX_COLOR_VALUE / 2));
     vec3 x_axis = Vec3(1, 0, 0);
     vec3 y_axis = Vec3(0, 1, 0);
     quat azimuth_rotation;
@@ -28,14 +27,14 @@ void drawProjectiveSpace(Viewport *viewport, Transition *transition, bool colori
             edge.from = getVec3Of(0);
             edge.to = mulVec3Quat(Vec3(1, 0, 0), mulQuat(altitude_rotation, azimuth_rotation));
             if (colorize) {
-                color.R = MAX_COLOR_VALUE / 4 + (u8)((f32)color.G * edge.to.x);
-                color.B = MAX_COLOR_VALUE / 4 + (u8)((f32)color.G * edge.to.z);
+                color.r = (f32)MAX_COLOR_VALUE / 4 + color.g * edge.to.x;
+                color.b = (f32)MAX_COLOR_VALUE / 4 + color.g * edge.to.z;
             }
 
             edge.to = scaleVec3(edge.to, 15 * transition->eased_t);
             convertEdgeFromSecondaryToMain(&edge);
 
-            drawEdge(viewport, color, &edge, 1);
+            drawEdge3D(viewport, color, opacity, &edge, 2);
 
             azimuth_rotation = mulQuat(azimuth_rotation, azimuth_rotation_step);
         }
