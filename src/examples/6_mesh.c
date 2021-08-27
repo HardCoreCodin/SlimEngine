@@ -24,21 +24,26 @@ void onDoubleClick(MouseButton *mouse_button) {
     }
 }
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
+    fillPixelGrid(viewport->frame_buffer,
+                  Color(Black), 1);
+
     setPreProjectionMatrix(viewport);
 
     bool normals = app->controls.is_pressed.ctrl;
-    Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->settings.primitives; i++, primitive++)
-        switch (primitive->type) {
+    Primitive *prim = scene->primitives;
+    for (u32 i = 0; i < scene->settings.primitives; i++, prim++)
+        switch (prim->type) {
             case PrimitiveType_Mesh:
-                drawMesh(viewport, Color(primitive->color), 1,
-                         &scene->meshes[primitive->id], primitive, normals,
+                drawMesh(viewport,
+                         Color(prim->color), 1,
+                         &scene->meshes[prim->id],
+                         prim, normals,
                          0);
                 break;
             case PrimitiveType_Grid:
-                drawGrid(viewport, Color(primitive->color), 1,
-                         &scene->grids[primitive->id], primitive,
+                drawGrid(viewport,
+                         Color(prim->color), 1,
+                         &scene->grids[prim->id], prim,
                          1);
                 break;
             default:
