@@ -1,7 +1,7 @@
 #pragma once
 
-#include "./projective_base.h"
-#include "./projective_transition.h"
+#include "./core.h"
+#include "./transition.h"
 
 #define PROJECTION_LINES_COUNT 36
 #define PROJECTION_LINES_OPACITY 0.125f

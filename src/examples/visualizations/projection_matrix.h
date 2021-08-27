@@ -1,11 +1,11 @@
 #pragma once
 
-#include "./projective_base.h"
-#include "./projective_arrow.h"
+#include "./core.h"
+#include "./arrow.h"
 #include "./projective_space.h"
-#include "./projective_matrix.h"
-#include "./projective_locator.h"
-#include "./projective_transition.h"
+#include "./matrix.h"
+#include "./locator.h"
+#include "./transition.h"
 
 Quad3 warping_ndc;
 

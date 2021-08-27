@@ -78,7 +78,7 @@ void updateAndRender() {
 }
 void setupScene(Scene *scene) {
     xform3 *xf = &scene->cameras[0].transform;
-    xf->position = Vec3(0, 7, -11);
+    xf->position = Vec3(0, 8, -13);
     rotateXform3(xf, 0, -0.2f, 0);
 
     Primitive *helix = &scene->primitives[0];

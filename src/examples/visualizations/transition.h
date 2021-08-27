@@ -1,7 +1,7 @@
 #pragma once
 
-#include "./projective_base.h"
-#include "./projective_matrix.h"
+#include "./core.h"
+#include "./matrix.h"
 
 #define TRANSITION_COUNT 29
 

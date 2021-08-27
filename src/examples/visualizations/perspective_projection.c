@@ -1,5 +1,5 @@
-#include "./projective_base.h"
-#include "./projective_process.h"
+#include "./core.h"
+#include "./projection_matrix.h"
 
 void onButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff = Vec2i(0, 0);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "./projective_base.h"
+#include "./core.h"
 
 #define MATRIX_PADDING 5
 #define MATRIX_MAX_ROW_HEIGHT (1 + FONT_HEIGHT + 1)

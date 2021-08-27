@@ -1,7 +1,7 @@
 #pragma once
 
-#include "./projective_base.h"
-#include "./projective_transition.h"
+#include "./core.h"
+#include "./transition.h"
 
 #define LOCATOR_GRID_SIZE_X 41
 #define LOCATOR_GRID_SIZE_Y 31

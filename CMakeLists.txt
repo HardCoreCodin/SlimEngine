@@ -21,8 +21,8 @@ add_executable(SlimEngine_6_mesh WIN32 src/examples/6_mesh.c)
 project(SlimEngine_7_scene)
 add_executable(SlimEngine_7_scene WIN32 src/examples/7_scene.c)
 
-project(Projective)
-add_executable(Projective WIN32 src/examples/visualizations/projective.c)
+project(PerspectiveProjection)
+add_executable(PerspectiveProjection WIN32 src/examples/visualizations/perspective_projection.c)
 
 project(obj2mesh)
 add_executable(obj2mesh src/obj2mesh.c)

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "./projective_base.h"
+#include "./core.h"
 
 typedef struct ArrowHead {
     Edge left, right;
