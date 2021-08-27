@@ -22,7 +22,7 @@ project(SlimEngine_7_scene)
 add_executable(SlimEngine_7_scene WIN32 src/examples/7_scene.c)
 
 project(Projective)
-add_executable(Projective WIN32 src/examples/projective.c)
+add_executable(Projective WIN32 src/examples/visualizations/projective.c)
 
 project(obj2mesh)
 add_executable(obj2mesh src/obj2mesh.c)

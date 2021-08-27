@@ -6,14 +6,6 @@
 #include "../shapes/edge.h"
 #include "./primitive.h"
 
-void setQuad3FromBox(Quad3 *quad, Box *box) {
-    quad->top_left     = box->vertices.corners.back_bottom_left;
-    quad->top_right    = box->vertices.corners.back_bottom_right;
-    quad->bottom_left  = box->vertices.corners.front_bottom_left;
-    quad->bottom_right = box->vertices.corners.front_bottom_right;
-    for (u8 i = 0; i < 4; i++) quad->corners[i].y = 0;
-}
-
 void transformBoxVerticesFromObjectToViewSpace(Viewport *viewport, Primitive *primitive, BoxVertices *vertices, BoxVertices *transformed_vertices) {
     vec3 position;
     for (u8 i = 0; i < BOX__VERTEX_COUNT; i++) {

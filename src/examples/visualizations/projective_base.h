@@ -1,13 +1,13 @@
 #pragma once
 
-#include "../SlimEngine/app.h"
-#include "../SlimEngine/core/time.h"
-#include "../SlimEngine/shapes/rect.h"
-#include "../SlimEngine/core/text.h"
-#include "../SlimEngine/scene/grid.h"
-#include "../SlimEngine/scene/xform.h"
-#include "../SlimEngine/viewport/navigation.h"
-#include "../SlimEngine/viewport/manipulation.h"
+#include "../../SlimEngine/app.h"
+#include "../../SlimEngine/core/time.h"
+#include "../../SlimEngine/shapes/rect.h"
+#include "../../SlimEngine/core/text.h"
+#include "../../SlimEngine/scene/grid.h"
+#include "../../SlimEngine/scene/xform.h"
+#include "../../SlimEngine/viewport/navigation.h"
+#include "../../SlimEngine/viewport/manipulation.h"
 
 RGBA sides_color,
      near_color,
@@ -71,6 +71,21 @@ typedef enum VIZ {
     VIS_COUNT
 } VIZ;
 VIZ current_viz = INTRO;
+
+typedef union Quad3 {
+    struct {
+        vec3 top_left, top_right, bottom_right, bottom_left;
+    };
+    vec3 corners[4];
+} Quad3;
+
+void setQuad3FromBox(Quad3 *quad, Box *box) {
+    quad->top_left     = box->vertices.corners.back_bottom_left;
+    quad->top_right    = box->vertices.corners.back_bottom_right;
+    quad->bottom_left  = box->vertices.corners.front_bottom_left;
+    quad->bottom_right = box->vertices.corners.front_bottom_right;
+    for (u8 i = 0; i < 4; i++) quad->corners[i].y = 0;
+}
 
 typedef struct Label {
     vec2i position;

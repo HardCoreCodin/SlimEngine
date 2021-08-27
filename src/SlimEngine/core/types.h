@@ -58,13 +58,6 @@ typedef struct Curve {
     u32 revolution_count;
 } Curve;
 
-typedef union Quad3 {
-    struct {
-        vec3 top_left, top_right, bottom_right, bottom_left;
-    };
-    vec3 corners[4];
-} Quad3;
-
 typedef enum BoxSide {
     NoSide = 0,
     Top    = 1,

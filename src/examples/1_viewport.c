@@ -58,11 +58,13 @@ void updateAndRender() {
 
     Viewport *viewport = &app->viewport;
 
-    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
+    fillPixelGrid(viewport->frame_buffer,
+                  Color(Black), 1);
 
     Grid      *grid = &app->scene.grids[0];
     Primitive *prim = &app->scene.primitives[0];
-    drawGrid(viewport, Color(prim->color), 1, grid, prim, 1);
+    drawGrid(viewport, Color(prim->color), 1,
+             grid, prim, 1);
     preparePixelGridForDisplay(viewport->frame_buffer);
 
     if (viewport->settings.show_hud) {

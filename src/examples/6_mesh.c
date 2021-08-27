@@ -33,11 +33,13 @@ void drawSceneToViewport(Scene *scene, Viewport *viewport) {
         switch (primitive->type) {
             case PrimitiveType_Mesh:
                 drawMesh(viewport, Color(primitive->color), 1,
-                         &scene->meshes[primitive->id], primitive, normals, 0);
+                         &scene->meshes[primitive->id], primitive, normals,
+                         0);
                 break;
             case PrimitiveType_Grid:
                 drawGrid(viewport, Color(primitive->color), 1,
-                         &scene->grids[primitive->id], primitive, 1);
+                         &scene->grids[primitive->id], primitive,
+                         1);
                 break;
             default:
                 break;
@@ -104,6 +106,8 @@ void onKeyChanged(u8 key, bool is_pressed) {
     if (key == 'S') move->backward = is_pressed;
     if (key == 'A') move->left     = is_pressed;
     if (key == 'D') move->right    = is_pressed;
+    if (key == 'M' && !is_pressed)
+        app->scene.primitives[1].id = app->scene.primitives[2].id = (app->scene.primitives[1].id + 1) % 2;
 
     ViewportSettings *settings = &app->viewport.settings;
     if (!is_pressed && key == app->controls.key_map.tab)
@@ -119,27 +123,30 @@ void setupScene(Scene *scene) {
     grid->scale = Vec3(5, 1, 5);
     initGrid(scene->grids,11, 11);
 
-    Primitive *suzanne1 = &scene->primitives[1];
-    Primitive *suzanne2 = &scene->primitives[2];
-    suzanne1->position = Vec3(10, 5, 4);
-    suzanne1->color = Magenta;
-    suzanne1->type = PrimitiveType_Mesh;
-    suzanne1->id = 0;
+    Primitive *mesh1 = &scene->primitives[1];
+    Primitive *mesh2 = &scene->primitives[2];
+    mesh1->position = Vec3(10, 5, 4);
+    mesh1->color = Magenta;
+    mesh1->type = PrimitiveType_Mesh;
+    mesh1->id = 0;
 
-    *suzanne2 = *suzanne1;
-    suzanne2->color = Cyan;
-    suzanne2->position.x = -10;
+    *mesh2 = *mesh1;
+    mesh2->color = Cyan;
+    mesh2->position.x = -10;
 }
 
 void initApp(Defaults *defaults) {
-    static char string_buffer[100];
-    static String mesh_file[1];
-    mesh_file->char_ptr = string_buffer;
-    mergeString(mesh_file, __FILE__,
-                "suzanne.mesh",
-                getDirectoryLength(__FILE__));
-    defaults->settings.scene.mesh_files = mesh_file;
-    defaults->settings.scene.meshes = 1;
+    static String mesh_files[2];
+    static char string_buffers[2][100];
+    String *mesh1 = &mesh_files[0];
+    String *mesh2 = &mesh_files[1];
+    mesh1->char_ptr = string_buffers[0];
+    mesh2->char_ptr = string_buffers[1];
+    u32 offset = getDirectoryLength(__FILE__);
+    mergeString(mesh2, __FILE__, "dragon.mesh",  offset);
+    mergeString(mesh1, __FILE__, "suzanne.mesh", offset);
+    defaults->settings.scene.mesh_files = mesh_files;
+    defaults->settings.scene.meshes = 2;
     defaults->settings.scene.grids  = 1;
     defaults->settings.scene.primitives = 3;
     defaults->settings.viewport.hud_line_count = 2;

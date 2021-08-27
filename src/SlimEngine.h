@@ -776,13 +776,6 @@ typedef struct Curve {
     u32 revolution_count;
 } Curve;
 
-typedef union Quad3 {
-    struct {
-        vec3 top_left, top_right, bottom_right, bottom_left;
-    };
-    vec3 corners[4];
-} Quad3;
-
 typedef enum BoxSide {
     NoSide = 0,
     Top    = 1,
@@ -3932,15 +3925,6 @@ INLINE void rotateXform3(xform3 *xform, f32 yaw, f32 pitch, f32 roll) {
     xform->rotation_inverted = convertRotationMatrixToQuaternion(xform->rotation_matrix_inverted);
 
     xform->matrix = mulMat3(xform->matrix, xform->rotation_matrix);
-}
-
-
-void setQuad3FromBox(Quad3 *quad, Box *box) {
-    quad->top_left     = box->vertices.corners.back_bottom_left;
-    quad->top_right    = box->vertices.corners.back_bottom_right;
-    quad->bottom_left  = box->vertices.corners.front_bottom_left;
-    quad->bottom_right = box->vertices.corners.front_bottom_right;
-    for (u8 i = 0; i < 4; i++) quad->corners[i].y = 0;
 }
 
 void transformBoxVerticesFromObjectToViewSpace(Viewport *viewport, Primitive *primitive, BoxVertices *vertices, BoxVertices *transformed_vertices) {
