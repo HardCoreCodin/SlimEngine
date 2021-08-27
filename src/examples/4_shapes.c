@@ -8,26 +8,32 @@
 // #include "../SlimEngine.h"
 
 void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
+    fillPixelGrid(viewport->frame_buffer,
+                  Color(Black), 1);
     setPreProjectionMatrix(viewport);
 
-    Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->settings.primitives; i++, primitive++)
-        switch (primitive->type) {
+    Primitive *prim = scene->primitives;
+    for (u32 i = 0; i < scene->settings.primitives; i++, prim++)
+        switch (prim->type) {
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:
-                drawCurve(viewport, Color(primitive->color), 1,
-                          &scene->curves[primitive->id], primitive,
+                drawCurve(viewport,
+                          Color(prim->color), 1,
+                          &scene->curves[prim->id], prim,
                           CURVE_STEPS, 1);
                 break;
             case PrimitiveType_Box:
-                drawBox(viewport, Color(primitive->color), 1,
-                        &scene->boxes[primitive->id], primitive,
-                        BOX__ALL_SIDES, 1);
+                drawBox(viewport,
+                        Color(prim->color), 1,
+                        &scene->boxes[prim->id], prim,
+                        BOX__ALL_SIDES,
+                        1);
                 break;
             case PrimitiveType_Grid:
-                drawGrid(viewport, Color(primitive->color), 1,
-                         &scene->grids[primitive->id], primitive, 1);
+                drawGrid(viewport,
+                         Color(prim->color), 1,
+                         &scene->grids[prim->id], prim,
+                         1);
                 break;
             default:
                 break;
