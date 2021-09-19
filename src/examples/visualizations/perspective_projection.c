@@ -356,7 +356,7 @@ void updateAndRender() {
         for (i32 y = 0; y < viewport->frame_buffer->dimensions.height; y++)
             for (i32 x = 0; x < viewport->frame_buffer->dimensions.width; x++, float_pixel++)
                 if (float_pixel->opacity)
-                    setPixel(viewport->frame_buffer, float_pixel->color, float_pixel->opacity, x, y, 0);
+                    setPixel(float_pixel, float_pixel->color, float_pixel->opacity, 0, viewport->frame_buffer->gamma_corrected_blending);
     }
 
     if (app->viewport.settings.show_hud && current_viz == VIEW_FRUSTUM_SLICE) {

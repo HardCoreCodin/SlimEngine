@@ -113,8 +113,8 @@ void printFloatIntoString(f32 number, NumberString *number_string, u8 float_digi
             }
         }
     }
-//    if (number_string->string.length <= float_digits_count) return;
-    char tmp[13];
+
+    static char tmp[13];
     tmp[number_string->string.length + 1] = 0;
     for (u8 i = 0; i < (u8)number_string->string.length; i++) {
         u8 char_count_from_right_to_left = (u8)number_string->string.length - i - 1;

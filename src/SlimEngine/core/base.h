@@ -644,13 +644,8 @@ void copyPixels(PixelGrid *src, PixelGrid *trg, i32 width, i32 height, i32 trg_x
     }
 }
 
-INLINE void setPixel(PixelGrid *canvas, vec3 color, f32 opacity, i32 x, i32 y, f64 z) {
-    if (!inRange(y, canvas->dimensions.height, 0) ||
-        !inRange(x, canvas->dimensions.width, 0))
-        return;
-
-    i32 index = canvas->dimensions.width * y + x;
-    FloatPixel pixel, foreground, background = canvas->float_pixels[index];
+INLINE void setPixel(FloatPixel *pixel, vec3 color, f32 opacity, f64 z, bool blend_with_gamma_correction) {
+    FloatPixel foreground, background = *pixel;
     foreground.depth = z;
     foreground.opacity = opacity;
     foreground.color.r = color.r * opacity;
@@ -658,12 +653,12 @@ INLINE void setPixel(PixelGrid *canvas, vec3 color, f32 opacity, i32 x, i32 y, f
     foreground.color.b = color.b * opacity;
 
     if (foreground.depth > background.depth) {
-        pixel = foreground;
+        *pixel = foreground;
         foreground = background;
-        background = pixel;
+        background = *pixel;
     }
 
-    if (canvas->gamma_corrected_blending) {
+    if (blend_with_gamma_correction) {
         background.color.r *= background.color.r;
         background.color.g *= background.color.g;
         background.color.b *= background.color.b;
@@ -673,20 +668,18 @@ INLINE void setPixel(PixelGrid *canvas, vec3 color, f32 opacity, i32 x, i32 y, f
     }
 
     opacity = 1.0f - foreground.opacity;
-    pixel.color.r = fast_mul_add(background.color.r, opacity, foreground.color.r);
-    pixel.color.g = fast_mul_add(background.color.g, opacity, foreground.color.g);
-    pixel.color.b = fast_mul_add(background.color.b, opacity, foreground.color.b);
+    pixel->color.r = fast_mul_add(background.color.r, opacity, foreground.color.r);
+    pixel->color.g = fast_mul_add(background.color.g, opacity, foreground.color.g);
+    pixel->color.b = fast_mul_add(background.color.b, opacity, foreground.color.b);
 
-    if (canvas->gamma_corrected_blending) {
-        pixel.color.r = sqrtf(pixel.color.r);
-        pixel.color.g = sqrtf(pixel.color.g);
-        pixel.color.b = sqrtf(pixel.color.b);
+    if (blend_with_gamma_correction) {
+        pixel->color.r = sqrtf(pixel->color.r);
+        pixel->color.g = sqrtf(pixel->color.g);
+        pixel->color.b = sqrtf(pixel->color.b);
     }
 
-    pixel.opacity = foreground.opacity + background.opacity * opacity;
-    pixel.depth = foreground.depth;
-
-    canvas->float_pixels[index] = pixel;
+    pixel->opacity = foreground.opacity + background.opacity * opacity;
+    pixel->depth = foreground.depth;
 }
 
 void preparePixelGridForDisplay(PixelGrid *canvas) {
