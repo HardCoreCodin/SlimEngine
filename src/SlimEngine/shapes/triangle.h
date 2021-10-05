@@ -6,19 +6,31 @@ void fillTriangle(PixelGrid *canvas, RGBA color, f32 *X, f32 *Y, f32 *Z) {
     u16 W = canvas->dimensions.width;
     u16 H = canvas->dimensions.height;
     f32 dx1, x1, y1, z1, xs,
-        dx2, x2, y2, z2, xe,
-        dx3, x3, y3, z3, dy;
+            dx2, x2, y2, z2, xe,
+            dx3, x3, y3, z3, dy;
     i32 offset,
-        x, x1i, y1i, x2i, xsi, ysi = 0,
-        y, y2i, x3i, y3i, xei, yei = 0;
+            x, x1i, y1i, x2i, xsi, ysi = 0,
+            y, y2i, x3i, y3i, xei, yei = 0;
     for (u8 i = 1; i <= 2; i++) {
         if (Y[i] < Y[ysi]) ysi = i;
         if (Y[i] > Y[yei]) yei = i;
     }
-    u8* id = ysi ? (ysi == 1 ?
-                    (u8[3]){1, 2, 0} :
-                    (u8[3]){2, 0, 1}) :
-                    (u8[3]){0, 1, 2};
+    u8 id[3];
+    if (ysi) {
+        if (ysi == 1) {
+            id[0] = 1;
+            id[1] = 2;
+            id[2] = 0;
+        } else {
+            id[0] = 2;
+            id[1] = 0;
+            id[2] = 1;
+        }
+    } else {
+        id[0] = 0;
+        id[1] = 1;
+        id[2] = 2;
+    }
     x1 = X[id[0]]; y1 = Y[id[0]]; z1 = Z[id[0]]; x1i = (i32)x1; y1i = (i32)y1;
     x2 = X[id[1]]; y2 = Y[id[1]]; z2 = Z[id[1]]; x2i = (i32)x2; y2i = (i32)y2;
     x3 = X[id[2]]; y3 = Y[id[2]]; z3 = Z[id[2]]; x3i = (i32)x3; y3i = (i32)y3;

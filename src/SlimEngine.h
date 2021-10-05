@@ -646,13 +646,8 @@ void copyPixels(PixelGrid *src, PixelGrid *trg, i32 width, i32 height, i32 trg_x
 }
 
 
-INLINE void setPixel(PixelGrid *canvas, vec3 color, f32 opacity, i32 x, i32 y, f64 z) {
-    if (!inRange(y, canvas->dimensions.height, 0) ||
-        !inRange(x, canvas->dimensions.width, 0))
-        return;
-
-    i32 index = canvas->dimensions.width * y + x;
-    FloatPixel pixel, foreground, background = canvas->float_pixels[index];
+INLINE void setPixel(FloatPixel *pixel, vec3 color, f32 opacity, f64 z, bool blend_with_gamma_correction) {
+    FloatPixel foreground, background = *pixel;
     foreground.depth = z;
     foreground.opacity = opacity;
     foreground.color.r = color.r * opacity;
@@ -660,12 +655,12 @@ INLINE void setPixel(PixelGrid *canvas, vec3 color, f32 opacity, i32 x, i32 y, f
     foreground.color.b = color.b * opacity;
 
     if (foreground.depth > background.depth) {
-        pixel = foreground;
+        *pixel = foreground;
         foreground = background;
-        background = pixel;
+        background = *pixel;
     }
 
-    if (canvas->gamma_corrected_blending) {
+    if (blend_with_gamma_correction) {
         background.color.r *= background.color.r;
         background.color.g *= background.color.g;
         background.color.b *= background.color.b;
@@ -675,20 +670,18 @@ INLINE void setPixel(PixelGrid *canvas, vec3 color, f32 opacity, i32 x, i32 y, f
     }
 
     opacity = 1.0f - foreground.opacity;
-    pixel.color.r = fast_mul_add(background.color.r, opacity, foreground.color.r);
-    pixel.color.g = fast_mul_add(background.color.g, opacity, foreground.color.g);
-    pixel.color.b = fast_mul_add(background.color.b, opacity, foreground.color.b);
+    pixel->color.r = fast_mul_add(background.color.r, opacity, foreground.color.r);
+    pixel->color.g = fast_mul_add(background.color.g, opacity, foreground.color.g);
+    pixel->color.b = fast_mul_add(background.color.b, opacity, foreground.color.b);
 
-    if (canvas->gamma_corrected_blending) {
-        pixel.color.r = sqrtf(pixel.color.r);
-        pixel.color.g = sqrtf(pixel.color.g);
-        pixel.color.b = sqrtf(pixel.color.b);
+    if (blend_with_gamma_correction) {
+        pixel->color.r = sqrtf(pixel->color.r);
+        pixel->color.g = sqrtf(pixel->color.g);
+        pixel->color.b = sqrtf(pixel->color.b);
     }
 
-    pixel.opacity = foreground.opacity + background.opacity * opacity;
-    pixel.depth = foreground.depth;
-
-    canvas->float_pixels[index] = pixel;
+    pixel->opacity = foreground.opacity + background.opacity * opacity;
+    pixel->depth = foreground.depth;
 }
 
 
@@ -3207,7 +3200,10 @@ void drawHLineF(PixelGrid *canvas, vec3 color, f32 opacity, i32 from, i32 to, i3
 
     i32 first, last;
     subRange(from, to, canvas->dimensions.width, 0, &first, &last);
-    for (i32 i = first; i <= last; i++) setPixel(canvas, color, opacity, i, at, 0);
+
+    FloatPixel *pixel = canvas->float_pixels + canvas->dimensions.width * at + first;
+    for (i32 i = first; i <= last; i++, pixel++)
+        setPixel(pixel, color, opacity, 0, canvas->gamma_corrected_blending);
 }
 
 void drawVLine(PixelGrid *canvas, RGBA color, i32 from, i32 to, i32 at) {
@@ -3224,14 +3220,16 @@ void drawVLineF(PixelGrid *canvas, vec3 color, f32 opacity, i32 from, i32 to, i3
     i32 first, last;
 
     subRange(from, to, canvas->dimensions.height, 0, &first, &last);
-    for (i32 i = first; i <= last; i++) setPixel(canvas, color, opacity, at, i, 0);
+    FloatPixel *pixel = canvas->float_pixels + canvas->dimensions.width * first + at;
+    for (i32 i = first; i <= last; i++)
+        setPixel(pixel, color, opacity, 0, canvas->gamma_corrected_blending);
 }
 
 void drawLine(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
     if (x0 < 0 &&
-    y0 < 0 &&
-    x1 < 0 &&
-    y1 < 0)
+        y0 < 0 &&
+        x1 < 0 &&
+        y1 < 0)
         return;
 
     if (x0 == x1) {
@@ -3291,11 +3289,11 @@ void drawLine(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
         if (inRange(index, canvas->dimensions.width_times_height, 0)) {
             if (is_steap) {
                 if (inRange(current1, height, 0) &&
-                inRange(current2, width, 0))
+                    inRange(current2, width, 0))
                     canvas->pixels[index].color = color;
             } else {
                 if (inRange(current2, height, 0) &&
-                inRange(current1, width, 0))
+                    inRange(current1, width, 0))
                     canvas->pixels[index].color = color;
             }
         }
@@ -3310,25 +3308,27 @@ void drawLine(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
     }
 }
 
-INLINE f32 fpart(f32 x) {
+INLINE f32 fractionOf(f32 x) {
     return x - floorf(x);
 }
 
-INLINE f32 rfpart(f32 x) {
-    return 1 - fpart(x);
+INLINE f32 oneMinusFractionOf(f32 x) {
+    return 1 - fractionOf(x);
 }
 
 void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x2, f32 y2, u8 line_width) {
     if (x1 < 0 &&
-    y1 < 0 &&
-    x2 < 0 &&
-    y2 < 0)
+        y1 < 0 &&
+        x2 < 0 &&
+        y2 < 0)
         return;
 
+    const bool blend = canvas->gamma_corrected_blending;
+    i32 x, y, w = canvas->dimensions.width, h = canvas->dimensions.height;
+    FloatPixel *pixel, *pixels = canvas->float_pixels;
     f32 dx = x2 - x1;
     f32 dy = y2 - y1;
     f32 tmp, gap, grad;
-    i32 x, y;
     vec3 first, last;
     vec2i start, end;
     if (fabsf(dx) > fabsf(dy)) { // Shallow:
@@ -3352,26 +3352,65 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
 
         x = start.x;
         y = start.y;
-        gap = rfpart(x1 + 0.5f);
-        setPixel(canvas, color, rfpart(first.y) * gap * opacity, x, y++, 0);
-        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, 0);
-        setPixel(canvas, color, fpart(first.y) * gap * opacity, x, y, 0);
+
+        gap = oneMinusFractionOf(x1 + 0.5f);
+
+        if (inRange(x, w, 0)) {
+            pixel = pixels + w * y + x;
+            if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(first.y) * gap * opacity, 0, blend);
+
+            for (u8 i = 0; i < line_width; i++) {
+                y++;
+                pixel += w;
+                if (inRange(y, h, 0)) setPixel(pixel, color, opacity, 0, blend);
+            }
+
+            y++;
+            pixel += w;
+            if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(first.y) * gap * opacity, 0, blend);
+        }
 
         x = end.x;
         y = end.y;
-        gap = fpart(x2 + 0.5f);
-        setPixel(canvas, color, rfpart(last.y) * gap * opacity, x, y++, 0);
-        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, 0);
-        setPixel(canvas, color, fpart(last.y) * gap * opacity, x, y, 0);
+
+        gap = fractionOf(x2 + 0.5f);
+
+        if (inRange(x, w, 0)) {
+            pixel = pixels + w * y + x;
+            if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(last.y) * gap * opacity, 0, blend);
+
+            for (u8 i = 0; i < line_width; i++) {
+                y++;
+                pixel += w;
+                if (inRange(y, h, 0)) setPixel(pixel, color, opacity, 0, blend);
+            }
+
+            y++;
+            pixel += w;
+            if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(last.y) * gap * opacity, 0, blend);
+        }
 
         gap = first.y + grad;
-        for (x = start.x + 1; x < end.x; x++) {
-            y = (i32)gap;
-            setPixel(canvas, color, rfpart(gap) * opacity, x, y++, 0);
-            for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, 0);
-            setPixel(canvas, color, fpart(gap) * opacity, x, y, 0);
-            gap += grad;
-        }
+        for (x = start.x + 1; x < end.x; x++) if (inRange(x, w, 0)) {
+                if (inRange(x, w, 0)) {
+                    y = (i32)gap;
+
+                    pixel = pixels + w * y + x;
+                    if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(gap) * opacity, 0, blend);
+
+                    for (u8 i = 0; i < line_width; i++) {
+                        y++;
+                        pixel += w;
+                        if (inRange(y, h, 0)) setPixel(pixel, color, opacity, 0, blend);
+                    }
+
+                    y++;
+                    pixel += w;
+                    if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(gap) * opacity, 0, blend);
+                }
+
+                gap += grad;
+            }
     } else { // Steep:
         if (y2 < y1) { // Bottom up:
             tmp = x2; x2 = x1; x1 = tmp;
@@ -3394,24 +3433,60 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
 
         x = start.x;
         y = start.y;
-        gap = rfpart(y1 + 0.5f);
-        setPixel(canvas, color, rfpart(first.x) * gap * opacity, x++, y, 0);
-        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, 0);
-        setPixel(canvas, color, fpart(first.x) * gap * opacity, x, y, 0);
+        gap = oneMinusFractionOf(y1 + 0.5f);
+
+        if (inRange(y, h, 0)) {
+            pixel = pixels + w * y + x;
+            if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(first.x) * gap * opacity, 0, blend);
+
+            for (u8 i = 0; i < line_width; i++) {
+                x++;
+                pixel++;
+                if (inRange(x, w, 0)) setPixel(pixel, color, opacity, 0, blend);
+            }
+
+            x++;
+            pixel++;
+            if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(first.x) * gap * opacity, 0, blend);
+        }
 
         x = end.x;
         y = end.y;
-        gap = fpart(y2 + 0.5f);
-        setPixel(canvas, color, rfpart(last.x) * gap * opacity, x++, y, 0);
-        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, 0);
-        setPixel(canvas, color, fpart(last.x) * gap * opacity, x, y, 0);
+        gap = fractionOf(y2 + 0.5f);
+
+        if (inRange(y, h, 0)) {
+            pixel = pixels + w * y + x;
+            if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(last.x) * gap * opacity, 0, blend);
+
+            for (u8 i = 0; i < line_width; i++) {
+                x++;
+                pixel++;
+                if (inRange(x, w, 0)) setPixel(pixel, color, opacity, 0, blend);
+            }
+
+            x++;
+            pixel++;
+            if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(last.x) * gap * opacity, 0, blend);
+        }
 
         gap = first.x + grad;
         for (y = start.y + 1; y < end.y; y++) {
-            x = (i32)gap;
-            setPixel(canvas, color, rfpart(gap) * opacity, x++, y, 0);
-            for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, 0);
-            setPixel(canvas, color, fpart(gap) * opacity, x, y, 0);
+            if (inRange(y, h, 0)) {
+                x = (i32) gap;
+
+                pixel = pixels + w * y + x;
+                if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(gap) * opacity, 0, blend);
+
+                for (u8 i = 0; i < line_width; i++) {
+                    x++;
+                    pixel++;
+                    if (inRange(x, w, 0)) setPixel(pixel, color, opacity, 0, blend);
+                }
+
+                x++;
+                pixel++;
+                if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(gap) * opacity, 0, blend);
+            }
             gap += grad;
         }
     }
@@ -3422,16 +3497,18 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
                 f32 x2, f32 y2, f64 z2,
                 u8 line_width) {
     if (x1 < 0 &&
-    y1 < 0 &&
-    x2 < 0 &&
-    y2 < 0)
+        y1 < 0 &&
+        x2 < 0 &&
+        y2 < 0)
         return;
 
-    f64 tmp;
+    const bool blend = canvas->gamma_corrected_blending;
+    i32 x, y, w = canvas->dimensions.width, h = canvas->dimensions.height;
+    FloatPixel *pixel, *pixels = canvas->float_pixels;
+    f64 tmp, z_range, original_range, start_offset_scale, end_offset_scale;
     f32 dx = x2 - x1;
     f32 dy = y2 - y1;
-    f32 gap, grad;
-    i32 x, y;
+    f32 gap, grad, first_offset, last_offset;
     f64 z, z_curr, z_step;
     vec3 first, last;
     vec2i start, end;
@@ -3444,11 +3521,16 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
         grad = dy / dx;
 
+        original_range = (f64)(x2 - x1);
         first.x = roundf(x1);
         last.x  = roundf(x2);
+        first_offset = first.x - x1;
+        last_offset  = last.x  - x2;
+        start_offset_scale = (f64)(first_offset + 1) / original_range;
+        end_offset_scale   = (f64)(last_offset  - 1) / original_range;
 
-        first.y = y1 + grad * (first.x - x1);
-        last.y  = y2 + grad * (last.x  - x2);
+        first.y = y1 + grad * first_offset;
+        last.y  = y2 + grad * last_offset;
 
         start.x = (i32)first.x;
         start.y = (i32)first.y;
@@ -3457,27 +3539,73 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
         x = start.x;
         y = start.y;
-        gap = rfpart(x1 + 0.5f);
-        setPixel(canvas, color, rfpart(first.y) * gap * opacity, x, y++, z1);
-        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, z1);
-        setPixel(canvas, color, fpart(first.y) * gap * opacity, x, y, z1);
+        gap = oneMinusFractionOf(x1 + 0.5f);
+
+        if (inRange(x, w, 0)) {
+            pixel = pixels + w * y + x;
+            if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(first.y) * gap * opacity, z1, blend);
+
+            for (u8 i = 0; i < line_width; i++) {
+                y++;
+                pixel += w;
+                if (inRange(y, h, 0)) setPixel(pixel, color, opacity, z1, blend);
+            }
+
+            y++;
+            pixel += w;
+            if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(first.y) * gap * opacity, z1, blend);
+        }
 
         x = end.x;
         y = end.y;
-        gap = fpart(x2 + 0.5f);
-        setPixel(canvas, color, rfpart(last.y) * gap * opacity, x, y++, z2);
-        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, z1);
-        setPixel(canvas, color, fpart(last.y) * gap * opacity, x, y, z2);
+        gap = fractionOf(x2 + 0.5f);
 
-        z_step = (z2 - z1) / (f64)(end.x - start.x + 1);
-        z_curr = z1 + z_step;
+        if (inRange(x, w, 0)) {
+            pixel = pixels + w * y + x;
+            if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(last.y) * gap * opacity, z2, blend);
+
+            for (u8 i = 0; i < line_width; i++) {
+                y++;
+                pixel += w;
+                if (inRange(y, h, 0)) setPixel(pixel, color, opacity, z2, blend);
+            }
+
+            y++;
+            pixel += w;
+            if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(last.y) * gap * opacity, z2, blend);
+        }
+
+
+
+        z1 = 1.0 / z1;
+        z2 = 1.0 / z2;
+        z_range = z2 - z1;
+        z1 += start_offset_scale * z_range;
+        z2 += end_offset_scale   * z_range;
+        z_range = z2 - z1;
+        z_step = z_range / (f64)(last.x - first.x - 1);
+        z_curr = z1;
+
         gap = first.y + grad;
         for (x = start.x + 1; x < end.x; x++) {
-            y = (i32)gap;
-            z = z_curr;
-            setPixel(canvas, color, rfpart(gap) * opacity, x, y++, z);
-            for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x, y++, z);
-            setPixel(canvas, color, fpart(gap) * opacity, x, y, z);
+            if (inRange(x, w, 0)) {
+                y = (i32)gap;
+                z = 1.0 / z_curr;
+
+                pixel = pixels + w * y + x;
+                if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(gap) * opacity, z, blend);
+
+                for (u8 i = 0; i < line_width; i++) {
+                    y++;
+                    pixel += w;
+                    if (inRange(y, h, 0)) setPixel(pixel, color, opacity, z, blend);
+                }
+
+                y++;
+                pixel += w;
+                if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(gap) * opacity, z, blend);
+            }
+
             gap += grad;
             z_curr += z_step;
         }
@@ -3490,11 +3618,18 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
         grad = dx / dy;
 
+        original_range = (f64)(y2 - y1);
         first.y = roundf(y1);
         last.y  = roundf(y2);
 
-        first.x = x1 + grad * (first.y - y1);
-        last.x  = x2 + grad * (last.y  - y2);
+        first_offset = y1 - first.y;
+        last_offset  = last.y  - y2;
+
+        start_offset_scale = (f64)(first_offset + 1) / original_range;
+        end_offset_scale   = (f64)(last_offset  - 1) / original_range;
+
+        first.x = x1 + grad * first_offset;
+        last.x  = x2 + grad * last_offset;
 
         start.y = (i32)first.y;
         start.x = (i32)first.x;
@@ -3504,168 +3639,137 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
         x = start.x;
         y = start.y;
-        gap = rfpart(y1 + 0.5f);
-        setPixel(canvas, color, rfpart(first.x) * gap * opacity, x++, y, z1);
-        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, z1);
-        setPixel(canvas, color, fpart(first.x) * gap * opacity, x, y, z1);
+        gap = oneMinusFractionOf(y1 + 0.5f);
+
+        if (inRange(y, h, 0)) {
+            pixel = pixels + w * y + x;
+            if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(first.x) * gap * opacity, z1, blend);
+
+            for (u8 i = 0; i < line_width; i++) {
+                x++;
+                pixel++;
+                if (inRange(x, w, 0)) setPixel(pixel, color, opacity, z1, blend);
+            }
+
+            x++;
+            pixel++;
+            if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(first.x) * gap * opacity, z1, blend);
+        }
 
         x = end.x;
         y = end.y;
-        gap = fpart(y2 + 0.5f);
-        setPixel(canvas, color, rfpart(last.x) * gap * opacity, x++, y, z2);
-        for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, z2);
-        setPixel(canvas, color, fpart(last.x) * gap * opacity, x, y, z2);
+        gap = fractionOf(y2 + 0.5f);
+
+        if (inRange(y, h, 0)) {
+            pixel = pixels + w * y + x;
+            if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(last.x) * gap * opacity, z2, blend);
+
+            for (u8 i = 0; i < line_width; i++) {
+                x++;
+                pixel++;
+                if (inRange(x, w, 0)) setPixel(pixel, color, opacity, z2, blend);
+            }
+
+            x++;
+            pixel++;
+            if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(last.x) * gap * opacity, z2, blend);
+        }
+
 
         z1 = 1.0 / z1;
         z2 = 1.0 / z2;
-        z_step = (z2 - z1) / (f64)(end.y - start.y + 1);
-        z_curr = z1 + z_step;
+        z_range = z2 - z1;
+        z1 += start_offset_scale * z_range;
+        z2 += end_offset_scale   * z_range;
+        z_range = z2 - z1;
+        z_step = z_range / (f64)(last.y - first.y - 1);
+        z_curr = z1;
+
         gap = first.x + grad;
         for (y = start.y + 1; y < end.y; y++) {
-            x = (i32)gap;
-            z = 1.0 / z_curr;
-            setPixel(canvas, color, rfpart(gap) * opacity, x++, y, z);
-            for (u8 i = 0; i < line_width; i++) setPixel(canvas, color, opacity, x++, y, z);
-            setPixel(canvas, color, fpart(gap) * opacity, x, y, z);
+            if (inRange(y, h, 0)) {
+                x = (i32)gap;
+                z = 1.0 / z_curr;
+
+                pixel = pixels + w * y + x;
+                if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(gap) * opacity, z, blend);
+
+                for (u8 i = 0; i < line_width; i++) {
+                    x++;
+                    pixel++;
+                    if (inRange(x, w, 0)) setPixel(pixel, color, opacity, z, blend);
+                }
+
+                x++;
+                pixel++;
+                if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(gap) * opacity, z, blend);
+            }
+
             gap += grad;
             z_curr += z_step;
         }
     }
 }
 
+INLINE f32 clipFactor(f32 Aw, f32 Bw, f32 a, f32 b, bool negative_w) {
+    if (negative_w)
+        b = -b;
+    else
+        a = -1;
 
-bool cullAndClipEdge(Edge *edge, Viewport *viewport) {
-    f32 n = viewport->settings.near_clipping_plane_distance;
-    f32 f = viewport->settings.far_clipping_plane_distance;
+    f32 numerator = Aw + a;
+    return numerator / (numerator - Bw + b);
+}
 
-    bool from_is_out_n = edge->from.z < n;
-    bool to_is_out_n   = edge->to.z < n;
-
-    bool from_is_out_f = edge->from.z > f;
-    bool to_is_out_f   = edge->to.z > f;
+INLINE bool cullAndClipEdgeInClipSpace(vec4 *A, vec4 *B) {
+    u8 A_flags = (A->x > A->w) | ((A->x < -A->w) * 2) | ((A->y > A->w) * 4) | ((A->y < -A->w) * 8) | ((A->z > A->w) * 16) | ((A->z < -A->w) * 32);
+    u8 B_flags = (B->x > B->w) | ((B->x < -B->w) * 2) | ((B->y > B->w) * 4) | ((B->y < -B->w) * 8) | ((B->z > B->w) * 16) | ((B->z < -B->w) * 32);
 
     // Cull:
-    if ((from_is_out_n && to_is_out_n) ||
-    (from_is_out_f && to_is_out_f))
+    if (A_flags & B_flags)
         return false;
-
-    f32 z_Range = fabsf(edge->to.z - edge->from.z);
-
-    vec3 forward = subVec3(edge->to, edge->from);
-    vec3 backward = invertedVec3(forward);
 
     // Clip:
-    if (   from_is_out_n) edge->from = scaleAddVec3(backward, (edge->to.z - n)   / z_Range, edge->to);
-    else if (to_is_out_n) edge->to   = scaleAddVec3(forward,  (edge->from.z - n) / z_Range, edge->from);
+    if (A_flags | B_flags) {
+        if (     A_flags & 3) *A = lerpVec4(*B, *A, clipFactor(B->w, A->w, B->x, A->x, A_flags & 2));
+        else if (B_flags & 3) *B = lerpVec4(*A, *B, clipFactor(A->w, B->w, A->x, B->x, B_flags & 2));
 
-    if (   from_is_out_f) edge->from = scaleAddVec3(backward, (f - edge->to.z)   / z_Range, edge->to);
-    else if (to_is_out_f) edge->to   = scaleAddVec3(forward,  (f - edge->from.z) / z_Range, edge->from);
+        if (     A_flags & 12) *A = lerpVec4(*B, *A, clipFactor(B->w, A->w, B->y, A->y, A_flags & 8));
+        else if (B_flags & 12) *B = lerpVec4(*A, *B, clipFactor(A->w, B->w, A->y, B->y, B_flags & 8));
 
-    vec4 A = mulVec4Mat4(Vec4fromVec3(edge->from, 1.0f), viewport->pre_projection_matrix);
-    vec4 B = mulVec4Mat4(Vec4fromVec3(edge->to,   1.0f), viewport->pre_projection_matrix);
-    f32 t;
-
-    if (fabsf(B.z) > B.w) {
-        vec4 AB = subVec4(B, A);
-        if (B.z > 0) {
-            t = A.z - A.w;
-            t /= AB.w - AB.z;
-        } else {
-            t = A.z + A.w;
-            t /= -(AB.w + AB.z);
-        }
-        B = scaleAddVec4(AB, t, A);
+        if (     A_flags & 48) *A = lerpVec4(*B, *A, clipFactor(B->w, A->w, B->z, A->z, A_flags & 32));
+        else if (B_flags & 48) *B = lerpVec4(*A, *B, clipFactor(A->w, B->w, A->z, B->z, B_flags & 32));
     }
-    if (fabsf(A.z) > A.w) {
-        vec4 BA = subVec4(A, B);
-        if (A.z > 0) {
-            t = B.z - B.w;
-            t /= BA.w - BA.z;
-        } else {
-            t = B.z + B.w;
-            t /= -(BA.w + BA.z);
-        }
-        A = scaleAddVec4(BA, t, B);
-    }
-
-    if (fabsf(B.x) > B.w) {
-        vec4 AB = subVec4(B, A);
-        if (B.x > 0) {
-            t = A.x - A.w;
-            t /= AB.w - AB.x;
-        } else {
-            t = A.x + A.w;
-            t /= -(AB.w + AB.x);
-        }
-        B = scaleAddVec4(AB, t, A);
-    }
-    if (fabsf(A.x) > A.w) {
-        vec4 BA = subVec4(A, B);
-        if (A.x > 0) {
-            t = B.x - B.w;
-            t /= BA.w - BA.x;
-        } else {
-            t = B.x + B.w;
-            t /= -(BA.w + BA.x);
-        }
-        A = scaleAddVec4(BA, t, B);
-    }
-
-    if (fabsf(B.y) > B.w) {
-        vec4 AB = subVec4(B, A);
-        if (B.y > 0) {
-            t = A.y - A.w;
-            t /= AB.w - AB.y;
-        } else {
-            t = A.y + A.w;
-            t /= -(AB.w + AB.y);
-        }
-        B = scaleAddVec4(AB, t, A);
-    }
-    if (fabsf(A.y) > A.w) {
-        vec4 BA = subVec4(A, B);
-        if (A.y > 0) {
-            t = B.y - B.w;
-            t /= BA.w - BA.y;
-        } else {
-            t = B.y + B.w;
-            t /= -(BA.w + BA.y);
-        }
-        A = scaleAddVec4(BA, t, B);
-    }
-
-    bool A_is_out_x = fabsf(A.x) >= fabsf(A.w);
-    bool A_is_out_y = fabsf(A.y) >= fabsf(A.w);
-    bool A_is_out_z = fabsf(A.z) >= fabsf(A.w);
-    bool B_is_out_x = fabsf(B.x) >= fabsf(B.w);
-    bool B_is_out_y = fabsf(B.y) >= fabsf(B.w);
-    bool B_is_out_z = fabsf(B.z) >= fabsf(B.w);
-    if ((A_is_out_x && A_is_out_y && A_is_out_z) ||
-    (B_is_out_x && B_is_out_y && B_is_out_z))
-        return false;
-
-    edge->from = Vec3fromVec4(mulVec4Mat4(A, viewport->pre_projection_matrix_inverted));
-    edge->to   = Vec3fromVec4(mulVec4Mat4(B, viewport->pre_projection_matrix_inverted));
 
     return true;
 }
 
-void projectEdge(Edge *edge, Viewport *viewport) {
-    Dimensions *dimensions = &viewport->frame_buffer->dimensions;
-    f32 focal_length = viewport->camera->focal_length;
+INLINE bool cullAndClipEdge(Edge *edge, Viewport *viewport) {
+    vec4 A = mulVec4Mat4(Vec4fromVec3(edge->from, 1.0f), viewport->pre_projection_matrix);
+    vec4 B = mulVec4Mat4(Vec4fromVec3(edge->to,   1.0f), viewport->pre_projection_matrix);
 
-    if (!cullAndClipEdge(edge, viewport)) {
+    if (cullAndClipEdgeInClipSpace(&A, &B)) {
+        edge->from = Vec3fromVec4(mulVec4Mat4(A, viewport->pre_projection_matrix_inverted));
+        edge->to   = Vec3fromVec4(mulVec4Mat4(B, viewport->pre_projection_matrix_inverted));
+        return true;
+    } else
+        return false;
+}
+
+INLINE bool projectEdge(Edge *edge, Viewport *viewport) {
+    Dimensions *dimensions = &viewport->frame_buffer->dimensions;
+
+    vec4 A = mulVec4Mat4(Vec4fromVec3(edge->from, 1.0f), viewport->pre_projection_matrix);
+    vec4 B = mulVec4Mat4(Vec4fromVec3(edge->to,   1.0f), viewport->pre_projection_matrix);
+
+    if (!cullAndClipEdgeInClipSpace(&A, &B)) {
         edge->to = edge->from = getVec3Of(-1);
-        return;
+        return false;
     }
 
     // Project:
-    f32 fl_over_z_from = focal_length / edge->from.z;
-    f32 fl_over_z_to   = focal_length / edge->to.z;
-    edge->from.x *= fl_over_z_from;
-    edge->from.y *= fl_over_z_from * dimensions->width_over_height;
-    edge->to.x   *= fl_over_z_to;
-    edge->to.y   *= fl_over_z_to   * dimensions->width_over_height;
+    edge->from = scaleVec3(Vec3fromVec4(A), 1.0f / A.w);
+    edge->to   = scaleVec3(Vec3fromVec4(B), 1.0f / B.w);
 
     // NDC->screen:
     edge->from.x += 1; edge->from.x *= dimensions->h_width;
@@ -3676,29 +3780,31 @@ void projectEdge(Edge *edge, Viewport *viewport) {
     // Flip Y:
     edge->from.y = dimensions->f_height - edge->from.y;
     edge->to.y   = dimensions->f_height - edge->to.y;
+
+    return true;
 }
 
 void drawEdge(Viewport *viewport, RGBA color, Edge *edge) {
-    projectEdge(edge, viewport);
-    drawLine(viewport->frame_buffer, color,
-             (i32)edge->from.x,
-             (i32)edge->from.y,
-             (i32)edge->to.x,
-             (i32)edge->to.y);
+    if (projectEdge(edge, viewport))
+        drawLine(viewport->frame_buffer, color,
+                 (i32)edge->from.x,
+                 (i32)edge->from.y,
+                 (i32)edge->to.x,
+                 (i32)edge->to.y);
 }
 void drawEdgeF(Viewport *viewport, vec3 color, f32 opacity, Edge *edge, u8 line_width) {
-    projectEdge(edge, viewport);
-    drawLineF(viewport->frame_buffer, color, opacity,
-              edge->from.x, edge->from.y,
-              edge->to.x,   edge->to.y,
-              line_width);
+    if (projectEdge(edge, viewport))
+        drawLineF(viewport->frame_buffer, color, opacity,
+                  edge->from.x, edge->from.y,
+                  edge->to.x,   edge->to.y,
+                  line_width);
 }
 void drawEdge3D(Viewport *viewport, vec3 color, f32 opacity, Edge *edge, u8 line_width) {
-    projectEdge(edge, viewport);
-    drawLine3D(viewport->frame_buffer, color, opacity,
-               edge->from.x, edge->from.y, edge->from.z,
-               edge->to.x,   edge->to.y,   edge->to.z,
-               line_width);
+    if (projectEdge(edge, viewport))
+        drawLine3D(viewport->frame_buffer, color, opacity,
+                   edge->from.x, edge->from.y, edge->from.z,
+                   edge->to.x,   edge->to.y,   edge->to.z,
+                   line_width);
 }
 
 void drawRect(PixelGrid *canvas, RGBA color, Rect *rect) {
@@ -3758,10 +3864,22 @@ void fillTriangle(PixelGrid *canvas, RGBA color, f32 *X, f32 *Y, f32 *Z) {
         if (Y[i] < Y[ysi]) ysi = i;
         if (Y[i] > Y[yei]) yei = i;
     }
-    u8* id = ysi ? (ysi == 1 ?
-            (u8[3]){1, 2, 0} :
-            (u8[3]){2, 0, 1}) :
-                    (u8[3]){0, 1, 2};
+    u8 id[3];
+    if (ysi) {
+        if (ysi == 1) {
+            id[0] = 1;
+            id[1] = 2;
+            id[2] = 0;
+        } else {
+            id[0] = 2;
+            id[1] = 0;
+            id[2] = 1;
+        }
+    } else {
+        id[0] = 0;
+        id[1] = 1;
+        id[2] = 2;
+    }
     x1 = X[id[0]]; y1 = Y[id[0]]; z1 = Z[id[0]]; x1i = (i32)x1; y1i = (i32)y1;
     x2 = X[id[1]]; y2 = Y[id[1]]; z2 = Z[id[1]]; x2i = (i32)x2; y2i = (i32)y2;
     x3 = X[id[2]]; y3 = Y[id[2]]; z3 = Z[id[2]]; x3i = (i32)x3; y3i = (i32)y3;
@@ -4198,22 +4316,22 @@ void loadMeshFromFile(Mesh *mesh, char *file_path, Platform *platform, Memory *m
     platform->readFromFile(&mesh->uvs_count,      sizeof(u32),  file);
     platform->readFromFile(&mesh->normals_count,  sizeof(u32),  file);
 
-    mesh->vertex_positions        = allocateMemory(memory, sizeof(vec3)                  * mesh->vertex_count);
-    mesh->vertex_position_indices = allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
-    mesh->edge_vertex_indices     = allocateMemory(memory, sizeof(EdgeVertexIndices)     * mesh->edge_count);
+    mesh->vertex_positions        = (vec3*                 )allocateMemory(memory, sizeof(vec3)                  * mesh->vertex_count);
+    mesh->vertex_position_indices = (TriangleVertexIndices*)allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
+    mesh->edge_vertex_indices     = (EdgeVertexIndices*    )allocateMemory(memory, sizeof(EdgeVertexIndices)     * mesh->edge_count);
 
     platform->readFromFile(mesh->vertex_positions,             sizeof(vec3)                  * mesh->vertex_count,   file);
     platform->readFromFile(mesh->vertex_position_indices,      sizeof(TriangleVertexIndices) * mesh->triangle_count, file);
     platform->readFromFile(mesh->edge_vertex_indices,          sizeof(EdgeVertexIndices)     * mesh->edge_count,     file);
     if (mesh->uvs_count) {
-        mesh->vertex_uvs         = allocateMemory(memory, sizeof(vec2)                  * mesh->uvs_count);
-        mesh->vertex_uvs_indices = allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
+        mesh->vertex_uvs         = (vec2*                 )allocateMemory(memory, sizeof(vec2)                  * mesh->uvs_count);
+        mesh->vertex_uvs_indices = (TriangleVertexIndices*)allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
         platform->readFromFile(mesh->vertex_uvs,               sizeof(vec2)                  * mesh->uvs_count,      file);
         platform->readFromFile(mesh->vertex_uvs_indices,       sizeof(TriangleVertexIndices) * mesh->triangle_count, file);
     }
     if (mesh->normals_count) {
-        mesh->vertex_normals          = allocateMemory(memory, sizeof(vec3)                  * mesh->normals_count);
-        mesh->vertex_normal_indices   = allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
+        mesh->vertex_normals          = (vec3*                 )allocateMemory(memory, sizeof(vec3)                  * mesh->normals_count);
+        mesh->vertex_normal_indices   = (TriangleVertexIndices*)allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
         platform->readFromFile(mesh->vertex_normals,                sizeof(vec3)                  * mesh->normals_count,  file);
         platform->readFromFile(mesh->vertex_normal_indices,         sizeof(TriangleVertexIndices) * mesh->triangle_count, file);
     }
@@ -4971,20 +5089,20 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
     scene->selection->changed = false;
 
     if (settings->meshes && settings->mesh_files) {
-        scene->meshes = allocateMemory(memory, sizeof(Mesh) * settings->meshes);
+        scene->meshes = (Mesh*)allocateMemory(memory, sizeof(Mesh) * settings->meshes);
         for (u32 i = 0; i < settings->meshes; i++)
             loadMeshFromFile(&scene->meshes[i], settings->mesh_files[i].char_ptr, platform, memory);
     }
 
     if (settings->cameras) {
-        scene->cameras = allocateMemory(memory, sizeof(Camera) * settings->cameras);
+        scene->cameras = (Camera*)allocateMemory(memory, sizeof(Camera) * settings->cameras);
         if (scene->cameras)
             for (u32 i = 0; i < settings->cameras; i++)
                 initCamera(scene->cameras + i);
     }
 
     if (settings->primitives) {
-        scene->primitives = allocateMemory(memory, sizeof(Primitive) * settings->primitives);
+        scene->primitives = (Primitive*)allocateMemory(memory, sizeof(Primitive) * settings->primitives);
         if (scene->primitives)
             for (u32 i = 0; i < settings->primitives; i++) {
                 initPrimitive(scene->primitives + i);
@@ -4993,21 +5111,21 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
     }
 
     if (settings->curves) {
-        scene->curves = allocateMemory(memory, sizeof(Curve) * settings->curves);
+        scene->curves = (Curve*)allocateMemory(memory, sizeof(Curve) * settings->curves);
         if (scene->curves)
             for (u32 i = 0; i < settings->curves; i++)
                 initCurve(scene->curves + i);
     }
 
     if (settings->boxes) {
-        scene->boxes = allocateMemory(memory, sizeof(Box) * settings->boxes);
+        scene->boxes = (Box*)allocateMemory(memory, sizeof(Box) * settings->boxes);
         if (scene->boxes)
             for (u32 i = 0; i < settings->boxes; i++)
                 initBox(scene->boxes + i);
     }
 
     if (settings->grids) {
-        scene->grids = allocateMemory(memory, sizeof(Grid) * settings->grids);
+        scene->grids = (Grid*)allocateMemory(memory, sizeof(Grid) * settings->grids);
         if (scene->grids)
             for (u32 i = 0; i < settings->grids; i++)
                 initGrid(scene->grids + i, 3, 3);
@@ -5072,7 +5190,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
 
     if (viewport_settings->hud_line_count)
-        viewport_settings->hud_lines = allocateAppMemory(viewport_settings->hud_line_count * sizeof(HUDLine));
+        viewport_settings->hud_lines = (HUDLine*)allocateAppMemory(viewport_settings->hud_line_count * sizeof(HUDLine));
 
     initViewport(&app->viewport,
                  viewport_settings,
