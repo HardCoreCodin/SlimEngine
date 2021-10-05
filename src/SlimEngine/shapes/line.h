@@ -125,12 +125,12 @@ void drawLine(PixelGrid *canvas, RGBA color, i32 x0, i32 y0, i32 x1, i32 y1) {
     }
 }
 
-INLINE f32 fpart(f32 x) {
+INLINE f32 fractionOf(f32 x) {
     return x - floorf(x);
 }
 
-INLINE f32 rfpart(f32 x) {
-    return 1 - fpart(x);
+INLINE f32 oneMinusFractionOf(f32 x) {
+    return 1 - fractionOf(x);
 }
 
 void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x2, f32 y2, u8 line_width) {
@@ -170,11 +170,11 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
         x = start.x;
         y = start.y;
 
-        gap = rfpart(x1 + 0.5f);
+        gap = oneMinusFractionOf(x1 + 0.5f);
 
         if (inRange(x, w, 0)) {
             pixel = pixels + w * y + x;
-            if (inRange(y, h, 0)) setPixel(pixel, color, rfpart(first.y) * gap * opacity, 0, blend);
+            if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(first.y) * gap * opacity, 0, blend);
 
             for (u8 i = 0; i < line_width; i++) {
                 y++;
@@ -184,17 +184,17 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
 
             y++;
             pixel += w;
-            if (inRange(y, h, 0)) setPixel(pixel, color, fpart(first.y) * gap * opacity, 0, blend);
+            if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(first.y) * gap * opacity, 0, blend);
         }
 
         x = end.x;
         y = end.y;
 
-        gap = fpart(x2 + 0.5f);
+        gap = fractionOf(x2 + 0.5f);
 
         if (inRange(x, w, 0)) {
             pixel = pixels + w * y + x;
-            if (inRange(y, h, 0)) setPixel(pixel, color, rfpart(last.y) * gap * opacity, 0, blend);
+            if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(last.y) * gap * opacity, 0, blend);
 
             for (u8 i = 0; i < line_width; i++) {
                 y++;
@@ -204,7 +204,7 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
 
             y++;
             pixel += w;
-            if (inRange(y, h, 0)) setPixel(pixel, color, fpart(last.y) * gap * opacity, 0, blend);
+            if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(last.y) * gap * opacity, 0, blend);
         }
 
         gap = first.y + grad;
@@ -213,7 +213,7 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
                     y = (i32)gap;
 
                     pixel = pixels + w * y + x;
-                    if (inRange(y, h, 0)) setPixel(pixel, color, rfpart(gap) * opacity, 0, blend);
+                    if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(gap) * opacity, 0, blend);
 
                     for (u8 i = 0; i < line_width; i++) {
                         y++;
@@ -223,7 +223,7 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
 
                     y++;
                     pixel += w;
-                    if (inRange(y, h, 0)) setPixel(pixel, color, fpart(gap) * opacity, 0, blend);
+                    if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(gap) * opacity, 0, blend);
                 }
 
                 gap += grad;
@@ -250,11 +250,11 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
 
         x = start.x;
         y = start.y;
-        gap = rfpart(y1 + 0.5f);
+        gap = oneMinusFractionOf(y1 + 0.5f);
 
         if (inRange(y, h, 0)) {
             pixel = pixels + w * y + x;
-            if (inRange(x, w, 0)) setPixel(pixel, color, rfpart(first.x) * gap * opacity, 0, blend);
+            if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(first.x) * gap * opacity, 0, blend);
 
             for (u8 i = 0; i < line_width; i++) {
                 x++;
@@ -264,16 +264,16 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
 
             x++;
             pixel++;
-            if (inRange(x, w, 0)) setPixel(pixel, color, fpart(first.x) * gap * opacity, 0, blend);
+            if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(first.x) * gap * opacity, 0, blend);
         }
 
         x = end.x;
         y = end.y;
-        gap = fpart(y2 + 0.5f);
+        gap = fractionOf(y2 + 0.5f);
 
         if (inRange(y, h, 0)) {
             pixel = pixels + w * y + x;
-            if (inRange(x, w, 0)) setPixel(pixel, color, rfpart(last.x) * gap * opacity, 0, blend);
+            if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(last.x) * gap * opacity, 0, blend);
 
             for (u8 i = 0; i < line_width; i++) {
                 x++;
@@ -283,7 +283,7 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
 
             x++;
             pixel++;
-            if (inRange(x, w, 0)) setPixel(pixel, color, fpart(last.x) * gap * opacity, 0, blend);
+            if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(last.x) * gap * opacity, 0, blend);
         }
 
         gap = first.x + grad;
@@ -292,7 +292,7 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
                 x = (i32) gap;
 
                 pixel = pixels + w * y + x;
-                if (inRange(x, w, 0)) setPixel(pixel, color, rfpart(gap) * opacity, 0, blend);
+                if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(gap) * opacity, 0, blend);
 
                 for (u8 i = 0; i < line_width; i++) {
                     x++;
@@ -302,7 +302,7 @@ void drawLineF(PixelGrid *canvas, vec3 color, f32 opacity, f32 x1, f32 y1, f32 x
 
                 x++;
                 pixel++;
-                if (inRange(x, w, 0)) setPixel(pixel, color, fpart(gap) * opacity, 0, blend);
+                if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(gap) * opacity, 0, blend);
             }
             gap += grad;
         }
@@ -322,10 +322,10 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
     const bool blend = canvas->gamma_corrected_blending;
     i32 x, y, w = canvas->dimensions.width, h = canvas->dimensions.height;
     FloatPixel *pixel, *pixels = canvas->float_pixels;
-    f64 tmp;
+    f64 tmp, z_range, original_range, start_offset_scale, end_offset_scale;
     f32 dx = x2 - x1;
     f32 dy = y2 - y1;
-    f32 gap, grad;
+    f32 gap, grad, first_offset, last_offset;
     f64 z, z_curr, z_step;
     vec3 first, last;
     vec2i start, end;
@@ -338,11 +338,16 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
         grad = dy / dx;
 
+        original_range = (f64)(x2 - x1);
         first.x = roundf(x1);
         last.x  = roundf(x2);
+        first_offset = first.x - x1;
+        last_offset  = last.x  - x2;
+        start_offset_scale = (f64)(first_offset + 1) / original_range;
+        end_offset_scale   = (f64)(last_offset  - 1) / original_range;
 
-        first.y = y1 + grad * (first.x - x1);
-        last.y  = y2 + grad * (last.x  - x2);
+        first.y = y1 + grad * first_offset;
+        last.y  = y2 + grad * last_offset;
 
         start.x = (i32)first.x;
         start.y = (i32)first.y;
@@ -351,11 +356,11 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
         x = start.x;
         y = start.y;
-        gap = rfpart(x1 + 0.5f);
+        gap = oneMinusFractionOf(x1 + 0.5f);
 
         if (inRange(x, w, 0)) {
             pixel = pixels + w * y + x;
-            if (inRange(y, h, 0)) setPixel(pixel, color, rfpart(first.y) * gap * opacity, z1, blend);
+            if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(first.y) * gap * opacity, z1, blend);
 
             for (u8 i = 0; i < line_width; i++) {
                 y++;
@@ -365,16 +370,16 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
             y++;
             pixel += w;
-            if (inRange(y, h, 0)) setPixel(pixel, color, fpart(first.y) * gap * opacity, z1, blend);
+            if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(first.y) * gap * opacity, z1, blend);
         }
 
         x = end.x;
         y = end.y;
-        gap = fpart(x2 + 0.5f);
+        gap = fractionOf(x2 + 0.5f);
 
         if (inRange(x, w, 0)) {
             pixel = pixels + w * y + x;
-            if (inRange(y, h, 0)) setPixel(pixel, color, rfpart(last.y) * gap * opacity, z2, blend);
+            if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(last.y) * gap * opacity, z2, blend);
 
             for (u8 i = 0; i < line_width; i++) {
                 y++;
@@ -384,19 +389,28 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
             y++;
             pixel += w;
-            if (inRange(y, h, 0)) setPixel(pixel, color, fpart(last.y) * gap * opacity, z2, blend);
+            if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(last.y) * gap * opacity, z2, blend);
         }
 
-        z_step = (z2 - z1) / (f64)(end.x - start.x + 1);
-        z_curr = z1 + z_step;
+
+
+        z1 = 1.0 / z1;
+        z2 = 1.0 / z2;
+        z_range = z2 - z1;
+        z1 += start_offset_scale * z_range;
+        z2 += end_offset_scale   * z_range;
+        z_range = z2 - z1;
+        z_step = z_range / (f64)(last.x - first.x - 1);
+        z_curr = z1;
+
         gap = first.y + grad;
         for (x = start.x + 1; x < end.x; x++) {
             if (inRange(x, w, 0)) {
                 y = (i32)gap;
-                z = z_curr;
+                z = 1.0 / z_curr;
 
                 pixel = pixels + w * y + x;
-                if (inRange(y, h, 0)) setPixel(pixel, color, rfpart(gap) * opacity, z, blend);
+                if (inRange(y, h, 0)) setPixel(pixel, color, oneMinusFractionOf(gap) * opacity, z, blend);
 
                 for (u8 i = 0; i < line_width; i++) {
                     y++;
@@ -406,7 +420,7 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
                 y++;
                 pixel += w;
-                if (inRange(y, h, 0)) setPixel(pixel, color, fpart(gap) * opacity, z, blend);
+                if (inRange(y, h, 0)) setPixel(pixel, color, fractionOf(gap) * opacity, z, blend);
             }
 
             gap += grad;
@@ -421,11 +435,18 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
         grad = dx / dy;
 
+        original_range = (f64)(y2 - y1);
         first.y = roundf(y1);
         last.y  = roundf(y2);
 
-        first.x = x1 + grad * (first.y - y1);
-        last.x  = x2 + grad * (last.y  - y2);
+        first_offset = y1 - first.y;
+        last_offset  = last.y  - y2;
+
+        start_offset_scale = (f64)(first_offset + 1) / original_range;
+        end_offset_scale   = (f64)(last_offset  - 1) / original_range;
+
+        first.x = x1 + grad * first_offset;
+        last.x  = x2 + grad * last_offset;
 
         start.y = (i32)first.y;
         start.x = (i32)first.x;
@@ -435,11 +456,11 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
         x = start.x;
         y = start.y;
-        gap = rfpart(y1 + 0.5f);
+        gap = oneMinusFractionOf(y1 + 0.5f);
 
         if (inRange(y, h, 0)) {
             pixel = pixels + w * y + x;
-            if (inRange(x, w, 0)) setPixel(pixel, color, rfpart(first.x) * gap * opacity, z1, blend);
+            if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(first.x) * gap * opacity, z1, blend);
 
             for (u8 i = 0; i < line_width; i++) {
                 x++;
@@ -449,16 +470,16 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
             x++;
             pixel++;
-            if (inRange(x, w, 0)) setPixel(pixel, color, fpart(first.x) * gap * opacity, z1, blend);
+            if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(first.x) * gap * opacity, z1, blend);
         }
 
         x = end.x;
         y = end.y;
-        gap = fpart(y2 + 0.5f);
+        gap = fractionOf(y2 + 0.5f);
 
         if (inRange(y, h, 0)) {
             pixel = pixels + w * y + x;
-            if (inRange(x, w, 0)) setPixel(pixel, color, rfpart(last.x) * gap * opacity, z2, blend);
+            if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(last.x) * gap * opacity, z2, blend);
 
             for (u8 i = 0; i < line_width; i++) {
                 x++;
@@ -468,13 +489,19 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
             x++;
             pixel++;
-            if (inRange(x, w, 0)) setPixel(pixel, color, fpart(last.x) * gap * opacity, z2, blend);
+            if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(last.x) * gap * opacity, z2, blend);
         }
+
 
         z1 = 1.0 / z1;
         z2 = 1.0 / z2;
-        z_step = (z2 - z1) / (f64)(end.y - start.y + 1);
-        z_curr = z1 + z_step;
+        z_range = z2 - z1;
+        z1 += start_offset_scale * z_range;
+        z2 += end_offset_scale   * z_range;
+        z_range = z2 - z1;
+        z_step = z_range / (f64)(last.y - first.y - 1);
+        z_curr = z1;
+
         gap = first.x + grad;
         for (y = start.y + 1; y < end.y; y++) {
             if (inRange(y, h, 0)) {
@@ -482,7 +509,7 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
                 z = 1.0 / z_curr;
 
                 pixel = pixels + w * y + x;
-                if (inRange(x, w, 0)) setPixel(pixel, color, rfpart(gap) * opacity, z, blend);
+                if (inRange(x, w, 0)) setPixel(pixel, color, oneMinusFractionOf(gap) * opacity, z, blend);
 
                 for (u8 i = 0; i < line_width; i++) {
                     x++;
@@ -492,7 +519,7 @@ void drawLine3D(PixelGrid *canvas, vec3 color, f32 opacity,
 
                 x++;
                 pixel++;
-                if (inRange(x, w, 0)) setPixel(pixel, color, fpart(gap) * opacity, z, blend);
+                if (inRange(x, w, 0)) setPixel(pixel, color, fractionOf(gap) * opacity, z, blend);
             }
 
             gap += grad;

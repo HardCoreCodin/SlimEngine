@@ -209,13 +209,15 @@ void drawLocalEdge(Edge edge, vec3 color, f32 opacity, u8 line_width) {
 void drawClippedEdge(Viewport *viewport, Edge *clipped_edge, vec3 color, f32 opacity) {
     convertEdgeFromSecondaryToMain(clipped_edge);
     projectEdge(clipped_edge, viewport);
-    clipped_edge->from.z -= 0.1f;
-    clipped_edge->to.z -= 0.1f;
-    drawLineF(viewport->frame_buffer, color, opacity,
-              clipped_edge->from.x,
-              clipped_edge->from.y,
-              clipped_edge->to.x,
-              clipped_edge->to.y,
+//    clipped_edge->from.z -= 0.1f;
+//    clipped_edge->to.z -= 0.1f;
+    drawLine3D(viewport->frame_buffer, color, opacity,
+               clipped_edge->from.x,
+               clipped_edge->from.y,
+               clipped_edge->from.z,
+               clipped_edge->to.x,
+               clipped_edge->to.y,
+               clipped_edge->to.z,
                1);
 }
 

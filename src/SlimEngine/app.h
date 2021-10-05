@@ -122,20 +122,20 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
     scene->selection->changed = false;
 
     if (settings->meshes && settings->mesh_files) {
-        scene->meshes = allocateMemory(memory, sizeof(Mesh) * settings->meshes);
+        scene->meshes = (Mesh*)allocateMemory(memory, sizeof(Mesh) * settings->meshes);
         for (u32 i = 0; i < settings->meshes; i++)
             loadMeshFromFile(&scene->meshes[i], settings->mesh_files[i].char_ptr, platform, memory);
     }
 
     if (settings->cameras) {
-        scene->cameras = allocateMemory(memory, sizeof(Camera) * settings->cameras);
+        scene->cameras = (Camera*)allocateMemory(memory, sizeof(Camera) * settings->cameras);
         if (scene->cameras)
             for (u32 i = 0; i < settings->cameras; i++)
                 initCamera(scene->cameras + i);
     }
 
     if (settings->primitives) {
-        scene->primitives = allocateMemory(memory, sizeof(Primitive) * settings->primitives);
+        scene->primitives = (Primitive*)allocateMemory(memory, sizeof(Primitive) * settings->primitives);
         if (scene->primitives)
             for (u32 i = 0; i < settings->primitives; i++) {
                 initPrimitive(scene->primitives + i);
@@ -144,21 +144,21 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
     }
 
     if (settings->curves) {
-        scene->curves = allocateMemory(memory, sizeof(Curve) * settings->curves);
+        scene->curves = (Curve*)allocateMemory(memory, sizeof(Curve) * settings->curves);
         if (scene->curves)
             for (u32 i = 0; i < settings->curves; i++)
                 initCurve(scene->curves + i);
     }
 
     if (settings->boxes) {
-        scene->boxes = allocateMemory(memory, sizeof(Box) * settings->boxes);
+        scene->boxes = (Box*)allocateMemory(memory, sizeof(Box) * settings->boxes);
         if (scene->boxes)
             for (u32 i = 0; i < settings->boxes; i++)
                 initBox(scene->boxes + i);
     }
 
     if (settings->grids) {
-        scene->grids = allocateMemory(memory, sizeof(Grid) * settings->grids);
+        scene->grids = (Grid*)allocateMemory(memory, sizeof(Grid) * settings->grids);
         if (scene->grids)
             for (u32 i = 0; i < settings->grids; i++)
                 initGrid(scene->grids + i, 3, 3);
@@ -223,7 +223,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
 
     if (viewport_settings->hud_line_count)
-        viewport_settings->hud_lines = allocateAppMemory(viewport_settings->hud_line_count * sizeof(HUDLine));
+        viewport_settings->hud_lines = (HUDLine*)allocateAppMemory(viewport_settings->hud_line_count * sizeof(HUDLine));
 
     initViewport(&app->viewport,
                  viewport_settings,

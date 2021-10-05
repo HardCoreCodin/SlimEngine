@@ -46,22 +46,22 @@ void loadMeshFromFile(Mesh *mesh, char *file_path, Platform *platform, Memory *m
     platform->readFromFile(&mesh->uvs_count,      sizeof(u32),  file);
     platform->readFromFile(&mesh->normals_count,  sizeof(u32),  file);
 
-    mesh->vertex_positions        = allocateMemory(memory, sizeof(vec3)                  * mesh->vertex_count);
-    mesh->vertex_position_indices = allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
-    mesh->edge_vertex_indices     = allocateMemory(memory, sizeof(EdgeVertexIndices)     * mesh->edge_count);
+    mesh->vertex_positions        = (vec3*                 )allocateMemory(memory, sizeof(vec3)                  * mesh->vertex_count);
+    mesh->vertex_position_indices = (TriangleVertexIndices*)allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
+    mesh->edge_vertex_indices     = (EdgeVertexIndices*    )allocateMemory(memory, sizeof(EdgeVertexIndices)     * mesh->edge_count);
 
     platform->readFromFile(mesh->vertex_positions,             sizeof(vec3)                  * mesh->vertex_count,   file);
     platform->readFromFile(mesh->vertex_position_indices,      sizeof(TriangleVertexIndices) * mesh->triangle_count, file);
     platform->readFromFile(mesh->edge_vertex_indices,          sizeof(EdgeVertexIndices)     * mesh->edge_count,     file);
     if (mesh->uvs_count) {
-        mesh->vertex_uvs         = allocateMemory(memory, sizeof(vec2)                  * mesh->uvs_count);
-        mesh->vertex_uvs_indices = allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
+        mesh->vertex_uvs         = (vec2*                 )allocateMemory(memory, sizeof(vec2)                  * mesh->uvs_count);
+        mesh->vertex_uvs_indices = (TriangleVertexIndices*)allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
         platform->readFromFile(mesh->vertex_uvs,               sizeof(vec2)                  * mesh->uvs_count,      file);
         platform->readFromFile(mesh->vertex_uvs_indices,       sizeof(TriangleVertexIndices) * mesh->triangle_count, file);
     }
     if (mesh->normals_count) {
-        mesh->vertex_normals          = allocateMemory(memory, sizeof(vec3)                  * mesh->normals_count);
-        mesh->vertex_normal_indices   = allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
+        mesh->vertex_normals          = (vec3*                 )allocateMemory(memory, sizeof(vec3)                  * mesh->normals_count);
+        mesh->vertex_normal_indices   = (TriangleVertexIndices*)allocateMemory(memory, sizeof(TriangleVertexIndices) * mesh->triangle_count);
         platform->readFromFile(mesh->vertex_normals,                sizeof(vec3)                  * mesh->normals_count,  file);
         platform->readFromFile(mesh->vertex_normal_indices,         sizeof(TriangleVertexIndices) * mesh->triangle_count, file);
     }
