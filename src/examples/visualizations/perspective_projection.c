@@ -1,14 +1,15 @@
 #include "./core.h"
 #include "./projection_matrix.h"
+#include "../../SlimEngine/viewport/viewport.h"
 
 void onButtonDown(MouseButton *mouse_button) {
     app->controls.mouse.pos_raw_diff = Vec2i(0, 0);
 
     if (app->viewport.settings.show_hud && current_viz != VIEW_FRUSTUM_SLICE) {
-        i32 w = secondary_viewport_frame_buffer.dimensions.width;
-        i32 h = secondary_viewport_frame_buffer.dimensions.height;
-        i32 x = secondary_viewport.settings.position.x;
-        i32 y = secondary_viewport.settings.position.y;
+        i32 w = secondary_viewport.dimensions.width;
+        i32 h = secondary_viewport.dimensions.height;
+        i32 x = secondary_viewport.position.x;
+        i32 y = secondary_viewport.position.y;
         active_viewport = (
                 inRange(app->controls.mouse.pos.x, w + x, x) &&
                 inRange(app->controls.mouse.pos.y, h + y, y)
@@ -46,12 +47,27 @@ void updateViewport(Viewport *viewport, Mouse *mouse) {
     }
 }
 
+void updateSecondaryViewport(u16 width, u16 height) {
+    u16 max_width = width - (u16)secondary_viewport.position.x;
+    u16 old_width = (u16)secondary_viewport.dimensions.width;
+    u16 new_width = max_width < SECONDARY_VIEWPORT_WIDTH ? max_width : SECONDARY_VIEWPORT_WIDTH;
+
+    u16 max_height = height - (u16)secondary_viewport.position.y;
+    u16 old_height = (u16)secondary_viewport.dimensions.height;
+    u16 new_height = max_height < SECONDARY_VIEWPORT_HEIGHT ? max_height : SECONDARY_VIEWPORT_HEIGHT;
+    if (new_height != old_height ||
+        new_width  != old_width)
+        updateDimensions(&secondary_viewport.dimensions, new_width, new_height, width);
+    else
+        secondary_viewport.dimensions.stride = width;
+}
+
 void renderIntro(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
     rotatePrimitive(main_box_prim, delta_time / -3, 0, 0);
 
-    drawGrid(viewport, Color(main_grid_prim->color), 1, main_grid, main_grid_prim,0);
-    drawGrid(viewport, Color(projection_plane_prim->color), 1, projection_plane_grid, projection_plane_prim, 0);
-    drawBox(viewport,  Color(main_box_prim->color), 1, main_box, main_box_prim, BOX__ALL_SIDES, 1);
+    drawGrid(main_grid,                    main_grid_prim, Color(main_grid_prim->color),        FG_GRID_OPACITY,  FG_GRID_LINE_WIDTH, viewport);
+    drawGrid(projection_plane_grid, projection_plane_prim, Color(projection_plane_prim->color), FG_GRID_OPACITY,  FG_GRID_LINE_WIDTH, viewport);
+    drawBox(main_box, BOX__ALL_SIDES, main_box_prim,  Color(main_box_prim->color),         FG_SHAPE_OPACITY, FG_SHAPE_LINE_WIDTH, viewport);
 
     Edge edge;
     initBox(&projected_box);
@@ -67,30 +83,36 @@ void renderIntro(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
         transformEdge(&edge, &view_space_edge, &viewport->camera->transform);
         projected_box.vertices.buffer[i] = view_space_edge.from;
 
-        drawEdgeF(viewport, Color(Magenta), 0.5f, &view_space_edge, 1);
+        drawEdge(&view_space_edge, Color(Magenta), PROJECTION_OPACITY, PROJECTION_LINE_WIDTH, viewport);
     }
 
     setBoxEdgesFromVertices(&projected_box.edges, &projected_box.vertices);
     for (u8 i = 0; i < BOX__EDGE_COUNT; i++)
-        drawEdge3D(viewport, Color(Yellow), 0.5f, projected_box.edges.buffer + i, 1);
+        drawEdge(projected_box.edges.buffer + i, Color(Yellow), PROJECTION_OPACITY, PROJECTION_LINE_WIDTH, viewport);
 }
 
 void renderViewFrustum(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
-    drawArrow(viewport, Color(BrightRed),   1, &arrowX, 2);
-    drawArrow(viewport, Color(BrightGreen), 1, &arrowY, 2);
-    drawArrow(viewport, Color(BrightBlue),  1, &arrowZ, 2);
+    drawGrid(main_grid, main_grid_prim, Color(main_grid_prim->color), BG_GRID_OPACITY, BG_GRID_LINE_WIDTH, viewport);
+
+    drawArrow(&arrowX, Color(BrightRed),   ARROW_OPACITY, ARROW_LINE_WIDTH, viewport);
+    drawArrow(&arrowY, Color(BrightGreen), ARROW_OPACITY, ARROW_LINE_WIDTH, viewport);
+    drawArrow(&arrowZ, Color(BrightBlue),  ARROW_OPACITY, ARROW_LINE_WIDTH, viewport);
 
     mat4 M = getMat4Identity();
 
     // Transform vertices positions from local-space to world-space and then to view-space:
     BoxVertices vertices;
-    transformBoxVerticesFromObjectToViewSpace(viewport, secondary_camera_prim, &NDC_box.vertices, &vertices);
+    transformBoxVerticesFromObjectToViewSpace(&NDC_box.vertices, &vertices, secondary_camera_prim, viewport);
 
     // Distribute transformed vertices positions to edges:
     BoxEdges edges;
     setBoxEdgesFromVertices(&edges, &vertices);
-    for (u8 i = 0; i < BOX__EDGE_COUNT; i++)
-        drawEdgeF(viewport, Color(Yellow), 1, edges.buffer + i, 1);
+    Edge edge;
+    for (u8 i = 0; i < BOX__EDGE_COUNT; i++) {
+        edge = edges.buffer[i];
+        edge.from.z = edge.to.z = 0;
+        drawEdge(&edge, Color(Yellow), NDC_BOX_OPACITY, NDC_BOX_LINE_WIDTH, viewport);
+    }
 
     view_frustum_box.vertices.corners = getViewFrustumCorners(&secondary_viewport);
     setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
@@ -104,56 +126,58 @@ void renderViewFrustum(Viewport *viewport, f32 delta_time, f32 elapsed_time) {
             far_color   = getColorInBetween(far_color,   Color(Yellow), transitions.full_projection.eased_t);
         }
     }
-    drawFrustum(viewport, &transforming_view_frustum_box, near_color, far_color, sides_color, 1, 1);
+    drawFrustum(viewport, &transforming_view_frustum_box, near_color, far_color, sides_color, VIEW_FRUSTUM_OPACITY, VIEW_FRUSTUM_LINE_WIDTH);
 
     edge_color = Color(DarkYellow);
-    drawBox(viewport, edge_color, 1, main_box, main_box_prim, BOX__ALL_SIDES, 0);
+    drawBox(main_box, BOX__ALL_SIDES, main_box_prim, edge_color, BG_SHAPE_OPACITY, BG_SHAPE_LINE_WIDTH, viewport);
 
     Edge *clipped_edge;
-    transformGridVerticesFromObjectToViewSpace(&secondary_viewport, main_grid_prim, main_grid, &clipped_grid.vertices);
+    transformGridVerticesFromObjectToViewSpace(main_grid, &clipped_grid.vertices, main_grid_prim, &secondary_viewport);
     setGridEdgesFromVertices(clipped_grid.edges.uv.u, main_grid->u_segments, clipped_grid.vertices.uv.u.from, clipped_grid.vertices.uv.u.to);
     setGridEdgesFromVertices(clipped_grid.edges.uv.v, main_grid->v_segments, clipped_grid.vertices.uv.v.from, clipped_grid.vertices.uv.v.to);
 
-    edge_color = Color(main_grid_prim->color);
+    edge_color = Color(White);
     clipped_edge = clipped_grid.edges.uv.u;
     for (u8 u = 0; u < main_grid->u_segments; u++, clipped_edge++) {
         if (cullAndClipEdge(clipped_edge, &secondary_viewport)) {
-            drawClippedEdge(viewport, transformedEdge(clipped_edge, M, M), edge_color, 1);
+            drawClippedEdge(viewport, transformedEdge(clipped_edge, M, M), edge_color, FG_GRID_OPACITY, FG_GRID_LINE_WIDTH);
         }
     }
 
     clipped_edge = clipped_grid.edges.uv.v;
     for (u8 v = 0; v < main_grid->v_segments; v++, clipped_edge++) {
         if (cullAndClipEdge(clipped_edge, &secondary_viewport)) {
-            drawClippedEdge(viewport, transformedEdge(clipped_edge, M, M), edge_color, 1);
+            drawClippedEdge(viewport, transformedEdge(clipped_edge, M, M), edge_color, FG_GRID_OPACITY, FG_GRID_LINE_WIDTH);
         }
     }
 
-    transformBoxVerticesFromObjectToViewSpace(&secondary_viewport, main_box_prim, &main_box->vertices, &clipped_box.vertices);
+    transformBoxVerticesFromObjectToViewSpace(&main_box->vertices, &clipped_box.vertices, main_box_prim, &secondary_viewport);
     setBoxEdgesFromVertices(&clipped_box.edges, &clipped_box.vertices);
     clipped_edge = clipped_box.edges.buffer;
     edge_color = Color(main_box_prim->color);
     for (u8 i = 0; i < BOX__EDGE_COUNT; i++, clipped_edge++) {
         if (cullAndClipEdge(clipped_edge, &secondary_viewport)) {
-            drawClippedEdge(viewport, transformedEdge(clipped_edge, M, M), edge_color, 1);
+            drawClippedEdge(viewport, transformedEdge(clipped_edge, M, M), edge_color, FG_SHAPE_OPACITY, FG_SHAPE_LINE_WIDTH);
         }
     }
 }
 
 void renderProjection(Viewport *viewport, f32 delta_time) {
-    drawArrow(viewport, Color(BrightRed),   1, &arrowX, 2);
-    drawArrow(viewport, Color(BrightGreen), 1, &arrowY, 2);
-    drawArrow(viewport, Color(BrightBlue),  1, &arrowZ, 2);
+    drawGrid(main_grid, main_grid_prim, Color(main_grid_prim->color), FG_GRID_OPACITY, FG_GRID_LINE_WIDTH, viewport);
+
+    drawArrow(&arrowX, Color(BrightRed),   ARROW_OPACITY, ARROW_LINE_WIDTH, viewport);
+    drawArrow(&arrowY, Color(BrightGreen), ARROW_OPACITY, ARROW_LINE_WIDTH, viewport);
+    drawArrow(&arrowZ, Color(BrightBlue),  ARROW_OPACITY, ARROW_LINE_WIDTH, viewport);
 
     view_frustum_box.vertices.corners = getViewFrustumCorners(&secondary_viewport);
     setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
     transforming_view_frustum_box = view_frustum_box;
-    drawFrustum(viewport, &transforming_view_frustum_box, near_color, far_color, sides_color, 1, 1);
-    drawBox(viewport, Color(Grey), 1, main_box, main_box_prim, BOX__ALL_SIDES, 0);
+    drawFrustum(viewport, &transforming_view_frustum_box, near_color, far_color, sides_color, VIEW_FRUSTUM_OPACITY, VIEW_FRUSTUM_LINE_WIDTH);
+    drawBox(main_box, BOX__ALL_SIDES, main_box_prim, Color(main_box_prim->color), BG_SHAPE_OPACITY, BG_SHAPE_LINE_WIDTH, viewport);
 
     vec3 side_col, far_col, near_col, color, out_color = Color(BrightGrey);
     if (show_pre_projection) {
-        drawBox(viewport, Color(Magenta), 1, &pre_projected_view_frustum_box, secondary_camera_prim, BOX__ALL_SIDES, 0);
+        drawBox(&pre_projected_view_frustum_box, BOX__ALL_SIDES, secondary_camera_prim, Color(Magenta), FG_SHAPE_OPACITY, FG_SHAPE_LINE_WIDTH, viewport);
 
         if (transitions.pre_projection.active) {
             if (incTransition(&transitions.pre_projection, delta_time, true)) {
@@ -161,10 +185,10 @@ void renderProjection(Viewport *viewport, f32 delta_time) {
                 side_col = getColorInBetween(sides_color, Color(Magenta), transitions.pre_projection.eased_t);
                 near_col = getColorInBetween(near_color,  Color(Magenta), transitions.pre_projection.eased_t);
                 far_col  = getColorInBetween(far_color,   Color(Magenta), transitions.pre_projection.eased_t);
-                drawFrustum(viewport, &transforming_view_frustum_box, near_col, far_col, side_col, 1, 1);
+                drawFrustum(viewport, &transforming_view_frustum_box, near_col, far_col, side_col, VIEW_FRUSTUM_OPACITY, VIEW_FRUSTUM_LINE_WIDTH);
 
                 if (draw_locator_grids)
-                    drawLocatorGrid(viewport, Color(Yellow), out_color, LOCATOR_OPACITY, &transitions.pre_projection);
+                    drawLocatorGrid(viewport, Color(Yellow), out_color, &transitions.pre_projection);
             } else {
                 transitions.projection.active = true;
                 transitions.projection.t = 0;
@@ -175,9 +199,9 @@ void renderProjection(Viewport *viewport, f32 delta_time) {
             if (incTransition(&transitions.projection, delta_time, true)) {
                 transitionBox(&transitions.projection, &pre_projected_view_frustum_box, &NDC_box);
                 color = getColorInBetween(Color(Magenta), Color(Yellow), transitions.projection.eased_t);
-                drawFrustum(viewport, &transforming_view_frustum_box, color, color, color, 1, 1);
+                drawFrustum(viewport, &transforming_view_frustum_box, color, color, color, VIEW_FRUSTUM_OPACITY, VIEW_FRUSTUM_LINE_WIDTH);
                 if (draw_locator_grids)
-                    drawLocatorGrid(viewport, color, out_color, LOCATOR_OPACITY, &transitions.projection);
+                    drawLocatorGrid(viewport, color, out_color, &transitions.projection);
             }
         }
     }
@@ -188,35 +212,38 @@ void renderProjection(Viewport *viewport, f32 delta_time) {
             side_col = getColorInBetween(sides_color, Color(Yellow), transitions.full_projection.eased_t);
             near_col = getColorInBetween(near_color,  Color(Yellow), transitions.full_projection.eased_t);
             far_col  = getColorInBetween(far_color,   Color(Yellow), transitions.full_projection.eased_t);
-            drawFrustum(viewport, &transforming_view_frustum_box, near_col, far_col, side_col, 1, 1);
+            drawFrustum(viewport, &transforming_view_frustum_box, near_col, far_col, side_col, VIEW_FRUSTUM_OPACITY, VIEW_FRUSTUM_LINE_WIDTH);
             if (draw_locator_grids)
-                drawLocatorGrid(viewport, color, out_color, LOCATOR_OPACITY, &transitions.full_projection);
+                drawLocatorGrid(viewport, color, out_color, &transitions.full_projection);
         }
     }
 
     BoxVertices vertices;
-    transformBoxVerticesFromObjectToViewSpace(viewport, secondary_camera_prim, &NDC_box.vertices, &vertices);
+    transformBoxVerticesFromObjectToViewSpace(&NDC_box.vertices, &vertices, secondary_camera_prim, viewport);
     BoxEdges edges;
+    Edge edge;
     setBoxEdgesFromVertices(&edges, &vertices);
-    for (u8 i = 0; i < BOX__EDGE_COUNT; i++)
-        drawEdgeF(viewport, Color(Yellow), 1, edges.buffer + i, 1);
+    for (u8 i = 0; i < BOX__EDGE_COUNT; i++) {
+        edge = edges.buffer[i];
+        edge.from.z = edge.to.z = 0;
+        drawEdge(&edge, Color(Yellow), NDC_BOX_OPACITY, NDC_BOX_LINE_WIDTH, viewport);
+    }
 }
 
 void renderProjectiveSpace(Viewport *viewport, f32 delta_time) {
-    drawGrid(viewport, Color(Magenta), 1, projective_ref_plane_grid, projective_ref_plane_prim,0);
-    drawBox(viewport, Color(Grey), 1, main_box, main_box_prim, BOX__ALL_SIDES, 0);
+    drawGrid(main_grid,                            main_grid_prim, Color(main_grid_prim->color), FG_GRID_OPACITY,  FG_GRID_LINE_WIDTH, viewport);
+    drawGrid(projective_ref_plane_grid, projective_ref_plane_prim, Color(Magenta),        FG_GRID_OPACITY,  FG_GRID_LINE_WIDTH, viewport);
+    drawBox(main_box, BOX__ALL_SIDES,          main_box_prim, Color(main_box_prim->color),  FG_SHAPE_OPACITY, FG_SHAPE_LINE_WIDTH, viewport);
 
     if (transitions.projective_lines.active) {
         if (incTransition(&transitions.projective_lines, delta_time, false))
             drawProjectiveSpace(viewport, &transitions.projective_lines, true);
     }
 
-    viewport->settings.depth_sort = false;
     updateCameraArrows(&secondary_viewport.camera->transform);
-    drawArrow(viewport, X_color, 1, &arrowX, 2);
-    drawArrow(viewport, Y_color, 1, &arrowY, 2);
-    drawArrow(viewport, Z_color, 1, &arrowZ, 2);
-    viewport->settings.depth_sort = true;
+    drawArrow(&arrowX, X_color, ARROW_LINE_WIDTH, ARROW_LINE_WIDTH, viewport);
+    drawArrow(&arrowY, Y_color, ARROW_LINE_WIDTH, ARROW_LINE_WIDTH, viewport);
+    drawArrow(&arrowZ, Z_color, ARROW_LINE_WIDTH, ARROW_LINE_WIDTH, viewport);
 }
 #define TEXT_OVERLAY_BACKGROUND_PADDING 5
 
@@ -225,8 +252,8 @@ void updateAndRender() {
     Mouse *mouse = &app->controls.mouse;
     Viewport *viewport = &app->viewport;
 
-    startFrameTimer(timer);
-    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
+    beginFrame(timer);
+    beginDrawing(viewport);
 
     static float elapsed = 0;
     elapsed += timer->delta_time;
@@ -284,8 +311,8 @@ void updateAndRender() {
         }
     }
 
-    setPreProjectionMatrix(viewport);
-    setPreProjectionMatrix(&secondary_viewport);
+    setProjectionMatrix(viewport);
+    setProjectionMatrix(&secondary_viewport);
 
     if (orbit) {
         f32 target_distance = viewport->camera->target_distance;
@@ -293,9 +320,6 @@ void updateAndRender() {
         orbitCamera(viewport->camera, timer->delta_time / 30, 0);
         viewport->camera->target_distance = target_distance;
     }
-
-    viewport->settings.depth_sort = true;
-    drawGrid(viewport, Color(DarkGrey), 1, main_grid, main_grid_prim,0);
 
     secondary_camera_prim->position = secondary_viewport.camera->transform.position;
     secondary_camera_prim->rotation = secondary_viewport.camera->transform.rotation;
@@ -314,7 +338,7 @@ void updateAndRender() {
     W_color = Color(Magenta);
 
     if (current_viz != VIEW_FRUSTUM_SLICE)
-        drawCamera(viewport, camera_color, camera_opacity, secondary_viewport.camera, 0);
+        drawCamera(secondary_viewport.camera, camera_color, camera_opacity, CAMERA_LINE_WIDTH, viewport);
 
     labels.count = 0;
 
@@ -328,12 +352,6 @@ void updateAndRender() {
 
     Label *label;
     if (labels.count) {
-        vec3 background_color = Color(Black);
-
-        text_overlay_frame_buffer.dimensions = viewport->frame_buffer->dimensions;
-        fillPixelGrid(&text_overlay_frame_buffer, background_color, 0);
-        background_color = Color(Black);
-
         label = labels.array;
         for (u8 i = 0; i < labels.count; i++, label++) {
             if (label->text[0] == 'X' ||
@@ -350,13 +368,8 @@ void updateAndRender() {
             rect.min.y -= TEXT_OVERLAY_BACKGROUND_PADDING;
             rect.max.x += TEXT_OVERLAY_BACKGROUND_PADDING;
             rect.max.y += TEXT_OVERLAY_BACKGROUND_PADDING;
-            fillRectF(&text_overlay_frame_buffer, background_color, 0.85f, &rect);
+            fillRect(rect, Color(Black), 0.85f, viewport);
         }
-        FloatPixel *float_pixel = text_overlay_frame_buffer.float_pixels;
-        for (i32 y = 0; y < viewport->frame_buffer->dimensions.height; y++)
-            for (i32 x = 0; x < viewport->frame_buffer->dimensions.width; x++, float_pixel++)
-                if (float_pixel->opacity)
-                    setPixel(float_pixel, float_pixel->color, float_pixel->opacity, 0, viewport->frame_buffer->gamma_corrected_blending);
     }
 
     if (app->viewport.settings.show_hud && current_viz == VIEW_FRUSTUM_SLICE) {
@@ -372,71 +385,97 @@ void updateAndRender() {
         setMatrixComponentColor(&main_matrix);
 
         if (secondary_viewport.settings.use_cube_NDC) {
-            copyToString(&final_matrix.components[0][0].string, "L/A", 0);
-            copyToString(&final_matrix.components[1][1].string, "L", 0);
-            copyToString(&final_matrix.components[2][3].string, secondary_viewport.settings.flip_z ? "-1" : "1", 0);
-            copyToString(&final_matrix.components[3][3].string, "0", 0);
-            copyToString(&final_matrix.components[3][2].string, "-2NF/(F-N)", 0);
-            copyToString(&final_matrix.components[2][2].string, (secondary_viewport.settings.flip_z ? "-(F+N)/(F-N)" : "(F+N)/(F-N)"), 0);
-            final_matrix.component_colors[0][0] = ColorOf(White);
-            final_matrix.component_colors[1][1] = ColorOf(White);
-            final_matrix.component_colors[2][2] = ColorOf(White);
-            final_matrix.component_colors[2][3] = ColorOf(White);
-            final_matrix.component_colors[3][2] = ColorOf(White);
-            final_matrix.component_colors[3][3] = ColorOf(White);
+            copyToString(&final_matrix.components[0][0].string, (char*)"L/A", 0);
+            copyToString(&final_matrix.components[1][1].string, (char*)"L", 0);
+            copyToString(&final_matrix.components[2][3].string, secondary_viewport.settings.flip_z ? (char*)"-1" : (char*)"1", 0);
+            copyToString(&final_matrix.components[3][3].string, (char*)"0", 0);
+            copyToString(&final_matrix.components[3][2].string, (char*)"-2NF/(F-N)", 0);
+            copyToString(&final_matrix.components[2][2].string, (secondary_viewport.settings.flip_z ? (char*)"-(F+N)/(F-N)" : (char*)"(F+N)/(F-N)"), 0);
+            final_matrix.component_colors[0][0] = Color(White);
+            final_matrix.component_colors[1][1] = Color(White);
+            final_matrix.component_colors[2][2] = Color(White);
+            final_matrix.component_colors[2][3] = Color(White);
+            final_matrix.component_colors[3][2] = Color(White);
+            final_matrix.component_colors[3][3] = Color(White);
         } else {
-            copyToString(&final_matrix.components[0][0].string, "L/A", 0);
-            copyToString(&final_matrix.components[1][1].string, "L", 0);
-            copyToString(&final_matrix.components[2][3].string, "1", 0);
-            copyToString(&final_matrix.components[3][3].string, "0", 0);
-            copyToString(&final_matrix.components[3][2].string, "-NF/(F-N)", 0);
-            copyToString(&final_matrix.components[2][2].string, "F/(F-N)", 0);
-            final_matrix.component_colors[0][0] = ColorOf(White);
-            final_matrix.component_colors[1][1] = ColorOf(White);
-            final_matrix.component_colors[2][2] = ColorOf(White);
-            final_matrix.component_colors[3][2] = ColorOf(White);
+            copyToString(&final_matrix.components[0][0].string, (char*)"L/A", 0);
+            copyToString(&final_matrix.components[1][1].string, (char*)"L", 0);
+            copyToString(&final_matrix.components[2][3].string, (char*)"1", 0);
+            copyToString(&final_matrix.components[3][3].string, (char*)"0", 0);
+            copyToString(&final_matrix.components[3][2].string, (char*)"-NF/(F-N)", 0);
+            copyToString(&final_matrix.components[2][2].string, (char*)"F/(F-N)", 0);
+            final_matrix.component_colors[0][0] = Color(White);
+            final_matrix.component_colors[1][1] = Color(White);
+            final_matrix.component_colors[2][2] = Color(White);
+            final_matrix.component_colors[3][2] = Color(White);
         }
 
         Rect rect;
         rect.min.x = rect.min.y = 0;
-        rect.max.x = viewport->frame_buffer->dimensions.width;
+        rect.max.x = viewport->dimensions.width;
         rect.max.y = MATRIX_HUD_START_Y + LINE_HEIGHT * 2 + (i32)getMatrixHeight(show_final_matrix ? &final_matrix : &main_matrix) + MATRIX_PADDING;
-        fillRectF(viewport->frame_buffer, Color(Black), 0.85f, &rect);
-
-        preparePixelGridForDisplay(viewport->frame_buffer);
+        fillRect(rect, Color(Black), 0.85f, viewport);
     }
-
-    preparePixelGridForDisplay(viewport->frame_buffer);
 
     if (labels.count) {
         label = labels.array;
         for (u8 i = 0; i < labels.count; i++, label++)
-            drawText(viewport->frame_buffer, label->color, label->text, label->position.x, label->position.y);
+            drawText(label->text, label->position.x, label->position.y, label->color, 1, viewport);
     }
 
     if (app->viewport.settings.show_hud) {
         if (current_viz == VIEW_FRUSTUM_SLICE)
-            drawMatrixHUD(viewport->frame_buffer, transitions.focal_length_and_plane.active, transitions.aspect_ratio.active);
+            drawMatrixHUD(viewport, transitions.focal_length_and_plane.active, transitions.aspect_ratio.active);
         else {
-            fillPixelGrid(&secondary_viewport_frame_buffer, Color(Black), 1);
+            clearViewportToBackground(&secondary_viewport);
+            drawGrid(main_grid,                     main_grid_prim, Color(main_grid_prim->color), FG_GRID_OPACITY,  FG_GRID_LINE_WIDTH, &secondary_viewport);
+            drawBox(main_box,  BOX__ALL_SIDES, main_box_prim,  Color(main_box_prim->color), FG_SHAPE_OPACITY, FG_SHAPE_LINE_WIDTH, &secondary_viewport);
 
-            drawGrid(&secondary_viewport, Color(main_grid_prim->color), 1, main_grid, main_grid_prim,0);
-            drawBox(&secondary_viewport, Color(main_box_prim->color), 1, main_box, main_box_prim, BOX__ALL_SIDES, 1);
-
-            preparePixelGridForDisplay(&secondary_viewport_frame_buffer);
             if (labels.count) {
                 label = labels.array;
                 for (u8 i = 0; i < labels.count; i++, label++)
-                    drawText(viewport->frame_buffer, label->color, label->text, label->position.x, label->position.y);
+                    drawText(label->text, label->position.x, label->position.y, label->color, 1, viewport);
             }
-            drawSecondaryViewportToFrameBuffer(viewport->frame_buffer);
+
+            i32 x1_start = 0;
+            i32 x1_end   = secondary_viewport.dimensions.width;
+            i32 x2_start = x1_start + 1;
+            i32 x2_end   = x1_end   - 1;
+            i32 x3_start = x2_start + 1;
+            i32 x3_end   = x2_end   - 1;
+
+            i32 y1_start = 0;
+            i32 y1_end   = secondary_viewport.dimensions.height;
+            i32 y2_start = y1_start + 1;
+            i32 y2_end   = y1_end   - 1;
+            i32 y3_start = y2_start + 1;
+            i32 y3_end   = y2_end   - 1;
+
+            vec3 color = Color(White);
+
+            drawHLine(x1_start, x1_end, y1_start, color, 1, &secondary_viewport);
+            drawHLine(x1_start, x1_end, y2_start, color, 1, &secondary_viewport);
+            drawHLine(x1_start, x1_end, y3_start, color, 1, &secondary_viewport);
+
+            drawHLine(x1_start, x1_end, y1_end,   color, 1, &secondary_viewport);
+            drawHLine(x1_start, x1_end, y2_end,   color, 1, &secondary_viewport);
+            drawHLine(x1_start, x1_end, y3_end,   color, 1, &secondary_viewport);
+
+
+            drawVLine(y1_start, y1_end, x1_start, color, 1, &secondary_viewport);
+            drawVLine(y1_start, y1_end, x2_start, color, 1, &secondary_viewport);
+            drawVLine(y1_start, y1_end, x3_start, color, 1, &secondary_viewport);
+
+            drawVLine(y1_start, y1_end, x1_end,   color, 1, &secondary_viewport);
+            drawVLine(y1_start, y1_end, x2_end,   color, 1, &secondary_viewport);
+            drawVLine(y1_start, y1_end, x3_end,   color, 1, &secondary_viewport);
         }
     }
 
     active_viewport->navigation.moved  = false;
     active_viewport->navigation.turned = false;
-    resetMouseChanges(mouse);
-    endFrameTimer(timer);
+    endDrawing(viewport);
+    endFrame(timer, mouse);
 }
 
 void setupViewportCore(Viewport *viewport) {
@@ -470,7 +509,7 @@ void setupViewportCore(Viewport *viewport) {
     projective_ref_plane_grid = grid;
 
     main_box_prim->color = Yellow;
-    main_grid_prim->color = White;
+    main_grid_prim->color = BrightGrey;
     projection_plane_prim->color = Cyan;
     camera_color = Color(projection_plane_prim->color);
 
@@ -574,37 +613,36 @@ void onKeyChanged(u8 key, bool is_pressed) {
 
     if (!is_pressed) {
         if (key == app->controls.key_map.space) {
-            current_viz = (VIZ)(((u8)(current_viz) + 1) % (u8)VIS_COUNT);
+            current_viz = (VIZ)(((u8)(current_viz) + 1) % 5);
             setupViewportCore(&app->viewport);
         } else if (key == app->controls.key_map.tab)
             app->viewport.settings.show_hud = !app->viewport.settings.show_hud;
         else if (key == 'R')
             orbit = !orbit;
         else if (key == 'Q')
-            updateDimensions(&secondary_viewport_frame_buffer.dimensions,
-                             secondary_viewport_frame_buffer.dimensions.width - 50,
-                             secondary_viewport_frame_buffer.dimensions.height);
+            updateDimensions(&secondary_viewport.dimensions,
+                             secondary_viewport.dimensions.width - 50,
+                             secondary_viewport.dimensions.height,
+                             app->viewport.dimensions.width);
         else if (key == 'E')
-            updateDimensions(&secondary_viewport_frame_buffer.dimensions,
-                             secondary_viewport_frame_buffer.dimensions.width + 50,
-                             secondary_viewport_frame_buffer.dimensions.height);
+            updateDimensions(&secondary_viewport.dimensions,
+                             secondary_viewport.dimensions.width + 50,
+                             secondary_viewport.dimensions.height,
+                             app->viewport.dimensions.width);
         else updateTransitions(key);
     }
 }
 
 void setupViewport(Viewport *viewport) {
     active_viewport = viewport;
-    viewport->settings.antialias = viewport->settings.depth_sort = true;
-    initPixelGrid(&secondary_viewport_frame_buffer, allocateAppMemory(RENDER_SIZE), MAX_WIDTH, MAX_HEIGHT);
-    initPixelGrid(&text_overlay_frame_buffer, allocateAppMemory(RENDER_SIZE), MAX_WIDTH, MAX_HEIGHT);
     initViewport(&secondary_viewport,
                  &viewport->settings,
                  &viewport->navigation.settings,
                  app->scene.cameras + 1,
-                 &secondary_viewport_frame_buffer);
-    updateDimensions(&secondary_viewport_frame_buffer.dimensions, 600,400);
-    secondary_viewport.settings.position.x = 20;
-    secondary_viewport.settings.position.y = 20;
+                 app->viewport.pixels);
+    updateDimensions(&secondary_viewport.dimensions, SECONDARY_VIEWPORT_WIDTH, SECONDARY_VIEWPORT_HEIGHT, app->viewport.dimensions.width);
+    secondary_viewport.position.x = SECONDARY_VIEWPORT_POSITION_X;
+    secondary_viewport.position.y = SECONDARY_VIEWPORT_POSITION_Y;
     secondary_viewport.settings.far_clipping_plane_distance = 20;
     secondary_viewport.settings.near_clipping_plane_distance = 4;
 
@@ -624,6 +662,7 @@ void setupViewport(Viewport *viewport) {
 void initApp(Defaults *defaults) {
     app->on.viewportReady = setupViewport;
     app->on.windowRedraw  = updateAndRender;
+    app->on.windowResize  = updateSecondaryViewport;
     app->on.keyChanged               = onKeyChanged;
     app->on.mouseButtonDown          = onButtonDown;
     app->on.mouseButtonDoubleClicked = onDoubleClick;
@@ -632,5 +671,4 @@ void initApp(Defaults *defaults) {
     defaults->settings.scene.boxes      = 1;
     defaults->settings.scene.primitives = 10;
     defaults->settings.scene.cameras    = 2;
-    defaults->additional_memory_size = 2 * RENDER_SIZE;
 }

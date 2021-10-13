@@ -14,7 +14,7 @@ void _windowRedraw() {
 
 void _windowResize(u16 width, u16 height) {
     if (!app->is_running) return;
-    updateDimensions(&app->window_content.dimensions, width, height);
+    updateDimensions(&app->viewport.dimensions, width, height, width);
 
     if (app->on.windowResize) app->on.windowResize(width, height);
     if (app->on.windowRedraw) app->on.windowRedraw();
@@ -169,7 +169,9 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
 }
 
 
-void _initApp(Defaults *defaults, void* window_content_memory) {
+void _initApp(Defaults *defaults, u32* window_content) {
+    app->window_content = window_content;
+
     app->is_running = true;
     app->user_data = null;
     app->memory.address = null;
@@ -186,11 +188,7 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     app->on.mouseMovementSet = null;
     app->on.mouseRawMovementSet = null;
 
-    initTime(&app->time, app->platform.getTicks, app->platform.ticks_per_second);
-    initMouse(&app->controls.mouse);
-    initPixelGrid(&app->window_content, window_content_memory, MAX_WIDTH, MAX_HEIGHT);
-
-    defaults->title = "";
+    defaults->title = (char*)"";
     defaults->width = 480;
     defaults->height = 360;
     defaults->additional_memory_size = 0;
@@ -203,8 +201,12 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
     setDefaultViewportSettings(viewport_settings);
     setDefaultNavigationSettings(navigation_settings);
 
+    initTime(&app->time, app->platform.getTicks, app->platform.ticks_per_second);
+    initMouse(&app->controls.mouse);
     initApp(defaults);
-    u64 memory_size = sizeof(Selection) + defaults->additional_memory_size;
+
+    u64 memory_size = defaults->additional_memory_size;
+    memory_size += sizeof(Selection);
     memory_size += scene_settings->primitives * sizeof(Primitive);
     memory_size += scene_settings->meshes     * sizeof(Mesh);
     memory_size += scene_settings->curves     * sizeof(Curve);
@@ -218,18 +220,17 @@ void _initApp(Defaults *defaults, void* window_content_memory) {
             memory_size +=  getMeshMemorySize(&mesh, scene_settings->mesh_files[i].char_ptr, &app->platform);
     }
 
+    memory_size += FRAME_BUFFER_MEMORY_SIZE;
     initAppMemory(memory_size);
+    PixelQuad *pixels = (PixelQuad*)allocateAppMemory(FRAME_BUFFER_MEMORY_SIZE);
+
     initScene(&app->scene, scene_settings, &app->memory, &app->platform);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
 
     if (viewport_settings->hud_line_count)
         viewport_settings->hud_lines = (HUDLine*)allocateAppMemory(viewport_settings->hud_line_count * sizeof(HUDLine));
 
-    initViewport(&app->viewport,
-                 viewport_settings,
-                 navigation_settings,
-                 app->scene.cameras,
-                 &app->window_content);
+    initViewport(&app->viewport, viewport_settings, navigation_settings, app->scene.cameras, pixels);
     if (app->on.viewportReady) app->on.viewportReady(&app->viewport);
 }
 

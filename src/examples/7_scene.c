@@ -1,9 +1,9 @@
 #include "../SlimEngine/app.h"
 #include "../SlimEngine/core/time.h"
+#include "../SlimEngine/viewport/viewport.h"
 #include "../SlimEngine/scene/grid.h"
 #include "../SlimEngine/scene/mesh.h"
 #include "../SlimEngine/scene/curve.h"
-#include "../SlimEngine/viewport/hud.h"
 #include "../SlimEngine/viewport/navigation.h"
 #include "../SlimEngine/viewport/manipulation.h"
 // Or using the single-header file:
@@ -24,31 +24,27 @@ void onDoubleClick(MouseButton *mouse_button) {
         onButtonDown(mouse_button);
     }
 }
-void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
-    setPreProjectionMatrix(viewport);
 
-    Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->settings.primitives; i++, primitive++)
-        switch (primitive->type) {
+void drawScene(Scene *scene, Viewport *viewport) {
+    Primitive *prim = scene->primitives;
+    for (u32 i = 0; i < scene->settings.primitives; i++, prim++)
+        switch (prim->type) {
             case PrimitiveType_Mesh:
-                drawMesh(viewport, Color(primitive->color), 1,
-                         &scene->meshes[primitive->id], primitive, false, 0);
+                drawMesh(scene->meshes + prim->id, false, prim,
+                         Color(prim->color),0.5f, 0, viewport);
                 break;
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:
-                drawCurve(viewport, Color(primitive->color), 1,
-                          &scene->curves[primitive->id], primitive,
-                          CURVE_STEPS, 1);
+                drawCurve(scene->curves + prim->id, CURVE_STEPS, prim,
+                          Color(prim->color), 0.5f, 0, viewport);
                 break;
             case PrimitiveType_Box:
-                drawBox(viewport, Color(primitive->color), 1,
-                        &scene->boxes[primitive->id], primitive,
-                        BOX__ALL_SIDES, 1);
+                drawBox(scene->boxes + prim->id, BOX__ALL_SIDES, prim,
+                        Color(prim->color),0.5f, 0, viewport);
                 break;
             case PrimitiveType_Grid:
-                drawGrid(viewport, Color(primitive->color), 1,
-                         &scene->grids[primitive->id], primitive, 1);
+                drawGrid(scene->grids + prim->id, prim,
+                         Color(prim->color), 0.5f, 0, viewport);
                 break;
             default:
                 break;
@@ -59,8 +55,8 @@ void setupViewport(Viewport *viewport) {
     hud->line_height = 1.2f;
     hud->position = Vec2i(10, 10);
     setCountersInHUD(hud, &app->time.timers.update);
-    setString(&hud->lines[0].title, "Fps    : ");
-    setString(&hud->lines[1].title, "mic-s/f: ");
+    setString(&hud->lines[0].title, (char*)"Fps    : ");
+    setString(&hud->lines[1].title, (char*)"mic-s/f: ");
 }
 void updateViewport(Viewport *viewport, Mouse *mouse) {
     if (mouse->is_captured) {
@@ -82,42 +78,31 @@ void updateAndRender() {
     Mouse *mouse = &controls->mouse;
     Scene *scene = &app->scene;
 
-    startFrameTimer(timer);
-
-    if (!mouse->is_captured)
-        manipulateSelection(scene, viewport, controls);
-
-    if (!controls->is_pressed.alt)
-        updateViewport(viewport, mouse);
-
-    drawSceneToViewport(scene, viewport);
-    drawSelection(scene, viewport, controls);
-
-    preparePixelGridForDisplay(viewport->frame_buffer);
-
-    if (viewport->settings.show_hud) {
-        setCountersInHUD(&viewport->hud, timer);
-        drawHUD(viewport->frame_buffer, &viewport->hud);
-    }
-    f64 now = (f64)app->time.getTicks();
-    f64 tps = (f64)app->time.ticks.per_second;
-    if ((now - (f64)scene->last_io_ticks) / tps <= 2.0) {
-        PixelGrid *canvas = viewport->frame_buffer;
-        char *message;
-        RGBA color;
-        if (scene->last_io_is_save) {
-            message = "Scene saved to: this.scene";
-            color = ColorOf(Yellow);
-        } else {
-            message = "Scene loaded from: this.scene";
-            color = ColorOf(Cyan);
-        }
-        i32 x = canvas->dimensions.width / 2 - 150;
-        i32 y = 20;
-        drawText(canvas, color, message, x, y);
-    }
-    resetMouseChanges(mouse);
-    endFrameTimer(timer);
+    beginFrame(timer);
+        if (!mouse->is_captured) manipulateSelection(scene, viewport, controls);
+        if (!controls->is_pressed.alt) updateViewport(viewport, mouse);
+        beginDrawing(viewport);
+            drawScene(scene, viewport);
+            drawSelection(scene, viewport, controls);
+            setCountersInHUD(&viewport->hud, timer);
+            f64 now = (f64)app->time.getTicks();
+            f64 tps = (f64)app->time.ticks.per_second;
+            if ((now - (f64)scene->last_io_ticks) / tps <= 2.0) {
+                char *text;
+                vec3 color;
+                if (scene->last_io_is_save) {
+                    text = (char*)"Scene saved to: this.scene";
+                    color = Color(Yellow);
+                } else {
+                    text = (char*)"Scene loaded from: this.scene";
+                    color = Color(Cyan);
+                }
+                i32 x = viewport->dimensions.width / 2 - 150;
+                i32 y = 20;
+                drawText(text, x, y, color, 1, viewport);
+            }
+        endDrawing(viewport);
+    endFrame(timer, mouse);
 }
 void setupScene(Scene *scene) {
     Primitive *dragon   = &scene->primitives[1];
@@ -184,7 +169,7 @@ void onKeyChanged(u8 key, bool is_pressed) {
     Scene *scene = &app->scene;
     Platform *platform = &app->platform;
     if (app->controls.is_pressed.ctrl &&
-    !is_pressed && key == 'S' || key == 'Z') {
+        !is_pressed && key == 'S' || key == 'Z') {
         scene->last_io_is_save = key == 'S';
         char *file = scene->settings.file.char_ptr;
         if (scene->last_io_is_save)
@@ -203,10 +188,10 @@ void initApp(Defaults *defaults) {
     mesh1->char_ptr = string_buffers[0];
     mesh2->char_ptr = string_buffers[1];
     scene->char_ptr = string_buffers[2];
-    u32 offset = getDirectoryLength(__FILE__);
-    mergeString(scene, __FILE__, "this.scene",   offset);
-    mergeString(mesh2, __FILE__, "dragon.mesh",  offset);
-    mergeString(mesh1, __FILE__, "suzanne.mesh", offset);
+    u32 offset = getDirectoryLength((char*)__FILE__);
+    mergeString(scene, (char*)__FILE__, (char*)"this.scene",   offset);
+    mergeString(mesh2, (char*)__FILE__, (char*)"dragon.mesh",  offset);
+    mergeString(mesh1, (char*)__FILE__, (char*)"suzanne.mesh", offset);
     defaults->settings.scene.mesh_files = files;
     defaults->settings.scene.meshes     = 2;
     defaults->settings.scene.boxes      = 1;

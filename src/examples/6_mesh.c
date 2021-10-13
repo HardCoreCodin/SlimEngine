@@ -1,8 +1,8 @@
 #include "../SlimEngine/app.h"
 #include "../SlimEngine/core/time.h"
+#include "../SlimEngine/viewport/viewport.h"
 #include "../SlimEngine/scene/grid.h"
 #include "../SlimEngine/scene/mesh.h"
-#include "../SlimEngine/viewport/hud.h"
 #include "../SlimEngine/viewport/navigation.h"
 #include "../SlimEngine/viewport/manipulation.h"
 // Or using the single-header file:
@@ -23,28 +23,18 @@ void onDoubleClick(MouseButton *mouse_button) {
         onButtonDown(mouse_button);
     }
 }
-void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer,
-                  Color(Black), 1);
-
-    setPreProjectionMatrix(viewport);
-
+void drawScene(Scene *scene, Viewport *viewport) {
     bool normals = app->controls.is_pressed.ctrl;
     Primitive *prim = scene->primitives;
     for (u32 i = 0; i < scene->settings.primitives; i++, prim++)
         switch (prim->type) {
             case PrimitiveType_Mesh:
-                drawMesh(viewport,
-                         Color(prim->color), 1,
-                         &scene->meshes[prim->id],
-                         prim, normals,
-                         0);
+                drawMesh(scene->meshes + prim->id, normals, prim,
+                         Color(prim->color), 0.5f, 0, viewport);
                 break;
             case PrimitiveType_Grid:
-                drawGrid(viewport,
-                         Color(prim->color), 1,
-                         &scene->grids[prim->id], prim,
-                         1);
+                drawGrid(scene->grids + prim->id, prim,
+                         Color(prim->color), 0.5f, 0, viewport);
                 break;
             default:
                 break;
@@ -56,8 +46,8 @@ void setupViewport(Viewport *viewport) {
     hud->line_height = 1.2f;
     hud->position = Vec2i(10, 10);
     setCountersInHUD(hud, &app->time.timers.update);
-    setString(&hud->lines[0].title, "Fps    : ");
-    setString(&hud->lines[1].title, "mic-s/f: ");
+    setString(&hud->lines[0].title, (char*)"Fps    : ");
+    setString(&hud->lines[1].title, (char*)"mic-s/f: ");
 }
 void updateViewport(Viewport *viewport, Mouse *mouse) {
     if (mouse->is_captured) {
@@ -79,26 +69,15 @@ void updateAndRender() {
     Mouse *mouse = &controls->mouse;
     Scene *scene = &app->scene;
 
-    startFrameTimer(timer);
-
-    if (!mouse->is_captured)
-        manipulateSelection(scene, viewport, controls);
-
-    if (!controls->is_pressed.alt)
-        updateViewport(viewport, mouse);
-
-    drawSceneToViewport(scene, viewport);
-    drawSelection(scene, viewport, controls);
-
-    preparePixelGridForDisplay(viewport->frame_buffer);
-
-    if (viewport->settings.show_hud) {
-        setCountersInHUD(&viewport->hud, timer);
-        drawHUD(viewport->frame_buffer, &viewport->hud);
-    }
-
-    resetMouseChanges(mouse);
-    endFrameTimer(timer);
+    beginFrame(timer);
+        if (!mouse->is_captured) manipulateSelection(scene, viewport, controls);
+        if (!controls->is_pressed.alt) updateViewport(viewport, mouse);
+        beginDrawing(viewport);
+            drawScene(scene, viewport);
+            drawSelection(scene, viewport, controls);
+            setCountersInHUD(&viewport->hud, timer);
+        endDrawing(viewport);
+    endFrame(timer, mouse);
 }
 void onKeyChanged(u8 key, bool is_pressed) {
     NavigationMove *move = &app->viewport.navigation.move;
@@ -147,9 +126,9 @@ void initApp(Defaults *defaults) {
     String *mesh2 = &mesh_files[1];
     mesh1->char_ptr = string_buffers[0];
     mesh2->char_ptr = string_buffers[1];
-    u32 offset = getDirectoryLength(__FILE__);
-    mergeString(mesh2, __FILE__, "dragon.mesh",  offset);
-    mergeString(mesh1, __FILE__, "suzanne.mesh", offset);
+    u32 offset = getDirectoryLength((char*)__FILE__);
+    mergeString(mesh2, (char*)__FILE__, (char*)"dragon.mesh",  offset);
+    mergeString(mesh1, (char*)__FILE__, (char*)"suzanne.mesh", offset);
     defaults->settings.scene.mesh_files = mesh_files;
     defaults->settings.scene.meshes = 2;
     defaults->settings.scene.grids  = 1;

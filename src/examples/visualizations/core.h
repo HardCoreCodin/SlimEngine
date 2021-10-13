@@ -9,6 +9,49 @@
 #include "../../SlimEngine/viewport/navigation.h"
 #include "../../SlimEngine/viewport/manipulation.h"
 
+#define SECONDARY_VIEWPORT_WIDTH 600
+#define SECONDARY_VIEWPORT_HEIGHT 400
+#define SECONDARY_VIEWPORT_POSITION_X 20
+#define SECONDARY_VIEWPORT_POSITION_Y 20
+
+#define TRAJECTORY_LINE_WIDTH 4
+
+#define LABEL_OPACITY 1
+#define LABEL_LINE_WIDTH 0
+#define FAT_LABEL_LINE_WIDTH 2
+
+#define PROJECTION_LINE_WIDTH 0
+#define PROJECTION_LINES_OPACITY 0.025f
+#define PROJECTION_OPACITY 0.5f
+
+#define LOCATOR_GRID_LINE_WIDTH 0
+#define LOCATOR_GRID_OPACITY 0.0125f
+#define LOCATOR_LINE_WIDTH 3
+
+#define VIEW_FRUSTUM_LINE_WIDTH 1
+#define VIEW_FRUSTUM_OPACITY 1
+
+#define NDC_BOX_LINE_WIDTH 1
+#define NDC_BOX_OPACITY 1
+
+#define CAMERA_LINE_WIDTH 1
+
+#define ARROW_LINE_WIDTH 1
+#define ARROW_OPACITY 1
+
+#define COORDINATE_ARROW_OPACITY 1
+#define COORDINATE_ARROW_LINE_WIDTH 2
+
+#define BG_SHAPE_LINE_WIDTH 0
+#define FG_SHAPE_LINE_WIDTH 1
+#define BG_SHAPE_OPACITY 0.75f
+#define FG_SHAPE_OPACITY 0.65f
+
+#define BG_GRID_LINE_WIDTH 0
+#define FG_GRID_LINE_WIDTH 1
+#define BG_GRID_OPACITY 0.5f
+#define FG_GRID_OPACITY 0.6f
+
 vec3 sides_color,
      near_color,
      far_color,
@@ -24,7 +67,6 @@ vec3 sides_color,
      Z_color,
      W_color;
 
-PixelGrid secondary_viewport_frame_buffer, text_overlay_frame_buffer;
 Viewport secondary_viewport, *active_viewport;
 
 Primitive *secondary_camera_prim,
@@ -56,6 +98,7 @@ vec3 edge_color;
 f32 camera_opacity = 0.5f;
 vec3 camera_color;
 
+bool draw_in_2D = false;
 bool orbit = false;
 bool collapse_final_matrix = false;
 bool show_final_matrix = false;
@@ -68,8 +111,7 @@ typedef enum VIZ {
     PROJECTIVE_SPACE,
     PROJECTION,
     VIEW_FRUSTUM,
-    VIEW_FRUSTUM_SLICE,
-    VIS_COUNT
+    VIEW_FRUSTUM_SLICE
 } VIZ;
 VIZ current_viz = INTRO;
 
@@ -90,18 +132,18 @@ void setQuad3FromBox(Quad3 *quad, Box *box) {
 
 typedef struct Label {
     vec2i position;
-    RGBA color;
+    vec3 color;
     char *text;
 } Label;
 
-#define MAX_LABEL_COUNT 16
+#define MAX_LABEL_COUNT 32
 typedef struct Labels {
     u8 count;
     Label array[MAX_LABEL_COUNT];
 } Labels;
 Labels labels;
 
-void addLabel(RGBA color, char* text, i32 x, i32 y) {
+void addLabel(vec3 color, char* text, i32 x, i32 y) {
     Label label;
     label.text = text;
     label.color = color;
@@ -116,37 +158,6 @@ void transformEdge(Edge *in_edge, Edge *out_edge, xform3 *xform) {
     out_edge->to = mulVec3Quat(out_edge->to, xform->rotation_inverted);
 }
 
-void drawSecondaryViewportToFrameBuffer(PixelGrid *frame_buffer) {
-    copyPixels(&secondary_viewport_frame_buffer, frame_buffer,
-               secondary_viewport_frame_buffer.dimensions.width,
-               secondary_viewport_frame_buffer.dimensions.height,
-               secondary_viewport.settings.position.x,
-               secondary_viewport.settings.position.y);
-    i32 x1 = secondary_viewport.settings.position.x;
-    i32 x2 = secondary_viewport.frame_buffer->dimensions.width + x1;
-    i32 y1 = secondary_viewport.settings.position.y;
-    i32 y2 = secondary_viewport.frame_buffer->dimensions.height + y1;
-
-    RGBA color = ColorOf(White);
-
-    drawHLine(frame_buffer, color, x1-1, x2+1, y1-1);
-    drawHLine(frame_buffer, color, x1-1, x2+1, y1+0);
-    drawHLine(frame_buffer, color, x1-1, x2+1, y1+1);
-
-    drawHLine(frame_buffer, color, x1-1, x2+1, y2-1);
-    drawHLine(frame_buffer, color, x1-1, x2+1, y2+0);
-    drawHLine(frame_buffer, color, x1-1, x2+1, y2+1);
-
-
-    drawVLine(frame_buffer, color, y1-1, y2+1, x1-1);
-    drawVLine(frame_buffer, color, y1-1, y2+1, x1+0);
-    drawVLine(frame_buffer, color, y1-1, y2+1, x1+1);
-
-    drawVLine(frame_buffer, color, y1-1, y2+1, x2-1);
-    drawVLine(frame_buffer, color, y1-1, y2+1, x2+0);
-    drawVLine(frame_buffer, color, y1-1, y2+1, x2+1);
-}
-
 INLINE vec3 vec3wUp(vec4 v) {
     return Vec3(v.x, v.w, v.z);
 }
@@ -155,7 +166,7 @@ BoxCorners getViewFrustumCorners(Viewport *viewport) {
     BoxCorners corners;
     corners.back_top_right.z = viewport->settings.near_clipping_plane_distance;
     corners.back_top_right.y = viewport->settings.near_clipping_plane_distance / viewport->camera->focal_length;
-    corners.back_top_right.x = viewport->frame_buffer->dimensions.width_over_height * corners.back_top_right.y;
+    corners.back_top_right.x = viewport->dimensions.width_over_height * corners.back_top_right.y;
     corners.back_top_left = corners.back_top_right;
     corners.back_top_left.x *= -1;
     corners.back_bottom_left = corners.back_top_left;
@@ -165,7 +176,7 @@ BoxCorners getViewFrustumCorners(Viewport *viewport) {
 
     corners.front_top_right.z = viewport->settings.far_clipping_plane_distance;
     corners.front_top_right.y = viewport->settings.far_clipping_plane_distance / viewport->camera->focal_length;
-    corners.front_top_right.x = viewport->frame_buffer->dimensions.width_over_height * corners.front_top_right.y;
+    corners.front_top_right.x = viewport->dimensions.width_over_height * corners.front_top_right.y;
     corners.front_top_left = corners.front_top_right;
     corners.front_top_left.x *= -1;
     corners.front_bottom_left = corners.front_top_left;
@@ -177,21 +188,21 @@ BoxCorners getViewFrustumCorners(Viewport *viewport) {
 }
 
 void drawFrustum(Viewport *viewport, Box *view_frustum, vec3 near_col, vec3 far_col, vec3 side_col, f32 opacity, u8 line_width) {
-    transformBoxVerticesFromObjectToViewSpace(viewport, secondary_camera_prim, &view_frustum->vertices, &view_frustum->vertices);
+    transformBoxVerticesFromObjectToViewSpace(&view_frustum->vertices, &view_frustum->vertices, secondary_camera_prim, viewport);
     setBoxEdgesFromVertices(&view_frustum->edges, &view_frustum->vertices);
 
-    drawEdge3D(viewport, far_col,  1, &view_frustum->edges.sides.front_top,    line_width);
-    drawEdge3D(viewport, far_col,  1, &view_frustum->edges.sides.front_bottom, line_width);
-    drawEdge3D(viewport, far_col,  1, &view_frustum->edges.sides.front_left,   line_width);
-    drawEdge3D(viewport, far_col,  1, &view_frustum->edges.sides.front_right,  line_width);
-    drawEdge3D(viewport, near_col, 1, &view_frustum->edges.sides.back_top,     line_width);
-    drawEdge3D(viewport, near_col, 1, &view_frustum->edges.sides.back_bottom,  line_width);
-    drawEdge3D(viewport, near_col, 1, &view_frustum->edges.sides.back_left,    line_width);
-    drawEdge3D(viewport, near_col, 1, &view_frustum->edges.sides.back_right,   line_width);
-    drawEdge3D(viewport, side_col, 1, &view_frustum->edges.sides.left_top,     line_width);
-    drawEdge3D(viewport, side_col, 1, &view_frustum->edges.sides.left_bottom,  line_width);
-    drawEdge3D(viewport, side_col, 1, &view_frustum->edges.sides.right_top,    line_width);
-    drawEdge3D(viewport, side_col, 1, &view_frustum->edges.sides.right_bottom, line_width);
+    drawEdge(&view_frustum->edges.sides.front_top,    far_col,  1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.front_bottom, far_col,  1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.front_left,   far_col,  1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.front_right,  far_col,  1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.back_top,     near_col, 1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.back_bottom,  near_col, 1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.back_left,    near_col, 1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.back_right,   near_col, 1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.left_top,     side_col, 1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.left_bottom,  side_col, 1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.right_top,    side_col, 1, line_width, viewport);
+    drawEdge(&view_frustum->edges.sides.right_bottom, side_col, 1, line_width, viewport);
 }
 
 void convertEdgeFromSecondaryToMain(Edge *edge) {
@@ -203,31 +214,29 @@ void convertEdgeFromSecondaryToMain(Edge *edge) {
 
 void drawLocalEdge(Edge edge, vec3 color, f32 opacity, u8 line_width) {
     convertEdgeFromSecondaryToMain(&edge);
-    drawEdge3D(&app->viewport, color, opacity, &edge, line_width);
+    if (draw_in_2D) edge.from.z = edge.to.z = 0;
+    drawEdge(&edge, color, opacity, line_width, &app->viewport);
 }
 
-void drawClippedEdge(Viewport *viewport, Edge *clipped_edge, vec3 color, f32 opacity) {
+void drawClippedEdge(Viewport *viewport, Edge *clipped_edge, vec3 color, f32 opacity, u8 line_width) {
     convertEdgeFromSecondaryToMain(clipped_edge);
     projectEdge(clipped_edge, viewport);
-//    clipped_edge->from.z -= 0.1f;
-//    clipped_edge->to.z -= 0.1f;
-    drawLine3D(viewport->frame_buffer, color, opacity,
-               clipped_edge->from.x,
-               clipped_edge->from.y,
-               clipped_edge->from.z,
-               clipped_edge->to.x,
-               clipped_edge->to.y,
-               clipped_edge->to.z,
-               1);
+    drawLine(clipped_edge->from.x,
+             clipped_edge->from.y,
+             clipped_edge->from.z - 0.1f,
+             clipped_edge->to.x,
+             clipped_edge->to.y,
+             clipped_edge->to.z - 0.1f,
+             color, opacity, line_width, viewport);
 }
 
 void updateProjectionBoxes(Viewport *viewport) {
-    setPreProjectionMatrix(viewport);
+    setProjectionMatrix(viewport);
     view_frustum_box.vertices.corners = getViewFrustumCorners(viewport);
     setBoxEdgesFromVertices(&view_frustum_box.edges, &view_frustum_box.vertices);
 
     for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
-        mulVec3Mat4(view_frustum_box.vertices.buffer[i], 1.0f, viewport->pre_projection_matrix, pre_projected_view_frustum_box.vertices.buffer + i);
+        mulVec3Mat4(view_frustum_box.vertices.buffer[i], 1.0f, viewport->projection_matrix, pre_projected_view_frustum_box.vertices.buffer + i);
 
     setBoxEdgesFromVertices(&pre_projected_view_frustum_box.edges, &pre_projected_view_frustum_box.vertices);
 }

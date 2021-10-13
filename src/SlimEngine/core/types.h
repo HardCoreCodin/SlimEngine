@@ -175,10 +175,9 @@ typedef struct xform3 {
 } xform3;
 
 typedef struct Camera {
-    f32 focal_length;
     xform3 transform;
     vec3 current_velocity;
-    f32 zoom, dolly, target_distance;
+    f32 focal_length, zoom, dolly, target_distance;
 } Camera;
 
 typedef struct NavigationSpeedSettings {
@@ -210,38 +209,36 @@ typedef struct ProjectionPlane {
 } ProjectionPlane;
 
 typedef struct ViewportSettings {
-    vec2i position;
+    Pixel background;
     f32 near_clipping_plane_distance,
         far_clipping_plane_distance;
     u32 hud_line_count;
     HUDLine *hud_lines;
     enum ColorID hud_default_color;
-    bool show_hud, depth_sort, antialias, use_cube_NDC, flip_z;
+    bool show_hud, use_cube_NDC, flip_z, antialias;
 } ViewportSettings;
 
 typedef struct Viewport {
     ViewportSettings settings;
+    Dimensions dimensions;
     Navigation navigation;
     ProjectionPlane projection_plane;
     HUD hud;
-    Camera *camera;
-    PixelGrid *frame_buffer;
     Box default_box;
     vec2i position;
-    mat4 pre_projection_matrix,
-         pre_projection_matrix_inverted;
+    mat4 projection_matrix;
+    Camera *camera;
+    PixelQuad *pixels;
 } Viewport;
 
 typedef struct Ray {
-    vec3 origin, scaled_origin, direction, direction_reciprocal;
-    u8_3 octant;
+    vec3 origin, direction;
 } Ray;
 
 typedef struct RayHit {
     vec3 position, normal;
-    vec2 uv;
     f32 distance, distance_squared;
-    u32 material_id, object_id, object_type;
+    u32 object_id, object_type;
     bool from_behind;
 } RayHit;
 
@@ -279,7 +276,6 @@ typedef struct Selection {
 typedef struct SceneSettings {
     u32 cameras, primitives, meshes, curves, boxes, grids;
     String file, *mesh_files;
-    bool autoload;
 } SceneSettings;
 
 typedef struct Scene {
@@ -345,7 +341,7 @@ typedef struct App {
     Memory memory;
     Platform platform;
     Controls controls;
-    PixelGrid window_content;
+    u32 *window_content;
     AppCallbacks on;
     Time time;
     Scene scene;
@@ -388,4 +384,48 @@ void setGridEdgesFromVertices(Edge *edges, u8 edge_count, vec3 *from, vec3 *to) 
         edges[i].from = from[i];
         edges[i].to   = to[i];
     }
+}
+
+INLINE void setPixel(i32 x, i32 y, f64 depth, vec3 color, f32 opacity, Viewport *viewport) {
+    Pixel *pixel;
+    PixelQuad *pixel_quad;
+    if (viewport->settings.antialias) {
+        pixel_quad = viewport->pixels + (viewport->dimensions.stride * (y >> 1)) + (x >> 1);
+        pixel = &pixel_quad->quad[y & 1][x & 1];
+    } else {
+        pixel_quad = viewport->pixels + (viewport->dimensions.stride * y) + x;
+        pixel = &pixel_quad->TL;
+    }
+
+    Pixel new_pixel;
+    new_pixel.opacity = opacity;
+    new_pixel.color = color;
+    new_pixel.depth = depth;
+
+    if (!(opacity == 1 && depth == 0)) {
+        Pixel background, foreground, old_pixel = *pixel;
+
+        if (old_pixel.depth < new_pixel.depth) {
+            background = new_pixel;
+            foreground = old_pixel;
+        } else {
+            background = old_pixel;
+            foreground = new_pixel;
+        }
+        if (foreground.opacity != 1) {
+            f32 one_minus_foreground_opacity = 1.0f - foreground.opacity;
+            opacity = foreground.opacity + background.opacity * one_minus_foreground_opacity;
+            f32 one_over_opacity = opacity ? 1.0f / opacity : 1;
+            f32 background_factor = background.opacity * one_over_opacity * one_minus_foreground_opacity;
+            f32 foreground_factor = foreground.opacity * one_over_opacity;
+
+            pixel->color.r = fast_mul_add(foreground.color.r, foreground_factor, background.color.r * background_factor);
+            pixel->color.g = fast_mul_add(foreground.color.g, foreground_factor, background.color.g * background_factor);
+            pixel->color.b = fast_mul_add(foreground.color.b, foreground_factor, background.color.b * background_factor);
+            pixel->opacity = opacity;
+            pixel->depth   = foreground.depth;
+        } else *pixel = foreground;
+    } else *pixel = new_pixel;
+
+    if (!viewport->settings.antialias) pixel_quad->BR = pixel_quad->BL = pixel_quad->TR = pixel_quad->TL;
 }

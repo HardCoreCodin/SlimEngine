@@ -58,7 +58,7 @@ u64 Win32_getTicks() {
     return (u64)performance_counter.QuadPart;
 }
 void* Win32_getMemory(u64 size) {
-    return VirtualAlloc((LPVOID)MEMORY_BASE, size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+    return VirtualAlloc((LPVOID)MEMORY_BASE, (SIZE_T)size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
 }
 
 inline UINT getRawInput(LPVOID data) {
@@ -156,20 +156,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         case WM_PAINT:
             SetDIBitsToDevice(win_dc,
-                              0, 0, app->window_content.dimensions.width, app->window_content.dimensions.height,
-                              0, 0, 0, app->window_content.dimensions.height,
-                              (u32*)app->window_content.pixels, &info, DIB_RGB_COLORS);
+                              0, 0, app->viewport.dimensions.width, app->viewport.dimensions.height,
+                              0, 0, 0, app->viewport.dimensions.height,
+                              app->window_content, &info, DIB_RGB_COLORS);
 
             ValidateRgn(window, null);
             break;
 
         case WM_SYSKEYDOWN:
         case WM_KEYDOWN:
-            _keyChanged((u32)wParam, true);
+            _keyChanged((u8)wParam, true);
             break;
 
         case WM_SYSKEYUP:
-        case WM_KEYUP: _keyChanged((u32)wParam, false); break;
+        case WM_KEYUP: _keyChanged((u8)wParam, false); break;
 
         case WM_MBUTTONUP:     _mouseButtonUp(  &app->controls.mouse.middle_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
         case WM_MBUTTONDOWN:   _mouseButtonDown(&app->controls.mouse.middle_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); break;
@@ -213,7 +213,7 @@ int APIENTRY WinMain(HINSTANCE hInstance,
 
     app = (App*)app_memory;
 
-    void* window_content_memory = GlobalAlloc(GPTR, RENDER_SIZE);
+    void* window_content_memory = GlobalAlloc(GPTR, sizeof(u32) * MAX_WIDTH * MAX_HEIGHT);
     if (!window_content_memory)
         return -1;
 
@@ -240,7 +240,7 @@ int APIENTRY WinMain(HINSTANCE hInstance,
     app->platform.writeToFile         = Win32_writeToFile;
 
     Defaults defaults;
-    _initApp(&defaults, window_content_memory);
+    _initApp(&defaults, (u32*)window_content_memory);
 
     info.bmiHeader.biSize        = sizeof(info.bmiHeader);
     info.bmiHeader.biCompression = BI_RGB;

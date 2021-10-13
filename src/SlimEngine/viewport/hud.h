@@ -3,9 +3,9 @@
 #include "../core/base.h"
 #include "../core/text.h"
 
-void drawHUD(PixelGrid *canvas, HUD *hud) {
-    i32 x = hud->position.x;
-    i32 y = hud->position.y;
+void drawHUD(Viewport *viewport, HUD *hud) {
+    u16 x = (u16)hud->position.x;
+    u16 y = (u16)hud->position.y;
 
     HUDLine *line = hud->lines;
     bool alt;
@@ -17,11 +17,10 @@ void drawHUD(PixelGrid *canvas, HUD *hud) {
         } else
             alt = false;
 
-        drawText(canvas, ColorOf(line->title_color), line->title.char_ptr, x, y);
-        drawText(canvas, ColorOf(
-                         alt ? line->alternate_value_color : line->value_color),
-                 alt ? line->alternate_value.char_ptr : line->value.string.char_ptr,
-                 x + line->title.length * FONT_WIDTH, y);
-        y += (i32)(hud->line_height * (f32)FONT_HEIGHT);
+        drawText(line->title.char_ptr, x, y, Color(line->title_color), 1, viewport);
+        drawText(alt ? line->alternate_value.char_ptr : line->value.string.char_ptr,
+                 x + (u16)line->title.length * FONT_WIDTH, y,
+                 Color(alt ? line->alternate_value_color : line->value_color), 1, viewport);
+        y += (u16)(hud->line_height * (f32)FONT_HEIGHT);
     }
 }

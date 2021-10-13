@@ -1,35 +1,30 @@
 #include "../SlimEngine/app.h"
 #include "../SlimEngine/core/time.h"
+#include "../SlimEngine/viewport/viewport.h"
 #include "../SlimEngine/scene/grid.h"
 #include "../SlimEngine/scene/curve.h"
 #include "../SlimEngine/viewport/navigation.h"
 #include "../SlimEngine/viewport/manipulation.h"
 // Or using the single-header file:
 //#include "../SlimEngine.h"
-
 #include "./_common.h"
 
-void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
-    setPreProjectionMatrix(viewport);
-
-    Primitive *primitive = scene->primitives;
-    for (u32 i = 0; i < scene->settings.primitives; i++, primitive++) {
-        switch (primitive->type) {
+void drawScene(Scene *scene, Viewport *viewport) {
+    Primitive *prim = scene->primitives;
+    for (u32 i = 0; i < scene->settings.primitives; i++, prim++) {
+        switch (prim->type) {
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:
-                drawCurve(viewport, Color(primitive->color), 1,
-                          scene->curves + primitive->id, primitive,
-                          CURVE_STEPS, 1);
+                drawCurve(scene->curves + prim->id, CURVE_STEPS, prim,
+                          Color(prim->color), 0.5f, 0, viewport);
                 break;
             case PrimitiveType_Box:
-                drawBox(viewport, Color(primitive->color), 1,
-                        scene->boxes + primitive->id, primitive,
-                        BOX__ALL_SIDES, 1);
+                drawBox(scene->boxes + prim->id, BOX__ALL_SIDES, prim,
+                        Color(prim->color), 0.5f, 0, viewport);
                 break;
             case PrimitiveType_Grid:
-                drawGrid(viewport, Color(primitive->color), 1,
-                         scene->grids + primitive->id, primitive, 1);
+                drawGrid(scene->grids + prim->id, prim,
+                         Color(prim->color), 0.5f, 0, viewport);
                 break;
             default:
                 break;
@@ -68,22 +63,17 @@ void updateAndRender() {
     Mouse *mouse = &controls->mouse;
     Scene *scene = &app->scene;
 
-    startFrameTimer(timer);
-
-    if (!mouse->is_captured)
-        manipulateSelection(scene, viewport, controls);
-
-    if (!controls->is_pressed.alt)
-        updateViewport(viewport, mouse);
-
-    drawSceneToViewport(scene, viewport);
-    drawSelection(scene, viewport, controls);
-    preparePixelGridForDisplay(viewport->frame_buffer);
-
-    drawMouseAndKeyboard(viewport, mouse);
-
-    resetMouseChanges(mouse);
-    endFrameTimer(timer);
+    beginFrame(timer);
+        if (!mouse->is_captured)
+            manipulateSelection(scene, viewport, controls);
+        if (!controls->is_pressed.alt)
+            updateViewport(viewport, mouse);
+        beginDrawing(viewport);
+            drawScene(scene, viewport);
+            drawSelection(scene, viewport, controls);
+            drawMouseAndKeyboard(mouse, viewport);
+        endDrawing(viewport);
+    endFrame(timer, mouse);
 }
 void onKeyChanged(u8 key, bool is_pressed) {
     NavigationMove *move = &app->viewport.navigation.move;
@@ -98,9 +88,9 @@ void onKeyChanged(u8 key, bool is_pressed) {
     if (key == 'D') move->right    = is_pressed;
 }
 void setupScene(Scene *scene) {
-    xform3 *xf = &scene->cameras[0].transform;
-    xf->position = Vec3(0, 7, -11);
-    rotateXform3(xf, 0, -0.2f, 0);
+    xform3 *xform = &scene->cameras->transform;
+    xform->position = Vec3(0, 7, -11);
+    rotateXform3(xform, 0, -0.2f, 0);
 
     Primitive *helix = &scene->primitives[0];
     Primitive *coil  = &scene->primitives[1];

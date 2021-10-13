@@ -6,7 +6,7 @@
 #include "../shapes/edge.h"
 #include "./primitive.h"
 
-void transformBoxVerticesFromObjectToViewSpace(Viewport *viewport, Primitive *primitive, BoxVertices *vertices, BoxVertices *transformed_vertices) {
+void transformBoxVerticesFromObjectToViewSpace(BoxVertices *vertices, BoxVertices *transformed_vertices, Primitive *primitive, Viewport *viewport) {
     vec3 position;
     for (u8 i = 0; i < BOX__VERTEX_COUNT; i++) {
         position = vertices->buffer[i];
@@ -17,10 +17,10 @@ void transformBoxVerticesFromObjectToViewSpace(Viewport *viewport, Primitive *pr
     }
 }
 
-void drawBox(Viewport *viewport, vec3 color, f32 opacity, Box *box, Primitive *primitive, u8 sides, u8 line_width) {
+void drawBox(Box *box, u8 sides, Primitive *primitive, vec3 color, f32 opacity, u8 line_width, Viewport *viewport) {
     // Transform vertices positions from local-space to world-space and then to view-space:
     static BoxVertices vertices;
-    transformBoxVerticesFromObjectToViewSpace(viewport, primitive, &box->vertices, &vertices);
+    transformBoxVerticesFromObjectToViewSpace(&box->vertices, &vertices, primitive, viewport);
 
     // Distribute transformed vertices positions to edges:
     static BoxEdges edges;
@@ -28,24 +28,24 @@ void drawBox(Viewport *viewport, vec3 color, f32 opacity, Box *box, Primitive *p
 
     if (sides == BOX__ALL_SIDES) {
         for (u8 i = 0; i < BOX__EDGE_COUNT; i++)
-            drawEdge3D(viewport, color, opacity, edges.buffer + i, line_width);
+            drawEdge(edges.buffer + i, color, opacity, line_width, viewport);
     } else {
-        if (sides & Front | sides & Top   ) drawEdge3D(viewport, color, opacity, &edges.sides.front_top, line_width);
-        if (sides & Front | sides & Bottom) drawEdge3D(viewport, color, opacity, &edges.sides.front_bottom, line_width);
-        if (sides & Front | sides & Left  ) drawEdge3D(viewport, color, opacity, &edges.sides.front_left, line_width);
-        if (sides & Front | sides & Right ) drawEdge3D(viewport, color, opacity, &edges.sides.front_right, line_width);
-        if (sides & Back  | sides & Top   ) drawEdge3D(viewport, color, opacity, &edges.sides.back_top, line_width);
-        if (sides & Back  | sides & Bottom) drawEdge3D(viewport, color, opacity, &edges.sides.back_bottom, line_width);
-        if (sides & Back  | sides & Left  ) drawEdge3D(viewport, color, opacity, &edges.sides.back_left, line_width);
-        if (sides & Back  | sides & Right ) drawEdge3D(viewport, color, opacity, &edges.sides.back_right, line_width);
-        if (sides & Left  | sides & Top   ) drawEdge3D(viewport, color, opacity, &edges.sides.left_top, line_width);
-        if (sides & Left  | sides & Bottom) drawEdge3D(viewport, color, opacity, &edges.sides.left_bottom, line_width);
-        if (sides & Right | sides & Top   ) drawEdge3D(viewport, color, opacity, &edges.sides.right_top, line_width);
-        if (sides & Right | sides & Bottom) drawEdge3D(viewport, color, opacity, &edges.sides.right_bottom, line_width);
+        if (sides & Front | sides & Top   ) drawEdge(&edges.sides.front_top,    color, opacity, line_width, viewport);
+        if (sides & Front | sides & Bottom) drawEdge(&edges.sides.front_bottom, color, opacity, line_width, viewport);
+        if (sides & Front | sides & Left  ) drawEdge(&edges.sides.front_left,   color, opacity, line_width, viewport);
+        if (sides & Front | sides & Right ) drawEdge(&edges.sides.front_right,  color, opacity, line_width, viewport);
+        if (sides & Back  | sides & Top   ) drawEdge(&edges.sides.back_top,     color, opacity, line_width, viewport);
+        if (sides & Back  | sides & Bottom) drawEdge(&edges.sides.back_bottom,  color, opacity, line_width, viewport);
+        if (sides & Back  | sides & Left  ) drawEdge(&edges.sides.back_left,    color, opacity, line_width, viewport);
+        if (sides & Back  | sides & Right ) drawEdge(&edges.sides.back_right,   color, opacity, line_width, viewport);
+        if (sides & Left  | sides & Top   ) drawEdge(&edges.sides.left_top,     color, opacity, line_width, viewport);
+        if (sides & Left  | sides & Bottom) drawEdge(&edges.sides.left_bottom,  color, opacity, line_width, viewport);
+        if (sides & Right | sides & Top   ) drawEdge(&edges.sides.right_top,    color, opacity, line_width, viewport);
+        if (sides & Right | sides & Bottom) drawEdge(&edges.sides.right_bottom, color, opacity, line_width, viewport);
     }
 }
 
-void drawCamera(Viewport *viewport, vec3 color, f32 opacity, Camera *camera, u8 line_width) {
+void drawCamera(Camera *camera, vec3 color, f32 opacity, u8 line_width, Viewport *viewport) {
     static Box box;
     static Primitive primitive;
     initBox(&box);
@@ -53,7 +53,7 @@ void drawCamera(Viewport *viewport, vec3 color, f32 opacity, Camera *camera, u8 
     primitive.rotation = camera->transform.rotation;
     primitive.position = camera->transform.position;
     primitive.scale.x  = primitive.scale.y = primitive.scale.z = 1;
-    drawBox(viewport, color, opacity, &box, &primitive, BOX__ALL_SIDES, line_width);
+    drawBox(&box, BOX__ALL_SIDES, &primitive, color, opacity, line_width, viewport);
     box.vertices.corners.back_bottom_left   = scaleVec3(box.vertices.corners.back_bottom_left,  0.5f);
     box.vertices.corners.back_bottom_right  = scaleVec3(box.vertices.corners.back_bottom_right, 0.5f);
     box.vertices.corners.back_top_left      = scaleVec3(box.vertices.corners.back_top_left,     0.5f);
@@ -64,5 +64,5 @@ void drawCamera(Viewport *viewport, vec3 color, f32 opacity, Camera *camera, u8 
     box.vertices.corners.front_top_right    = scaleVec3(box.vertices.corners.front_top_right,    2);
     for (u8 i = 0; i < BOX__VERTEX_COUNT; i++)
         box.vertices.buffer[i].z += 1.5f;
-    drawBox(viewport, color, opacity, &box, &primitive, BOX__ALL_SIDES, line_width);
+    drawBox(&box, BOX__ALL_SIDES, &primitive, color, opacity, line_width, viewport);
 }

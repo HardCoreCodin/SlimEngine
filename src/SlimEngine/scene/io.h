@@ -93,18 +93,74 @@ void saveMeshToFile(Mesh *mesh, char* file_path, Platform *platform) {
     platform->closeFile(file);
 }
 
+void writeSceneSettingsToFile(SceneSettings *settings, void *file, Platform *platform) {
+    platform->writeToFile(&settings->boxes, sizeof(u32), file);
+    platform->writeToFile(&settings->cameras, sizeof(u32), file);
+    platform->writeToFile(&settings->curves, sizeof(u32), file);
+    platform->writeToFile(&settings->grids, sizeof(u32), file);
+    platform->writeToFile(&settings->meshes, sizeof(u32), file);
+    platform->writeToFile(&settings->primitives, sizeof(u32), file);
+}
+
+void readSceneSettingsFromFile(SceneSettings *settings, void *file, Platform *platform) {
+    platform->readFromFile(&settings->boxes, sizeof(u32), file);
+    platform->readFromFile(&settings->cameras, sizeof(u32), file);
+    platform->readFromFile(&settings->curves, sizeof(u32), file);
+    platform->readFromFile(&settings->grids, sizeof(u32), file);
+    platform->readFromFile(&settings->meshes, sizeof(u32), file);
+    platform->readFromFile(&settings->primitives, sizeof(u32), file);
+}
+
+void writeTransformToFile(xform3 *xform, void *file, Platform *platform) {
+    platform->writeToFile(&xform->matrix, sizeof(mat3), file);
+    platform->writeToFile(&xform->yaw_matrix, sizeof(mat3), file);
+    platform->writeToFile(&xform->pitch_matrix, sizeof(mat3), file);
+    platform->writeToFile(&xform->roll_matrix, sizeof(mat3), file);
+    platform->writeToFile(&xform->rotation_matrix, sizeof(mat3), file);
+    platform->writeToFile(&xform->rotation_matrix_inverted, sizeof(mat3), file);
+
+    platform->writeToFile(&xform->rotation, sizeof(quat), file);
+    platform->writeToFile(&xform->rotation_inverted, sizeof(quat), file);
+
+    platform->writeToFile(&xform->position, sizeof(vec3), file);
+    platform->writeToFile(&xform->scale, sizeof(vec3), file);
+}
+
+void readTransformFromFile(xform3 *xform, void *file, Platform *platform) {
+    platform->readFromFile(&xform->matrix, sizeof(mat3), file);
+    platform->readFromFile(&xform->yaw_matrix, sizeof(mat3), file);
+    platform->readFromFile(&xform->pitch_matrix, sizeof(mat3), file);
+    platform->readFromFile(&xform->roll_matrix, sizeof(mat3), file);
+    platform->readFromFile(&xform->rotation_matrix, sizeof(mat3), file);
+    platform->readFromFile(&xform->rotation_matrix_inverted, sizeof(mat3), file);
+
+    platform->readFromFile(&xform->rotation, sizeof(quat), file);
+    platform->readFromFile(&xform->rotation_inverted, sizeof(quat), file);
+
+    platform->readFromFile(&xform->position, sizeof(vec3), file);
+    platform->readFromFile(&xform->scale, sizeof(vec3), file);
+
+    xform->right_direction   = &xform->rotation_matrix.X;
+    xform->up_direction      = &xform->rotation_matrix.Y;
+    xform->forward_direction = &xform->rotation_matrix.Z;
+}
+
 void loadSceneFromFile(Scene *scene, char* file_path, Platform *platform) {
     void *file = platform->openFileForReading(file_path);
 
-    platform->readFromFile(&scene->settings, sizeof(SceneSettings), file);
+    readSceneSettingsFromFile(&scene->settings, file, platform);
 
-    if (scene->cameras)
-        for (u32 i = 0; i < scene->settings.cameras; i++) {
-            platform->readFromFile(scene->cameras + i, sizeof(Camera), file);
-            scene->cameras[i].transform.right_direction   = &scene->cameras[i].transform.rotation_matrix.X;
-            scene->cameras[i].transform.up_direction      = &scene->cameras[i].transform.rotation_matrix.Y;
-            scene->cameras[i].transform.forward_direction = &scene->cameras[i].transform.rotation_matrix.Z;
+    if (scene->cameras) {
+        Camera *camera = scene->cameras;
+        for (u32 i = 0; i < scene->settings.cameras; i++, camera++) {
+            platform->readFromFile(&camera->focal_length, sizeof(f32), file);
+            platform->readFromFile(&camera->zoom, sizeof(f32), file);
+            platform->readFromFile(&camera->dolly, sizeof(f32), file);
+            platform->readFromFile(&camera->target_distance, sizeof(f32), file);
+            platform->readFromFile(&camera->current_velocity, sizeof(vec3), file);
+            readTransformFromFile(&camera->transform, file, platform);
         }
+    }
 
     if (scene->primitives)
         for (u32 i = 0; i < scene->settings.primitives; i++)
@@ -152,11 +208,19 @@ void loadSceneFromFile(Scene *scene, char* file_path, Platform *platform) {
 void saveSceneToFile(Scene *scene, char* file_path, Platform *platform) {
     void *file = platform->openFileForWriting(file_path);
 
-    platform->writeToFile(&scene->settings, sizeof(SceneSettings), file);
+    writeSceneSettingsToFile(&scene->settings, file, platform);
 
-    if (scene->cameras)
-        for (u32 i = 0; i < scene->settings.cameras; i++)
-            platform->writeToFile(scene->cameras + i, sizeof(Camera), file);
+    if (scene->cameras) {
+        Camera *camera = scene->cameras;
+        for (u32 i = 0; i < scene->settings.cameras; i++, camera++) {
+            platform->writeToFile(&camera->focal_length, sizeof(f32), file);
+            platform->writeToFile(&camera->zoom, sizeof(f32), file);
+            platform->writeToFile(&camera->dolly, sizeof(f32), file);
+            platform->writeToFile(&camera->target_distance, sizeof(f32), file);
+            platform->writeToFile(&camera->current_velocity, sizeof(vec3), file);
+            writeTransformToFile(&camera->transform, file, platform);
+        }
+    }
 
     if (scene->primitives)
         for (u32 i = 0; i < scene->settings.primitives; i++)
@@ -195,7 +259,7 @@ void saveSceneToFile(Scene *scene, char* file_path, Platform *platform) {
                 platform->writeToFile(mesh->vertex_normals,        sizeof(vec3)                  * mesh->normals_count,  file);
                 platform->writeToFile(mesh->vertex_normal_indices, sizeof(TriangleVertexIndices) * mesh->triangle_count, file);
             }
-        };
+        }
     }
 
     platform->closeFile(file);

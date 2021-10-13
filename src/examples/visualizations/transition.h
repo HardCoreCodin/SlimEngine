@@ -170,7 +170,7 @@ void updateTransitions(u8 key) {
         transitions.show_NDC_corner_labels.t = 0;
     } else if (key == 'O') {
         secondary_viewport.settings.use_cube_NDC = !secondary_viewport.settings.use_cube_NDC;
-        setPreProjectionMatrix(&secondary_viewport);
+        setProjectionMatrix(&secondary_viewport);
         initBox(&NDC_box);
         if (!secondary_viewport.settings.use_cube_NDC) for (u8 i = 4; i < 8; i++) NDC_box.vertices.buffer[i].z = 0;
         setBoxEdgesFromVertices(&NDC_box.edges, &NDC_box.vertices);
@@ -204,7 +204,7 @@ void transitionBox(Transition *transition, Box *from_box, Box *to_box) {
 void transformedPosition(vec3 *pos, mat4 M, mat4 src) {
     vec4 final_pos, pos4 = Vec4fromVec3(*pos, 1.0f);
     if (transitions.full_projection.active) {
-        final_pos = mulVec4Mat4(pos4, secondary_viewport.pre_projection_matrix);
+        final_pos = mulVec4Mat4(pos4, secondary_viewport.projection_matrix);
         final_pos = scaleVec4(final_pos, 1.0f / final_pos.w);
         if (secondary_viewport.settings.flip_z)
             final_pos.z = -final_pos.z;

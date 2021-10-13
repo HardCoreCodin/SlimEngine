@@ -1,5 +1,6 @@
 #include "../SlimEngine/app.h"
 #include "../SlimEngine/core/time.h"
+#include "../SlimEngine/viewport/viewport.h"
 #include "../SlimEngine/scene/xform.h"
 #include "../SlimEngine/scene/box.h"
 #include "../SlimEngine/scene/grid.h"
@@ -7,38 +8,26 @@
 // Or using the single-header file:
 // #include "../SlimEngine.h"
 
-void drawSceneToViewport(Scene *scene, Viewport *viewport) {
-    fillPixelGrid(viewport->frame_buffer,
-                  Color(Black), 1);
-    setPreProjectionMatrix(viewport);
-
+void drawScene(Scene *scene, Viewport *viewport) {
     Primitive *prim = scene->primitives;
     for (u32 i = 0; i < scene->settings.primitives; i++, prim++)
         switch (prim->type) {
             case PrimitiveType_Coil:
             case PrimitiveType_Helix:
-                drawCurve(viewport,
-                          Color(prim->color), 1,
-                          &scene->curves[prim->id], prim,
-                          CURVE_STEPS, 1);
+                drawCurve(scene->curves + prim->id, CURVE_STEPS, prim,
+                          Color(prim->color), 0.5f, 0, viewport);
                 break;
             case PrimitiveType_Box:
-                drawBox(viewport,
-                        Color(prim->color), 1,
-                        &scene->boxes[prim->id], prim,
-                        BOX__ALL_SIDES,
-                        1);
+                drawBox(scene->boxes + prim->id, BOX__ALL_SIDES, prim,
+                        Color(prim->color), 0.5f, 0, viewport);
                 break;
             case PrimitiveType_Grid:
-                drawGrid(viewport,
-                         Color(prim->color), 1,
-                         &scene->grids[prim->id], prim,
-                         1);
+                drawGrid(scene->grids + prim->id, prim,
+                         Color(prim->color), 0.5f, 0, viewport);
                 break;
             default:
                 break;
         }
-    preparePixelGridForDisplay(viewport->frame_buffer);
 }
 
 void updateScene(Scene *scene, f32 delta_time) {
@@ -69,12 +58,12 @@ void updateAndRender() {
     Scene *scene = &app->scene;
     Viewport *viewport = &app->viewport;
 
-    startFrameTimer(timer);
-
-    updateScene(scene, timer->delta_time);
-    drawSceneToViewport(scene, viewport);
-
-    endFrameTimer(timer);
+    beginFrame(timer);
+        updateScene(scene, timer->delta_time);
+        beginDrawing(viewport);
+            drawScene(scene, viewport);
+        endDrawing(viewport);
+    endFrame(timer, &app->controls.mouse);
 }
 void setupScene(Scene *scene) {
     xform3 *xf = &scene->cameras[0].transform;

@@ -6,8 +6,7 @@
 #define LOCATOR_GRID_SIZE_X 41
 #define LOCATOR_GRID_SIZE_Y 31
 #define LOCATOR_GRID_SIZE_Z 21
-#define LOCATOR_OPACITY 0.125f
-#define LOCATOR_SIZE 0.2f
+#define LOCATOR_SIZE 0.4f
 
 typedef union Locator {
     struct {
@@ -27,7 +26,7 @@ void setLocator(Locator *locator, vec3 location) {
     locator->Z.to.z   += LOCATOR_SIZE;
 }
 
-void drawLocatorGrid(Viewport *viewport, vec3 color, vec3 out_color, f32 opacity, Transition *transition) {
+void drawLocatorGrid(Viewport *viewport, vec3 color, vec3 out_color, Transition *transition) {
     f32 from_w, to_w;
     f32 n = secondary_viewport.settings.near_clipping_plane_distance;
     f32 f = secondary_viewport.settings.far_clipping_plane_distance;
@@ -51,8 +50,8 @@ void drawLocatorGrid(Viewport *viewport, vec3 color, vec3 out_color, f32 opacity
                 edge = locator.edges;
 
                 for (u8 i = 0; i < 3; i++, edge++) {
-                    from_w = mulVec3Mat4(edge->from, 1.0f, secondary_viewport.pre_projection_matrix, &trg_edge.from);
-                    to_w   = mulVec3Mat4(edge->to,   1.0f, secondary_viewport.pre_projection_matrix, &trg_edge.to);
+                    from_w = mulVec3Mat4(edge->from, 1.0f, secondary_viewport.projection_matrix, &trg_edge.from);
+                    to_w   = mulVec3Mat4(edge->to, 1.0f, secondary_viewport.projection_matrix, &trg_edge.to);
 
                     is_out = fabsf(trg_edge.from.x) > from_w ||
                              fabsf(trg_edge.from.y) > from_w ||
@@ -71,7 +70,7 @@ void drawLocatorGrid(Viewport *viewport, vec3 color, vec3 out_color, f32 opacity
                     edge->to   = lerpVec3(edge->to,   trg_edge.to,   transition->eased_t);
 
                     convertEdgeFromSecondaryToMain(edge);
-                    drawEdge3D(viewport, is_out ? out_color : color, opacity, edge, 4);
+                    drawEdge(edge, is_out ? out_color : color, LOCATOR_GRID_OPACITY, LOCATOR_GRID_LINE_WIDTH, viewport);
                 }
                 location.x += x_step;
             }

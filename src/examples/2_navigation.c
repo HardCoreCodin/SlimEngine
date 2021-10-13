@@ -1,5 +1,6 @@
 #include "../SlimEngine/app.h"
 #include "../SlimEngine/core/time.h"
+#include "../SlimEngine/viewport/viewport.h"
 #include "../SlimEngine/scene/grid.h"
 #include "../SlimEngine/viewport/navigation.h"
 // Or using the single-header file:
@@ -33,36 +34,33 @@ void updateViewport(Viewport *viewport, Mouse *mouse) {
 }
 void updateAndRender() {
     Timer *timer = &app->time.timers.update;
-    Scene *scene = &app->scene;
     Mouse *mouse = &app->controls.mouse;
     Viewport *viewport = &app->viewport;
+    Grid      *grid = app->scene.grids;
+    Primitive *prim = app->scene.primitives;
 
-    startFrameTimer(timer);
-
-    updateViewport(viewport, mouse);
-
-    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
-    setPreProjectionMatrix(viewport);
-    drawGrid(viewport, Color(scene->primitives->color), 1,
-             &scene->grids[0], &scene->primitives[0], 1);
-    preparePixelGridForDisplay(viewport->frame_buffer);
-    drawMouseAndKeyboard(viewport, mouse);
-
-    resetMouseChanges(mouse);
-    endFrameTimer(timer);
+    beginFrame(timer);
+        updateViewport(viewport, mouse);
+        beginDrawing(viewport);
+            drawGrid(grid, prim, Color(prim->color),
+                     0.5f, 0, viewport);
+            drawMouseAndKeyboard(mouse, viewport);
+        endDrawing(viewport);
+    endFrame(timer, mouse);
 }
 
 void setupScene(Scene *scene) {
-    Primitive *grid_primitive = &scene->primitives[0];
-    grid_primitive->type = PrimitiveType_Grid;
-    grid_primitive->scale = Vec3(5, 1, 5);
-    grid_primitive->position.z = 5;
-    rotatePrimitive(grid_primitive, 0.5f, 0, 0);
-    initGrid(&scene->grids[0],11, 11);
+    Grid *grid = scene->grids;
+    initGrid(grid,11, 11);
+    Primitive *grid_prim = scene->primitives;
+    grid_prim->type = PrimitiveType_Grid;
+    grid_prim->scale = Vec3(5, 1, 5);
+    grid_prim->position.z = 5;
+    rotatePrimitive(grid_prim, 0.5f, 0, 0);
 
-    xform3 *xf = &scene->cameras[0].transform;
-    xf->position = Vec3(0, 7, -11);
-    rotateXform3(xf, 0, -0.2f, 0);
+    xform3 *camera_xform = &scene->cameras[0].transform;
+    camera_xform->position = Vec3(0, 7, -11);
+    rotateXform3(camera_xform, 0, -0.2f, 0);
 }
 void onKeyChanged(u8 key, bool is_pressed) {
     NavigationMove *move = &app->viewport.navigation.move;

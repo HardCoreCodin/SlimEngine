@@ -19,7 +19,7 @@ enum VertexAttributes {
     VertexAttributes_PositionsUVsAndNormals
 };
 
-int obj2mesh(char* obj_file_path, char* mesh_file_path) {
+int obj2mesh(char* obj_file_path, char* mesh_file_path, bool invert_winding_order) {
     Mesh mesh;
     mesh.aabb.min.x = mesh.aabb.min.y = mesh.aabb.min.z = 0;
     mesh.aabb.max.x = mesh.aabb.max.y = mesh.aabb.max.z = 0;
@@ -39,10 +39,10 @@ int obj2mesh(char* obj_file_path, char* mesh_file_path) {
 
     enum VertexAttributes vertex_attributes = VertexAttributes_None;
     while (fgets(line, 1024, file)) {
-        if (strncmp(line, "vn ", 2) == 0) mesh.normals_count++;
-        if (strncmp(line, "vt ", 2) == 0) mesh.uvs_count++;
-        if (strncmp(line, "v ", 2) == 0) mesh.vertex_count++;
-        if (strncmp(line, "f ", 2) == 0) {
+        if (strncmp(line, (char*)"vn ", 2) == 0) mesh.normals_count++;
+        if (strncmp(line, (char*)"vt ", 2) == 0) mesh.uvs_count++;
+        if (strncmp(line, (char*)"v ", 2) == 0) mesh.vertex_count++;
+        if (strncmp(line, (char*)"f ", 2) == 0) {
             mesh.triangle_count++;
             if (vertex_attributes == VertexAttributes_None) {
                 int forward_slash_count = 0;
@@ -83,19 +83,23 @@ int obj2mesh(char* obj_file_path, char* mesh_file_path) {
     TriangleVertexIndices *vertex_normal_indices = mesh.vertex_normal_indices;
     TriangleVertexIndices *vertex_uvs_indices = mesh.vertex_uvs_indices;
 
-    file = fopen(obj_file_path, "r");
+    u8 v1_id = 0;
+    u8 v2_id = invert_winding_order ? 2 : 1;
+    u8 v3_id = invert_winding_order ? 1 : 2;
+
+    file = fopen(obj_file_path, (char*)"r");
     while (fgets(line, 1024, file)) {
         // Vertex information
-        if (strncmp(line, "v ", 2) == 0) {
-            sscanf(line, "v %f %f %f", &vertex_position->x, &vertex_position->y, &vertex_position->z);
+        if (strncmp(line, (char*)"v ", 2) == 0) {
+            sscanf(line, (char*)"v %f %f %f", &vertex_position->x, &vertex_position->y, &vertex_position->z);
             vertex_position++;
-        } else if (strncmp(line, "vn ", 2) == 0) {
-            sscanf(line, "vn %f %f %f", &vertex_normal->x, &vertex_normal->y, &vertex_normal->z);
+        } else if (strncmp(line, (char*)"vn ", 2) == 0) {
+            sscanf(line, (char*)"vn %f %f %f", &vertex_normal->x, &vertex_normal->y, &vertex_normal->z);
             vertex_normal++;
-        } else if (strncmp(line, "vt ", 2) == 0) {
-            sscanf(line, "vt %f %f", &vertex_uvs->x, &vertex_uvs->y);
+        } else if (strncmp(line, (char*)"vt ", 2) == 0) {
+            sscanf(line, (char*)"vt %f %f", &vertex_uvs->x, &vertex_uvs->y);
             vertex_uvs++;
-        } else if (strncmp(line, "f ", 2) == 0) {
+        } else if (strncmp(line, (char*)"f ", 2) == 0) {
             int vertex_indices[3];
             int uvs_indices[3];
             int normal_indices[3];
@@ -103,18 +107,18 @@ int obj2mesh(char* obj_file_path, char* mesh_file_path) {
             switch (vertex_attributes) {
                 case VertexAttributes_Positions:
                     sscanf(
-                            line, "f %d %d %d",
-                            &vertex_indices[0],
-                            &vertex_indices[1],
-                            &vertex_indices[2]
+                            line, (char*)"f %d %d %d",
+                            &vertex_indices[v1_id],
+                            &vertex_indices[v2_id],
+                            &vertex_indices[v3_id]
                     );
                     break;
                 case VertexAttributes_PositionsAndUVs:
                     sscanf(
-                            line, "f %d/%d %d/%d %d/%d",
-                            &vertex_indices[0], &uvs_indices[0],
-                            &vertex_indices[1], &uvs_indices[1],
-                            &vertex_indices[2], &uvs_indices[2]
+                            line, (char*)"f %d/%d %d/%d %d/%d",
+                            &vertex_indices[v1_id], &uvs_indices[v1_id],
+                            &vertex_indices[v2_id], &uvs_indices[v2_id],
+                            &vertex_indices[v3_id], &uvs_indices[v3_id]
                     );
                     vertex_uvs_indices->ids[0] = uvs_indices[0] - 1;
                     vertex_uvs_indices->ids[1] = uvs_indices[1] - 1;
@@ -123,10 +127,10 @@ int obj2mesh(char* obj_file_path, char* mesh_file_path) {
                     break;
                 case VertexAttributes_PositionsUVsAndNormals:
                     sscanf(
-                            line, "f %d/%d/%d %d/%d/%d %d/%d/%d",
-                            &vertex_indices[0], &uvs_indices[0], &normal_indices[0],
-                            &vertex_indices[1], &uvs_indices[1], &normal_indices[1],
-                            &vertex_indices[2], &uvs_indices[2], &normal_indices[2]
+                            line, (char*)"f %d/%d/%d %d/%d/%d %d/%d/%d",
+                            &vertex_indices[v1_id], &uvs_indices[v1_id], &normal_indices[v1_id],
+                            &vertex_indices[v2_id], &uvs_indices[v2_id], &normal_indices[v2_id],
+                            &vertex_indices[v3_id], &uvs_indices[v3_id], &normal_indices[v3_id]
                     );
                     vertex_uvs_indices->ids[0] = uvs_indices[0] - 1;
                     vertex_uvs_indices->ids[1] = uvs_indices[1] - 1;
@@ -187,7 +191,7 @@ int obj2mesh(char* obj_file_path, char* mesh_file_path) {
         }
     }
 
-    file = fopen(mesh_file_path, "wb");
+    file = fopen(mesh_file_path, (char*)"wb");
 
     fwrite(&mesh.aabb,           sizeof(AABB), 1, file);
     fwrite(&mesh.vertex_count,   sizeof(u32),  1, file);
@@ -213,10 +217,22 @@ int obj2mesh(char* obj_file_path, char* mesh_file_path) {
 }
 
 int main(int argc, char *argv[]) {
-    //return error if user does not provide exactly two arguments
-    if (argc == 3)
-        return obj2mesh(argv[1], argv[2]);
+    if (argc == 2 && !strcmp(argv[1], (char*)"--help")) {
+        printf((char*)("Exactly 2 file paths need to be provided: "
+                "An '.obj' file (input) then a '.mesh' file (output), "
+                "and an optional flag '-invert_winding_order' for inverting winding order"));
+        return 0;
+    } else if (argc == 3 || // 2 arguments
+               argc == 4    // 3 arguments
+            ) {
+        char *obj_file_path = argv[1];
+        char *mesh_file_path = argv[2];
+        bool invert_winding_order = argc == 4 ? !strcmp(argv[3], (char*)"-invert_winding_order") : false;
+        return obj2mesh(obj_file_path, mesh_file_path, invert_winding_order);
+    }
 
-    printf("Exactly 2 file paths need to be provided: An '.obj' file (input) then a '.mesh' file (output)");
+    printf((char*)("Exactly 2 file paths need to be provided: "
+            "An '.obj' file (input) then a '.mesh' file (output), "
+            "and an optional flag '-invert_winding_order' for inverting winding order"));
     return 1;
 }

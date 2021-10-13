@@ -20,7 +20,7 @@ enum ColorID MATRIX_AXIS_COLORS[4] = {
 typedef struct Matrix {
     mat4 M;
     NumberString components[4][4];
-    RGBA component_colors[4][4];
+    vec3 component_colors[4][4];
     u8 dim;
     bool is_custom;
 } Matrix;
@@ -36,8 +36,8 @@ void initMatrix(Matrix *matrix) {
     for (u8 col = 0; col < 4; col++)
         for (u8 row = 0; row < 4; row++) {
             initNumberString(&matrix->components[row][col]);
-            matrix->component_colors[row][col] = ColorOf(MATRIX_AXIS_COLORS[row]);
-            copyToString(&matrix->components[row][col].string, col == row ? "1" : "0", 0);
+            matrix->component_colors[row][col] = Color(MATRIX_AXIS_COLORS[row]);
+            copyToString(&matrix->components[row][col].string, col == row ? (char*)"1" : (char*)"0", 0);
         }
 }
 
@@ -45,11 +45,11 @@ void setMatrixComponentColor(Matrix *matrix) {
         for (u8 row = 0; row < 4; row++)
             for (u8 column = 0; column < 4; column++)
                 if (column == 1 || row == 1) {
-                    matrix->component_colors[row][column] = ColorOf(MATRIX_AXIS_COLORS[row]);
+                    matrix->component_colors[row][column] = Color(MATRIX_AXIS_COLORS[row]);
                     if (matrix->dim == 4) {
-                        matrix->component_colors[row][column].R /= 4;
-                        matrix->component_colors[row][column].G /= 4;
-                        matrix->component_colors[row][column].B /= 4;
+                        matrix->component_colors[row][column].r /= 4;
+                        matrix->component_colors[row][column].g /= 4;
+                        matrix->component_colors[row][column].b /= 4;
                     }
                 }
 }
@@ -99,89 +99,76 @@ void updateMatrixStrings(Matrix *matrix) {
     }
 }
 
-void drawMatrix(PixelGrid *canvas, RGBA background_color, Matrix *matrix, i32 x, i32 y) {
-    RGBA foreground_color = ColorOf(White);
+void drawMatrix(Matrix *matrix, i32 x, i32 y, vec3 background_color, Viewport *viewport) {
+    vec3 foreground_color = Color(White);
 
     i32 width  = (i32)getMatrixWidth(matrix);
     i32 height = (i32)getMatrixHeight(matrix);
     Rect rect;
     rect.min = Vec2i(x, y);
     rect.max = Vec2i(x + width, y + height);
-//    fillTransparentRect(canvas, background_color, 0.85f, &rect);
-    drawRect(canvas, foreground_color, &rect);
+    drawRect(rect, foreground_color, 1, viewport);
     rect.min.x++;
     rect.min.y++;
     rect.max.x--;
     rect.max.y--;
-    drawRect(canvas, foreground_color, &rect);
+    drawRect(rect, foreground_color, 1, viewport);
     rect.min.x--;
     rect.max.x++;
     rect.min.x += MATRIX_PADDING;
     rect.max.x -= MATRIX_PADDING;
-    drawHLine(canvas, background_color, rect.min.x, rect.max.x, y + 0);
-    drawHLine(canvas, background_color, rect.min.x, rect.max.x, y + 1);
-    drawHLine(canvas, background_color, rect.min.x, rect.max.x, y + height - 0);
-    drawHLine(canvas, background_color, rect.min.x, rect.max.x, y + height - 1);
+    drawHLine(rect.min.x, rect.max.x, y + 0,          background_color, 1, viewport);
+    drawHLine(rect.min.x, rect.max.x, y + 1,          background_color, 1, viewport);
+    drawHLine(rect.min.x, rect.max.x, y + height - 0, background_color, 1, viewport);
+    drawHLine(rect.min.x, rect.max.x, y + height - 1, background_color, 1, viewport);
 
     vec2i offset = Vec2i(x + MATRIX_PADDING, y + MATRIX_PADDING);
     for (u8 row_index = 0; row_index < matrix->dim; row_index++) {
         offset.x = x + MATRIX_PADDING;
         for (u8 column_index = 0; column_index < matrix->dim; column_index++) {
-            drawText(canvas,
-                     matrix->component_colors[row_index][column_index],
-                     matrix->components[row_index][column_index].string.char_ptr, offset.x, offset.y);
+            drawText(matrix->components[row_index][column_index].string.char_ptr, offset.x, offset.y,
+                     matrix->component_colors[row_index][column_index], 1, viewport);
             offset.x += FONT_WIDTH * ((i32)getMatrixColumnLength(matrix, column_index) + 1);
         }
         offset.y += MATRIX_MAX_ROW_HEIGHT;
     }
 }
 
-RGBA RGBAfromVec3(vec3 color) {
-    RGBA out;
-    out.R = (u8)(color.r);
-    out.G = (u8)(color.g);
-    out.B = (u8)(color.b);
-    out.A = MAX_COLOR_VALUE;
-    return out;
-}
-
-void drawMatrixHUD(PixelGrid *canvas, bool show_focal_length, bool show_aspect_ratio) {
-    drawText(canvas, RGBAfromVec3(default_near_color), "Near Clipping Plane: N = ", MATRIX_HUD_START_X, MATRIX_HUD_START_Y);
-    drawText(canvas, RGBAfromVec3(default_far_color), "Far  Clipping Plane: F = ", MATRIX_HUD_START_X, MATRIX_HUD_START_Y + LINE_HEIGHT);
+void drawMatrixHUD(Viewport *viewport, bool show_focal_length, bool show_aspect_ratio) {
+    drawText((char*)"Near Clipping Plane: N = ", MATRIX_HUD_START_X,                  MATRIX_HUD_START_Y, default_near_color, 1, viewport);
+    drawText((char*)"Far  Clipping Plane: F = ", MATRIX_HUD_START_X, MATRIX_HUD_START_Y + LINE_HEIGHT, default_far_color , 1, viewport);
 
     NumberString number;
     initNumberString(&number);
 
     printFloatIntoString(secondary_viewport.settings.near_clipping_plane_distance, &number, 2);
-    drawText(canvas, RGBAfromVec3(default_near_color), number.string.char_ptr, MATRIX_HUD_START_X + 25 * FONT_WIDTH, MATRIX_HUD_START_Y);
+    drawText(number.string.char_ptr, MATRIX_HUD_START_X + 25 * FONT_WIDTH, MATRIX_HUD_START_Y, default_near_color, 1, viewport);
 
     printFloatIntoString(secondary_viewport.settings.far_clipping_plane_distance, &number, 2);
-    drawText(canvas, RGBAfromVec3(default_far_color), number.string.char_ptr, MATRIX_HUD_START_X + 25 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT);
+    drawText(number.string.char_ptr, MATRIX_HUD_START_X + 25 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT, default_far_color, 1, viewport);
 
     if (show_focal_length) {
         printFloatIntoString(secondary_viewport.camera->focal_length, &number, 2);
-        drawText(canvas, RGBAfromVec3(focal_length_color), "Focal Length : L = ", MATRIX_HUD_START_X + 32 * FONT_WIDTH, MATRIX_HUD_START_Y);
-        drawText(canvas, RGBAfromVec3(focal_length_color), number.string.char_ptr, MATRIX_HUD_START_X + 32 * FONT_WIDTH + 19 * FONT_WIDTH, MATRIX_HUD_START_Y);
+        drawText((char*)"Focal Length : L = ", MATRIX_HUD_START_X + 32 * FONT_WIDTH,                   MATRIX_HUD_START_Y, focal_length_color, 1, viewport);
+        drawText(number.string.char_ptr,    MATRIX_HUD_START_X + 32 * FONT_WIDTH + 19 * FONT_WIDTH, MATRIX_HUD_START_Y, focal_length_color, 1, viewport);
 
         if (show_aspect_ratio) {
-            printFloatIntoString(secondary_viewport_frame_buffer.dimensions.width_over_height, &number, 2);
-            drawText(canvas, RGBAfromVec3(aspect_ratio_color), "Aspect Ratio : A = ", MATRIX_HUD_START_X + 32 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT);
-            drawText(canvas, RGBAfromVec3(aspect_ratio_color), number.string.char_ptr, MATRIX_HUD_START_X + 32 * FONT_WIDTH + 19 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT);
+            printFloatIntoString(secondary_viewport.dimensions.width_over_height, &number, 2);
+            drawText((char*)"Aspect Ratio : A = ", MATRIX_HUD_START_X + 32 * FONT_WIDTH,                   MATRIX_HUD_START_Y + LINE_HEIGHT, aspect_ratio_color, 1, viewport);
+            drawText(number.string.char_ptr,    MATRIX_HUD_START_X + 32 * FONT_WIDTH + 19 * FONT_WIDTH, MATRIX_HUD_START_Y + LINE_HEIGHT, aspect_ratio_color, 1, viewport);
         }
     }
 
-    i32 y, x = canvas->dimensions.width - (i32)getMatrixWidth(show_final_matrix ? &final_matrix : &main_matrix) - MATRIX_PADDING;
-    drawText(canvas, ColorOf(White), show_final_matrix ? "Final Matrix" : "Transformation:", x, MATRIX_HUD_START_Y);
-
-    drawMatrix(canvas, ColorOf(Black), show_final_matrix ? &final_matrix : &main_matrix, x, MATRIX_HUD_START_Y + LINE_HEIGHT);
-
-    drawText(canvas, ColorOf(White), "P' = P * M * ", MATRIX_HUD_START_X, MATRIX_HUD_START_Y + LINE_HEIGHT * 3);
+    i32 y, x = viewport->dimensions.width - (i32)getMatrixWidth(show_final_matrix ? &final_matrix : &main_matrix) - MATRIX_PADDING;
+    drawText(show_final_matrix ? (char*)"Final Matrix" : (char*)"Transformation:", x, MATRIX_HUD_START_Y, Color(White), 1, viewport);
+    drawMatrix(show_final_matrix ? &final_matrix : &main_matrix, x, MATRIX_HUD_START_Y + LINE_HEIGHT, Color(Black), viewport);
+    drawText((char*)"P' = P * M * ", MATRIX_HUD_START_X, MATRIX_HUD_START_Y + LINE_HEIGHT * 3, Color(White), 1, viewport);
 
     x = MATRIX_HUD_START_X + FONT_WIDTH * 13;
     y = MATRIX_HUD_START_Y + LINE_HEIGHT * 2;
     Matrix *matrix = matrices;
     for (u8 i = 0; i < matrix_count; i++, matrix++) {
-        drawMatrix(canvas, ColorOf(Black), matrix, x, y);
+        drawMatrix(matrix, x, y, Color(Black), viewport);
         x += (i32)getMatrixWidth(matrix) + MATRIX_PADDING;
     }
 }

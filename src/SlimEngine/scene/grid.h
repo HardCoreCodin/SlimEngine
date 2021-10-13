@@ -5,7 +5,7 @@
 #include "../shapes/edge.h"
 #include "./primitive.h"
 
-void transformGridVerticesFromObjectToViewSpace(Viewport *viewport, Primitive *primitive, Grid *grid, GridVertices *transformed_vertices) {
+void transformGridVerticesFromObjectToViewSpace(Grid *grid, GridVertices *transformed_vertices, Primitive *primitive, Viewport *viewport) {
     vec3 position;
     for (u8 side = 0; side < 2; side++) {
         for (u8 axis = 0; axis < 2; axis++) {
@@ -21,17 +21,17 @@ void transformGridVerticesFromObjectToViewSpace(Viewport *viewport, Primitive *p
     }
 }
 
-void drawGrid(Viewport *viewport, vec3 color, f32 opacity, Grid *grid, Primitive *primitive, u8 line_width) {
+void drawGrid(Grid *grid, Primitive *primitive, vec3 color, f32 opacity, u8 line_width, Viewport *viewport) {
     // Transform vertices positions from local-space to world-space and then to view-space:
     static GridVertices vertices;
 
-    transformGridVerticesFromObjectToViewSpace(viewport, primitive, grid, &vertices);
+    transformGridVerticesFromObjectToViewSpace(grid, &vertices, primitive, viewport);
 
     // Distribute transformed vertices positions to edges:
     static GridEdges edges;
     setGridEdgesFromVertices(edges.uv.u, grid->u_segments, vertices.uv.u.from, vertices.uv.u.to);
     setGridEdgesFromVertices(edges.uv.v, grid->v_segments, vertices.uv.v.from, vertices.uv.v.to);
 
-    for (u8 u = 0; u < grid->u_segments; u++) drawEdge3D(viewport, color, opacity, edges.uv.u + u, line_width);
-    for (u8 v = 0; v < grid->v_segments; v++) drawEdge3D(viewport, color, opacity, edges.uv.v + v, line_width);
+    for (u8 u = 0; u < grid->u_segments; u++) drawEdge(edges.uv.u + u, color, opacity, line_width, viewport);
+    for (u8 v = 0; v < grid->v_segments; v++) drawEdge(edges.uv.v + v, color, opacity, line_width, viewport);
 }

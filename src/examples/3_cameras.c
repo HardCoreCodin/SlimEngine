@@ -1,5 +1,6 @@
 #include "../SlimEngine/app.h"
 #include "../SlimEngine/core/time.h"
+#include "../SlimEngine/viewport/viewport.h"
 #include "../SlimEngine/scene/box.h"
 #include "../SlimEngine/scene/grid.h"
 #include "../SlimEngine/viewport/navigation.h"
@@ -32,30 +33,26 @@ void updateViewport(Viewport *viewport, Mouse *mouse) {
 }
 void updateAndRender() {
     Timer *timer = &app->time.timers.update;
-    Scene *scene = &app->scene;
     Mouse *mouse = &app->controls.mouse;
     Viewport *viewport = &app->viewport;
+    Grid      *grid = app->scene.grids;
+    Primitive *prim = app->scene.primitives;
+    vec3 camera_color = Color(Yellow);
+    Camera *other_camera = app->scene.cameras;
+    if (other_camera == viewport->camera) {
+        other_camera++;
+        camera_color = Color(Cyan);
+    }
 
-    startFrameTimer(timer);
-
-    updateViewport(viewport, mouse);
-
-    fillPixelGrid(viewport->frame_buffer, Color(Black), 1);
-    setPreProjectionMatrix(viewport);
-
-    Primitive *prim = &scene->primitives[0];
-    drawGrid(viewport, Color(prim->color), 1, scene->grids, prim, 1);
-
-    Camera *camera1 = &scene->cameras[0];
-    Camera *camera2 = &scene->cameras[1];
-    if (viewport->camera == camera1)
-        drawCamera(viewport, Color(Yellow), 1, camera2, 1);
-    else
-        drawCamera(viewport, Color(Cyan  ), 1, camera1, 1);
-
-    preparePixelGridForDisplay(viewport->frame_buffer);
-    resetMouseChanges(mouse);
-    endFrameTimer(timer);
+    beginFrame(timer);
+        updateViewport(viewport, mouse);
+        beginDrawing(viewport);
+            drawGrid(grid, prim, Color(prim->color),
+                     0.5f, 0, viewport);
+            drawCamera(other_camera, camera_color,
+                       0.5f,0, viewport);
+        endDrawing(viewport);
+    endFrame(timer, mouse);
 }
 void onKeyChanged(u8 key, bool is_pressed) {
     Viewport *viewport = &app->viewport;
@@ -71,21 +68,24 @@ void onKeyChanged(u8 key, bool is_pressed) {
     if (key == 'D') move->right    = is_pressed;
 }
 void setupScene(Scene *scene) {
-    Primitive *grid_primitive = &scene->primitives[0];
-    grid_primitive->type = PrimitiveType_Grid;
-    grid_primitive->scale = Vec3(5, 1, 5);
-    grid_primitive->position.z = 5;
-    rotatePrimitive(grid_primitive, 0.5f, 0, 0);
-    initGrid(&scene->grids[0],11, 11);
+    Grid *grid = scene->grids;
+    initGrid(grid,11, 11);
+    Primitive *grid_prim = scene->primitives;
+    grid_prim->type = PrimitiveType_Grid;
+    grid_prim->scale = Vec3(5, 1, 5);
+    grid_prim->position.z = 5;
+    rotatePrimitive(grid_prim, 0.5f, 0, 0);
 
-    xform3 *camera_xform = &scene->cameras[0].transform;
+    Camera *camera = scene->cameras;
+    xform3 *camera_xform = &camera->transform;
     camera_xform->position = Vec3(0, 7, -11);
     rotateXform3(camera_xform, 0, -0.2f, 0);
 
-    camera_xform = &scene->cameras[1].transform;
+    camera++;
+    camera_xform = &camera->transform;
     camera_xform->position = Vec3(0, 6, 21);
     rotateXform3(camera_xform, 8, -0.1f, 0);
-    zoomCamera(&scene->cameras[1], -2);
+    zoomCamera(camera, -2);
 }
 void initApp(Defaults *defaults) {
     defaults->settings.scene.cameras    = 2;

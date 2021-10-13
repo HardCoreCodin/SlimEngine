@@ -22,13 +22,26 @@ The single header file variant includes everything.<br>
 Otherwise, specific headers can be included from the directory of headers.<br>
 The main entry point for the app needs to be defined explicitly (see [SlimApp](https://github.com/HardCoreCodin/SlimApp)). <br>
 
+SlimEngine comes with pre-configured CMake targets for all examples.<br>
+For manual builds on Windows, the typical system libraries need to be linked<br>
+(winmm.lib, gdi32.lib, shell32.lib, user32.lib) and the SUBSYSTEM needs to be set to WINDOWS<br>
+
+All examples were tested in all combinations of:<br>
+Source: Single header file (SlimApp.h), Directory of headers (specific includes) <br>
+Compiler: MSVC, MinGW, CLang<br>
+Language: C, C++<br>
+CPU Arch: x86, x64<br>
+
 Features:
 -
 All features of SlimApp are available here as well.<br>
 Additional features include basic facilities needed in interactive 3D application:<br>
 * A 3D viewport with wireframe rendering, a HUD and rich mouse/keyboard navigation.<br>
 * A scene with cameras, meshes and parametric shapes.<br>
-* Scene selection and interactive transformations (moving, rotating and scaling).
+* Scene selection and interactive transformations (moving, rotating and scaling).<br>
+* Line drawing is anti-aliased and multi-sampled (MSAA) producing very clean lines.<br>
+
+<img src="src/examples/MSAA.gif" alt="MSAA" height="360"><br>
 
 Well documented example applications cover the features:<br>
 * <b><u>Viewport</b>:</u> Head-Up Display (a.k.a: HUD)<br>

@@ -1,20 +1,18 @@
 #include "../SlimEngine/app.h"
 #include "../SlimEngine/core/time.h"
 #include "../SlimEngine/core/string.h"
+#include "../SlimEngine/viewport/viewport.h"
 #include "../SlimEngine/scene/grid.h"
 #include "../SlimEngine/scene/xform.h"
-#include "../SlimEngine/viewport/hud.h"
 // Or using the single-header file:
 // #include "../SlimEngine.h"
 
+enum HUDLineIndex { Fps, Mfs, Width, Height, MouseX, MouseY };
 void updateHudVisibility(u8 key, bool is_pressed) {
     ViewportSettings *settings = &app->viewport.settings;
     if (!is_pressed && key == app->controls.key_map.tab)
         settings->show_hud = !settings->show_hud;
 }
-
-enum HUDLineIndex { Fps, Mfs, Width, Height, MouseX, MouseY };
-
 void setDimensionsInHUD(HUD *hud, i32 width, i32 height) {
     printNumberIntoString(width,  &hud->lines[Width ].value);
     printNumberIntoString(height, &hud->lines[Height].value);
@@ -30,60 +28,54 @@ void updateSizeInHUD(u16 width, u16 height) {
     setDimensionsInHUD(&app->viewport.hud, width, height);
 }
 void setCountersInHUD(HUD *hud, Timer *timer) {
-    printNumberIntoString(timer->average_frames_per_second,      &hud->lines[Fps].value);
-    printNumberIntoString(timer->average_microseconds_per_frame, &hud->lines[Mfs].value);
+    printNumberIntoString(timer->average_frames_per_second,
+                          &hud->lines[Fps].value);
+    printNumberIntoString(timer->average_microseconds_per_frame,
+                          &hud->lines[Mfs].value);
 }
 void setupViewport(Viewport *viewport) {
     HUD *hud = &viewport->hud;
     hud->line_height = 1.2f;
     hud->position = Vec2i(10, 10);
 
-    Dimensions *dim = &viewport->frame_buffer->dimensions;
+    Dimensions *dim = &viewport->dimensions;
     setDimensionsInHUD(hud, dim->width, dim->height);
     setCountersInHUD(  hud, &app->time.timers.update);
     setMouseInHUD(     hud, app->controls.mouse.pos);
 
     HUDLine *lines = hud->lines;
-    setString(&lines[Fps   ].title, "Fps    : ");
-    setString(&lines[Mfs   ].title, "mic-s/f: ");
-    setString(&lines[Width ].title, "Width  : ");
-    setString(&lines[Height].title, "Height : ");
-    setString(&lines[MouseX].title, "Mouse X: ");
-    setString(&lines[MouseY].title, "Mouse Y: ");
+    setString(&lines[Fps   ].title, (char*)"Fps    : ");
+    setString(&lines[Mfs   ].title, (char*)"mic-s/f: ");
+    setString(&lines[Width ].title, (char*)"Width  : ");
+    setString(&lines[Height].title, (char*)"Height : ");
+    setString(&lines[MouseX].title, (char*)"Mouse X: ");
+    setString(&lines[MouseY].title, (char*)"Mouse Y: ");
 }
 
 void updateAndRender() {
     Timer *timer = &app->time.timers.update;
-    startFrameTimer(timer);
-
     Viewport *viewport = &app->viewport;
+    Grid      *grid = app->scene.grids;
+    Primitive *prim = app->scene.primitives;
 
-    fillPixelGrid(viewport->frame_buffer,
-                  Color(Black), 1);
-
-    Grid      *grid = &app->scene.grids[0];
-    Primitive *prim = &app->scene.primitives[0];
-    drawGrid(viewport, Color(prim->color), 1,
-             grid, prim, 1);
-    preparePixelGridForDisplay(viewport->frame_buffer);
-
-    if (viewport->settings.show_hud) {
-        setCountersInHUD(&viewport->hud, timer);
-        drawHUD(viewport->frame_buffer, &viewport->hud);
-    }
-
-    endFrameTimer(timer);
+    beginFrame(timer);
+        beginDrawing(viewport);
+            drawGrid(grid, prim, Color(prim->color),
+                     0.5f, 0, viewport);
+            setCountersInHUD(&viewport->hud, timer);
+        endDrawing(viewport);
+    endFrame(timer, &app->controls.mouse);
 }
 
 void setupScene(Scene *scene) {
-    Primitive *grid_primitive = &scene->primitives[0];
-    grid_primitive->type = PrimitiveType_Grid;
-    grid_primitive->scale    = Vec3(5, 1, 5);
-    grid_primitive->position = Vec3(0, 0, 5);
-    rotatePrimitive(grid_primitive, 0.5f, 0, 0);
-    initGrid(&scene->grids[0],11, 11);
+    Primitive *grid_prim = scene->primitives;
+    grid_prim->type = PrimitiveType_Grid;
+    grid_prim->scale    = Vec3(5, 1, 5);
+    grid_prim->position = Vec3(0, 0, 5);
+    rotatePrimitive(grid_prim, 0.5f, 0, 0);
+    initGrid(scene->grids,11, 11);
 
-    xform3 *camera_xform = &scene->cameras[0].transform;
+    xform3 *camera_xform = &scene->cameras->transform;
     camera_xform->position = Vec3(0, 7, -11);
     rotateXform3(camera_xform, 0, -0.2f, 0);
 }

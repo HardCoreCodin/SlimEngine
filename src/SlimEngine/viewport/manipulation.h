@@ -9,11 +9,11 @@
 void setViewportProjectionPlane(Viewport *viewport) {
     Camera *camera = viewport->camera;
     ProjectionPlane *projection_plane = &viewport->projection_plane;
-    Dimensions *dimensions = &viewport->frame_buffer->dimensions;
+    Dimensions *dimensions = &viewport->dimensions;
 
-    projection_plane->start = scaleVec3(*camera->transform.forward_direction, (f32)dimensions->width * camera->focal_length);
+    projection_plane->start = scaleVec3(*camera->transform.forward_direction, dimensions->f_height * camera->focal_length);
     projection_plane->right = scaleVec3(*camera->transform.right_direction, 1.0f - (f32)dimensions->width);
-    projection_plane->down  = scaleVec3(*camera->transform.up_direction, (f32)dimensions->height - 2);
+    projection_plane->down  = scaleVec3(*camera->transform.up_direction, dimensions->f_height - 1.0f);
     projection_plane->start = addVec3(projection_plane->start, projection_plane->right);
     projection_plane->start = addVec3(projection_plane->start, projection_plane->down);
 
@@ -60,44 +60,6 @@ INLINE BoxSide getBoxSide(vec3 octant, u8 axis) {
     }
 }
 
-INLINE vec2 getUVonUnitCube(vec3 pos, BoxSide side) {
-    vec2 uv;
-
-    switch (side) {
-        case Top: {
-            uv.x = pos.x;
-            uv.y = pos.z;
-        } break;
-        case Bottom: {
-            uv.x = -pos.x;
-            uv.y = -pos.z;
-        } break;
-        case Left: {
-            uv.x = -pos.z;
-            uv.y = pos.y;
-        } break;
-        case Right:  {
-            uv.x = pos.z;
-            uv.y = pos.y;
-        } break;
-        case Front: {
-            uv.x = pos.x;
-            uv.y = pos.y;
-        } break;
-        default: {
-            uv.x = -pos.x;
-            uv.y =  pos.y;
-        } break;
-    }
-
-    uv.x += 1;
-    uv.y += 1;
-    uv.x *= 0.5f;
-    uv.y *= 0.5f;
-
-    return uv;
-}
-
 INLINE BoxSide hitCube(RayHit *hit, vec3 *Ro, vec3 *Rd) {
     vec3 octant, RD_rcp = oneOverVec3(*Rd);
     octant.x = signbit(Rd->x) ? 1.0f : -1.0f;
@@ -130,7 +92,6 @@ INLINE BoxSide hitCube(RayHit *hit, vec3 *Ro, vec3 *Rd) {
 
     BoxSide side = getBoxSide(octant, min_axis);
     hit->position = scaleAddVec3(*Rd, mint, *Ro);
-    hit->uv = getUVonUnitCube(hit->position, side);
     hit->normal = getVec3Of(0);
     switch (side) {
         case Left:   hit->normal.x = hit->from_behind ? +1.0f : -1.0f; break;
@@ -163,7 +124,6 @@ INLINE bool rayHitScene(Ray *ray, RayHit *local_hit, RayHit *hit, Scene *scene) 
             if (local_hit->distance_squared < hit->distance_squared) {
                 *hit = *local_hit;
                 hit->object_type = primitive.type;
-                hit->material_id = primitive.material_id;
                 hit->object_id = i;
 
                 hit_primitive = primitive;
@@ -183,9 +143,10 @@ INLINE bool rayHitScene(Ray *ray, RayHit *local_hit, RayHit *hit, Scene *scene) 
 void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     Mouse *mouse = &controls->mouse;
     Camera *camera = viewport->camera;
-    Dimensions *dimensions = &viewport->frame_buffer->dimensions;
+    Dimensions *dimensions = &viewport->dimensions;
     Selection *selection = scene->selection;
 
+    setProjectionMatrix(viewport);
     setViewportProjectionPlane(viewport);
 
     vec3 position;
@@ -195,8 +156,8 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
     RayHit *hit = &selection->hit;
     Ray ray, *local_ray = &selection->local_ray;
     Primitive primitive;
-    vec2i mouse_pos = Vec2i(mouse->pos.x - viewport->settings.position.x,
-                            mouse->pos.y - viewport->settings.position.y);
+    vec2i mouse_pos = Vec2i(mouse->pos.x - viewport->position.x,
+                            mouse->pos.y - viewport->position.y);
 
     if (mouse->left_button.is_pressed) {
         if (!mouse->left_button.is_handled) { // This is the first frame after the left mouse button went down:
@@ -313,13 +274,13 @@ void manipulateSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                 position.z = selection->object_distance;
 
                 // Screen -> NDC:
-                position.x = (f32) mouse_pos.x / dimensions->h_width - 1;
-                position.y = (f32) mouse_pos.y / dimensions->h_height - 1;
+                position.x = ((f32)mouse_pos.x + 0.5f) / dimensions->h_width  - 1;
+                position.y = ((f32)mouse_pos.y + 0.5f) / dimensions->h_height - 1;
                 position.y = -position.y;
 
                 // NDC -> View:
-                position.x *= position.z / camera->focal_length;
-                position.y *= position.z / (camera->focal_length * dimensions->width_over_height);
+                position.x *= position.z / (camera->focal_length * dimensions->height_over_width);
+                position.y *= position.z / camera->focal_length;
 
                 // View -> World:
                 position = addVec3(mulVec3Mat3(position, *rot), *cam_pos);
@@ -348,7 +309,7 @@ void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
             primitive.scale = mulVec3(primitive.scale, scene->meshes[primitive.id].aabb.max);
 
         initBox(box);
-        drawBox(viewport, Color(Yellow), 1, box, &primitive, BOX__ALL_SIDES, 1);
+        drawBox(box, BOX__ALL_SIDES, &primitive, Color(Yellow), 0.5f, 0, viewport);
         if (selection->box_side) {
             vec3 color = Color(White);
             switch (selection->box_side) {
@@ -357,7 +318,7 @@ void drawSelection(Scene *scene, Viewport *viewport, Controls *controls) {
                 case Front: case Back:   color = Color(Blue);  break;
                 case NoSide: break;
             }
-            drawBox(viewport, color, 1, box, &primitive, selection->box_side, 1);
+            drawBox(box, selection->box_side, &primitive, color, 0.5f, 1, viewport);
         }
     }
 }

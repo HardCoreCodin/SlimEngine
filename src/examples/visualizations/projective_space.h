@@ -4,7 +4,6 @@
 #include "./transition.h"
 
 #define PROJECTION_LINES_COUNT 36
-#define PROJECTION_LINES_OPACITY 0.125f
 #define PROJECTION_LINE_INC_SPEED 0.3f
 
 void drawProjectiveSpace(Viewport *viewport, Transition *transition, bool colorize) {
@@ -12,7 +11,6 @@ void drawProjectiveSpace(Viewport *viewport, Transition *transition, bool colori
     f32 step = TAU / (PROJECTION_LINES_COUNT * 2);
     vec2 sin_cos = Vec2(cosf(step), sinf(step));
 
-    f32 opacity = PROJECTION_LINES_OPACITY;
     vec3 color = getVec3Of(((f32)MAX_COLOR_VALUE / 2));
     vec3 x_axis = Vec3(1, 0, 0);
     vec3 y_axis = Vec3(0, 1, 0);
@@ -34,7 +32,7 @@ void drawProjectiveSpace(Viewport *viewport, Transition *transition, bool colori
             edge.to = scaleVec3(edge.to, 15 * transition->eased_t);
             convertEdgeFromSecondaryToMain(&edge);
 
-            drawEdge3D(viewport, color, opacity, &edge, 2);
+            drawEdge(&edge, color, PROJECTION_LINES_OPACITY, PROJECTION_LINE_WIDTH, viewport);
 
             azimuth_rotation = mulQuat(azimuth_rotation, azimuth_rotation_step);
         }

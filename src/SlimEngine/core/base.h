@@ -45,28 +45,31 @@ ENABLE_FP_CONTRACT
 
 #ifdef __cplusplus
     #define null nullptr
+    #ifndef signbit
+        #define signbit std::signbit
+    #endif
 #else
     #define null 0
     typedef unsigned char      bool;
  #endif
 
-#ifndef false
-  #define false 0
-#endif
-
-#ifndef true
-  #define true 1
-#endif
-
 typedef unsigned char      u8;
 typedef unsigned short     u16;
-typedef unsigned int       u32;
+typedef unsigned long int  u32;
 typedef unsigned long long u64;
 typedef signed   short     i16;
-typedef signed   int       i32;
+typedef signed   long int  i32;
 
 typedef float  f32;
 typedef double f64;
+
+#ifndef false
+#define false (u8)0
+#endif
+
+#ifndef true
+#define true (u8)1
+#endif
 
 typedef void* (*CallbackWithInt)(u64 size);
 typedef void (*CallbackWithBool)(bool on);
@@ -107,7 +110,7 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define NAVIGATION_SPEED_DEFAULT__DOLLY  1
 #define NAVIGATION_SPEED_DEFAULT__PAN    0.03f
 
-#define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.1f
+#define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.001f
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
 
 typedef struct u8_3 { u8 x, y, z; } u8_3;
@@ -123,11 +126,10 @@ typedef struct quat { vec3 axis; f32 amount; } quat;
 typedef struct Edge { vec3 from, to;  } Edge;
 typedef struct Rect { vec2i min, max; } Rect;
 typedef struct RGBA { u8 B, G, R, A; } RGBA;
-typedef struct FloatPixel { vec3 color; f32 opacity; f64 depth; } FloatPixel;
-typedef union Pixel { RGBA color; u32 value; } Pixel;
+typedef struct Pixel { vec3 color; f32 opacity; f64 depth; } Pixel;
+typedef union PixelQuad { Pixel quad[2][2]; struct { Pixel TL, TR, BL, BR; }; } PixelQuad;
 
-#define PIXEL_SIZE (sizeof(Pixel) + sizeof(FloatPixel) + (sizeof(f64)))
-#define RENDER_SIZE (PIXEL_SIZE * MAX_WIDTH * MAX_HEIGHT)
+#define FRAME_BUFFER_MEMORY_SIZE (sizeof(PixelQuad) * MAX_WIDTH * MAX_HEIGHT)
 
 INLINE vec2i Vec2i(i32 x, i32 y) {
     vec2i out;
@@ -252,7 +254,7 @@ void resetMouseChanges(Mouse *mouse) {
 }
 
 typedef struct Dimensions {
-    u16 width, height;
+    u16 width, height, stride;
     u32 width_times_height;
     f32 height_over_width,
         width_over_height,
@@ -260,9 +262,10 @@ typedef struct Dimensions {
         h_height, h_width;
 } Dimensions;
 
-void updateDimensions(Dimensions *dimensions, u16 width, u16 height) {
+void updateDimensions(Dimensions *dimensions, u16 width, u16 height, u16 stride) {
     dimensions->width = width;
     dimensions->height = height;
+    dimensions->stride = stride;
     dimensions->width_times_height = dimensions->width * dimensions->height;
     dimensions->f_width  =      (f32)dimensions->width;
     dimensions->f_height =      (f32)dimensions->height;
@@ -272,20 +275,13 @@ void updateDimensions(Dimensions *dimensions, u16 width, u16 height) {
     dimensions->height_over_width  = dimensions->f_height / dimensions->f_width;
 }
 
-typedef struct PixelGrid {
-    Dimensions dimensions;
-    Pixel* pixels;
-    FloatPixel* float_pixels;
-    bool gamma_corrected_blending;
-} PixelGrid;
-
-void swap(i32 *a, i32 *b) {
+INLINE void swap(i32 *a, i32 *b) {
     i32 t = *a;
     *a = *b;
     *b = t;
 }
 
-void subRange(i32 from, i32 to, i32 end, i32 start, i32 *first, i32 *last) {
+INLINE void subRange(i32 from, i32 to, i32 end, i32 start, i32 *first, i32 *last) {
     *first = from;
     *last  = to;
     if (to < from) swap(first, last);
@@ -298,6 +294,8 @@ INLINE bool inRange(i32 value, i32 end, i32 start) {
 }
 
 INLINE f32 clampValueToBetween(f32 value, f32 from, f32 to) {
+    if (value != value || value > to)
+        value = value;
     f32 mn = value < to ? value : to;
     return mn > from ? mn : from;
 }
@@ -356,138 +354,6 @@ enum ColorID {
     DarkMagenta,
     DarkYellow
 };
-
-INLINE RGBA ColorOf(enum ColorID color_id) {
-    RGBA color;
-    color.A = MAX_COLOR_VALUE;
-
-    switch (color_id) {
-        case Black:
-            color.R = 0;
-            color.G = 0;
-            color.B = 0;
-            break;
-        case White:
-            color.R = MAX_COLOR_VALUE;
-            color.G = MAX_COLOR_VALUE;
-            color.B = MAX_COLOR_VALUE;
-
-            break;
-        case Grey:
-                color.R = MAX_COLOR_VALUE/2;
-                color.G = MAX_COLOR_VALUE/2;
-                color.B = MAX_COLOR_VALUE/2;
-                break;
-        case DarkGrey:
-            color.R = MAX_COLOR_VALUE/4;
-            color.G = MAX_COLOR_VALUE/4;
-            color.B = MAX_COLOR_VALUE/4;
-            break;
-        case BrightGrey:
-            color.R = MAX_COLOR_VALUE*3/4;
-            color.G = MAX_COLOR_VALUE*3/4;
-            color.B = MAX_COLOR_VALUE*3/4;
-            break;
-
-        case Red:
-            color.R = MAX_COLOR_VALUE;
-            color.G = 0;
-            color.B = 0;
-            break;
-        case Green:
-            color.R = 0;
-            color.G = MAX_COLOR_VALUE;
-            color.B = 0;
-            break;
-        case Blue:
-            color.R = 0;
-            color.G = 0;
-            color.B = MAX_COLOR_VALUE;
-            break;
-
-        case DarkRed:
-            color.R = MAX_COLOR_VALUE/2;
-            color.G = 0;
-            color.B = 0;
-            break;
-        case DarkGreen:
-            color.R = 0;
-            color.G = MAX_COLOR_VALUE/2;
-            color.B = 0;
-            break;
-        case DarkBlue:
-            color.R = 0;
-            color.G = 0;
-            color.B = MAX_COLOR_VALUE/2;
-            break;
-
-        case DarkCyan:
-            color.R = 0;
-            color.G = MAX_COLOR_VALUE/2;
-            color.B = MAX_COLOR_VALUE/2;
-            break;
-        case DarkMagenta:
-            color.R = MAX_COLOR_VALUE/2;
-            color.G = 0;
-            color.B = MAX_COLOR_VALUE/2;
-            break;
-        case DarkYellow:
-            color.R = MAX_COLOR_VALUE/2;
-            color.G = MAX_COLOR_VALUE/2;
-            color.B = 0;
-            break;
-
-        case BrightRed:
-            color.R = MAX_COLOR_VALUE;
-            color.G = MAX_COLOR_VALUE/2;
-            color.B = MAX_COLOR_VALUE/2;
-            break;
-        case BrightGreen:
-            color.R = MAX_COLOR_VALUE/2;
-            color.G = MAX_COLOR_VALUE;
-            color.B = MAX_COLOR_VALUE/2;
-            break;
-        case BrightBlue:
-            color.R = MAX_COLOR_VALUE/2;
-            color.G = MAX_COLOR_VALUE/2;
-            color.B = MAX_COLOR_VALUE;
-            break;
-
-        case Cyan:
-            color.R = 0;
-            color.G = MAX_COLOR_VALUE;
-            color.B = MAX_COLOR_VALUE;
-            break;
-        case Magenta:
-            color.R = MAX_COLOR_VALUE;
-            color.G = 0;
-            color.B = MAX_COLOR_VALUE;
-            break;
-        case Yellow:
-            color.R = MAX_COLOR_VALUE;
-            color.G = MAX_COLOR_VALUE;
-            color.B = 0;
-            break;
-
-        case BrightCyan:
-            color.R = 0;
-            color.G = MAX_COLOR_VALUE*3/4;
-            color.B = MAX_COLOR_VALUE*3/4;
-            break;
-        case BrightMagenta:
-            color.R = MAX_COLOR_VALUE*3/4;
-            color.G = 0;
-            color.B = MAX_COLOR_VALUE*3/4;
-            break;
-        case BrightYellow:
-            color.R = MAX_COLOR_VALUE*3/4;
-            color.G = MAX_COLOR_VALUE*3/4;
-            color.B = 0;
-            break;
-    }
-
-    return color;
-}
 
 INLINE vec3 Color(enum ColorID color_id) {
     vec3 color;
@@ -620,77 +486,12 @@ INLINE vec3 Color(enum ColorID color_id) {
     return color;
 }
 
-vec3 getColorInBetween(vec3 from, vec3 to, f32 t) {
+INLINE vec3 getColorInBetween(vec3 from, vec3 to, f32 t) {
     return Vec3(
             clampValueToBetween(fast_mul_add(to.r - from.r, t, from.r), 0, (f32)MAX_COLOR_VALUE),
             clampValueToBetween(fast_mul_add(to.g - from.g, t, from.g), 0, (f32)MAX_COLOR_VALUE),
             clampValueToBetween(fast_mul_add(to.b - from.b, t, from.b), 0, (f32)MAX_COLOR_VALUE)
    );
-}
-
-void copyPixels(PixelGrid *src, PixelGrid *trg, i32 width, i32 height, i32 trg_x, i32 trg_y) {
-    Pixel *trg_pixels = trg->pixels;
-    Pixel *src_pixels = src->pixels;
-    Dimensions *trg_dim = &trg->dimensions;
-    Dimensions *src_dim = &src->dimensions;
-    i32 trg_index;
-    for (i32 y = 0; y < height; y++) {
-        for (i32 x = 0; x < width; x++) {
-            trg_index = y + trg_y;
-            trg_index *= trg_dim->width;
-            trg_index += x + trg_x;
-            trg_pixels[trg_index] = src_pixels[src_dim->width * y + x];
-        }
-    }
-}
-
-INLINE void setPixel(FloatPixel *pixel, vec3 color, f32 opacity, f64 z, bool blend_with_gamma_correction) {
-    FloatPixel foreground, background = *pixel;
-    foreground.depth = z;
-    foreground.opacity = opacity;
-    foreground.color.r = color.r * opacity;
-    foreground.color.g = color.g * opacity;
-    foreground.color.b = color.b * opacity;
-
-    if (foreground.depth > background.depth) {
-        *pixel = foreground;
-        foreground = background;
-        background = *pixel;
-    }
-
-    if (blend_with_gamma_correction) {
-        background.color.r *= background.color.r;
-        background.color.g *= background.color.g;
-        background.color.b *= background.color.b;
-        foreground.color.r *= foreground.color.r;
-        foreground.color.g *= foreground.color.g;
-        foreground.color.b *= foreground.color.b;
-    }
-
-    opacity = 1.0f - foreground.opacity;
-    pixel->color.r = fast_mul_add(background.color.r, opacity, foreground.color.r);
-    pixel->color.g = fast_mul_add(background.color.g, opacity, foreground.color.g);
-    pixel->color.b = fast_mul_add(background.color.b, opacity, foreground.color.b);
-
-    if (blend_with_gamma_correction) {
-        pixel->color.r = sqrtf(pixel->color.r);
-        pixel->color.g = sqrtf(pixel->color.g);
-        pixel->color.b = sqrtf(pixel->color.b);
-    }
-
-    pixel->opacity = foreground.opacity + background.opacity * opacity;
-    pixel->depth = foreground.depth;
-}
-
-void preparePixelGridForDisplay(PixelGrid *canvas) {
-    FloatPixel *float_pixel = canvas->float_pixels;
-    Pixel *pixel = canvas->pixels;
-    for (u32 pixel_index = 0; pixel_index < canvas->dimensions.width_times_height; pixel_index++, float_pixel++, pixel++) {
-        pixel->color.R = (u8)(clampValueToBetween(float_pixel->color.r, 0, MAX_COLOR_VALUE));
-        pixel->color.G = (u8)(clampValueToBetween(float_pixel->color.g, 0, MAX_COLOR_VALUE));
-        pixel->color.B = (u8)(clampValueToBetween(float_pixel->color.b, 0, MAX_COLOR_VALUE));
-        pixel->color.A = (u8)(clampValue(float_pixel->opacity) * FLOAT_TO_COLOR_COMPONENT);
-    }
 }
 
 typedef struct String {
