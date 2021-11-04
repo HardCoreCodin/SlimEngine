@@ -1,6 +1,9 @@
 #pragma once
 
 #include "./types.h"
+#include "../renderer/mesh_shaders.h"
+#include "../renderer/pixel_shaders.h"
+#include "../scene/cube.h"
 
 void initNumberString(NumberString *number_string) {
     number_string->string.char_ptr = number_string->_buffer;
@@ -204,7 +207,6 @@ void initNavigation(Navigation *navigation, NavigationSettings *navigation_setti
     navigation->turn.right = false;
     navigation->turn.left = false;
 }
-
 void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->near_clipping_plane_distance = VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE;
     settings->far_clipping_plane_distance  = VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE;
@@ -215,6 +217,8 @@ void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->use_cube_NDC = false;
     settings->flip_z = false;
     settings->antialias = false;
+    settings->cull_back_faces = true;
+    settings->show_wire_frame = false;
     settings->background.color = Color(Black);
     settings->background.opacity = 0;
     settings->background.depth = INFINITY;
@@ -255,15 +259,13 @@ void initViewport(Viewport *viewport, ViewportSettings *viewport_settings, Navig
 void setDefaultSceneSettings(SceneSettings *settings) {
     settings->cameras = 1;
     settings->primitives = 0;
+    settings->materials = 0;
+    settings->lights = 0;
     settings->meshes = 0;
-    settings->curves = 0;
-    settings->boxes = 0;
-    settings->grids = 0;
     settings->mesh_files = null;
     settings->file.char_ptr = null;
     settings->file.length = 0;
 }
-
 void initCurve(Curve *curve) {
     curve->thickness = 0.1f;
     curve->revolution_count = 1;
@@ -314,4 +316,25 @@ bool initGrid(Grid *grid, u8 u_segments, u8 v_segments) {
     setGridEdgesFromVertices(grid->edges.uv.v, grid->v_segments, grid->vertices.uv.v.from, grid->vertices.uv.v.to);
 
     return true;
+}
+
+void initMaterial(Material *material) {
+    for (u8 i = 0; i < 3; i++) {
+        material->specular.components[i] = 1;
+        material->diffuse.components[i] = 1;
+    }
+    material->pixel_shader = shadePixelDepth;
+    material->mesh_shader = shadeMesh;
+    material->roughness  = 1;
+    material->shininess  = 1;
+    material->texture_count = 0;
+    for (u8 i = 0; i < 16; i++) material->texture_ids[i] = 0;
+}
+
+void initRasterizer(Rasterizer *rasterizer, u32 max_vertex_count, u32 max_normal_count, Memory *memory) {
+    rasterizer->vertex_flags = (u8*)allocateMemory(memory, max_vertex_count);
+    rasterizer->clip_space_vertex_positions  = (vec4*)allocateMemory(memory, sizeof(vec4) * max_vertex_count);
+    rasterizer->world_space_vertex_positions = (vec3*)allocateMemory(memory, sizeof(vec3) * max_vertex_count);
+    rasterizer->world_space_vertex_normals = (vec3*)allocateMemory(memory, sizeof(vec3) * max_normal_count);
+    setMeshToCube(&rasterizer->default_cube_mesh);
 }

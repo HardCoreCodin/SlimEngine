@@ -2,6 +2,8 @@
 
 #include "../core/types.h"
 #include "../math/vec3.h"
+#include "../math/mat3.h"
+#include "../math/mat4.h"
 #include "../math/quat.h"
 
 INLINE void convertPositionAndDirectionToObjectSpace(
@@ -28,6 +30,18 @@ INLINE void convertPositionAndDirectionToObjectSpace(
         if (primitive->flags & IS_SCALED_NON_UNIFORMLY)
             *out_direction = normVec3(mulVec3(*out_direction, inv_scale));
     }
+}
+INLINE mat4 getPrimitiveTransformationMatrix(Primitive *primitive) {
+    mat3 rotation_matrix = transposedMat3(convertQuaternionToRotationMatrix(primitive->rotation));
+
+    rotation_matrix.X = scaleVec3(rotation_matrix.X, primitive->scale.x);
+    rotation_matrix.Y = scaleVec3(rotation_matrix.Y, primitive->scale.y);
+    rotation_matrix.Z = scaleVec3(rotation_matrix.Z, primitive->scale.z);
+
+    mat4 matrix = mat4fromMat3(rotation_matrix);
+    matrix.W = Vec4fromVec3(primitive->position, 1);
+
+    return matrix;
 }
 
 INLINE vec3 convertPositionToWorldSpace(vec3 position, Primitive *primitive) {

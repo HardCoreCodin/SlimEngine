@@ -115,10 +115,31 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.001f
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
 
+// Culling flags:
+// ======================
+#define IS_NEAR  0b00000001
+#define IS_FAR   0b00000010
+#define IS_BELOW 0b00000100
+#define IS_ABOVE 0b00001000
+#define IS_RIGHT 0b00010000
+#define IS_LEFT  0b00100000
+#define IS_OUT   0b00111111
+#define IS_NDC   0b01000000
+
+// Clipping flags:
+// ===============
+#define CULL    0b00000000
+#define INSIDE  0b00000010
+
+#define LAMBERT 1
+#define PHONG 2
+#define BLINN 4
+
 typedef struct u8_3 { u8 x, y, z; } u8_3;
 typedef struct vec2i { i32 x, y; } vec2i;
+typedef struct vec2u { u32 x, y; } vec2u;
 typedef union vec2 { struct {f32 x, y;        }; struct {f32 u, v;       }; f32 components[2]; } vec2;
-typedef union vec3 { struct {f32 x, y, z;     }; struct {f32 u, v, w;    }; struct {f32 r, g, b; }; struct {f32 red, green, blue; }; f32 components[3]; } vec3;
+typedef union vec3 { struct {f32 x, y, z;     }; struct {f32 u, v, W;    }; struct {vec2 v2; f32 _; }; struct {f32 r, g, b; }; struct {f32 red, green, blue; }; struct {f32 A, B, C; }; f32 components[3]; } vec3;
 typedef union vec4 { struct {f32 x, y, z, w;  }; struct {f32 r, g, b, a; }; struct {vec3 v3; f32 _; }; f32 components[4]; } vec4;
 typedef union mat2 { struct {vec2 X, Y;       }; vec2 axis[2]; } mat2;
 typedef union mat3 { struct {vec3 X, Y, Z;    }; vec3 axis[3]; } mat3;
@@ -194,6 +215,7 @@ f32 smoothstep(f32 from, f32 to, f32 t) {
 
 #define MEMORY_SIZE Gigabytes(1)
 #define MEMORY_BASE Terabytes(2)
+
 
 typedef struct Memory {
     u8* address;
@@ -972,6 +994,7 @@ typedef struct ProjectionPlane {
     vec3 start, right, down;
 } ProjectionPlane;
 
+
 typedef struct ViewportSettings {
     Pixel background;
     f32 near_clipping_plane_distance,
@@ -979,7 +1002,7 @@ typedef struct ViewportSettings {
     u32 hud_line_count;
     HUDLine *hud_lines;
     enum ColorID hud_default_color;
-    bool show_hud, use_cube_NDC, flip_z, antialias;
+    bool show_hud, use_cube_NDC, flip_z, antialias, cull_back_faces, show_wire_frame;
 } ViewportSettings;
 
 typedef struct Viewport {
@@ -1006,8 +1029,10 @@ typedef struct RayHit {
     bool from_behind;
 } RayHit;
 
+// Mesh:
+// =====
 typedef struct EdgeVertexIndices { u32 from, to; } EdgeVertexIndices;
-typedef struct TriangleVertexIndices { u32 ids[3]; } TriangleVertexIndices;
+typedef union TriangleVertexIndices { u32 ids[3]; struct { u32 v1, v2, v3; }; } TriangleVertexIndices;
 typedef struct Mesh {
     AABB aabb;
     u32 triangle_count, vertex_count, edge_count, normals_count, uvs_count;
@@ -1016,9 +1041,194 @@ typedef struct Mesh {
     TriangleVertexIndices *vertex_position_indices;
     TriangleVertexIndices *vertex_normal_indices;
     TriangleVertexIndices *vertex_uvs_indices;
-    EdgeVertexIndices *edge_vertex_indices;
+    EdgeVertexIndices     *edge_vertex_indices;
 } Mesh;
 
+typedef union TexelQuad {
+    struct {vec4 TL, TR, BL, BR;};
+    vec4 quadrants[4];
+} TexelQuad;
+
+typedef struct TextureMip {
+    u16 width, height;
+    vec4 *texels;
+    TexelQuad *texel_quads;
+    TexelQuad **texel_quad_lines;
+} TextureMip;
+
+typedef struct Texture {
+    u16 width, height;
+    u8 mip_count;
+    bool wrap, mipmap, filter;
+    TextureMip *mips;
+} Texture;
+
+// Materials:
+// =========
+typedef struct Material Material;
+
+enum BRDFType {
+    phong,
+    ggx
+};
+typedef struct Scene Scene;
+typedef struct Shaded Shaded;
+typedef struct PixelShaderInputs {
+    vec2 UV, dUV;
+    vec2u coords;
+    f32 depth;
+} PixelShaderInputs;
+
+typedef struct PixelShaderOutputs {
+    vec3 color;
+    f32 opacity;
+    f64 z;
+} PixelShaderOutputs;
+
+typedef struct Rasterizer {
+    Mesh default_cube_mesh;
+    mat4 model_to_world_inverted_transposed, model_to_world, world_to_clip;
+    vec4 *clip_space_vertex_positions;
+    vec3 *world_space_vertex_positions, *world_space_vertex_normals;
+    u8 *vertex_flags;
+} Rasterizer;
+
+typedef void (*PixelShader)(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs);
+typedef u8 (  *MeshShader )(Mesh *mesh, Rasterizer *rasterizer);
+
+typedef struct Material {
+    vec3 ambient, diffuse, specular;
+    f32 shininess, roughness;
+    u8 texture_count, texture_ids[16];
+    PixelShader pixel_shader;
+    MeshShader mesh_shader;
+    enum BRDFType brdf;
+    u8 flags;
+} Material;
+
+typedef struct MaterialHas {
+    bool diffuse, specular;
+} MaterialHas;
+
+typedef struct MaterialUses {
+    bool blinn, phong;
+} MaterialUses;
+
+INLINE void decodeMaterialSpec(u8 flags, MaterialHas *has, MaterialUses *uses) {
+    uses->phong = flags & (u8)PHONG;
+    uses->blinn = flags & (u8)BLINN;
+    has->diffuse = flags & (u8)LAMBERT;
+    has->specular = uses->phong || uses->blinn;
+}
+
+typedef struct Shaded {
+    Primitive *primitive;
+    Material *material;
+    MaterialHas has;
+    MaterialUses uses;
+    vec3 position, normal, viewing_direction, viewing_origin, reflected_direction, light_direction, diffuse;
+} Shaded;
+
+// Lights:
+// ======
+typedef struct AmbientLight{
+    vec3 color;
+} AmbientLight;
+
+typedef struct Light {
+    vec3 attenuation, position_or_direction, color;
+    f32 intensity;
+    bool is_directional;
+} Light;
+#define CUBE__UV_COUNT 4
+#define CUBE__NORMAL_COUNT 6
+#define CUBE__VERTEX_COUNT 8
+#define CUBE__TRIANGLE_COUNT 12
+
+static const vec3 CUBE__VERTEX_POSITIONS[CUBE__VERTEX_COUNT] = {
+        {-1, -1, -1},
+        {1, -1, -1},
+        {1, 1, -1},
+        {-1, 1, -1},
+        {-1, -1, 1},
+        {1, -1, 1},
+        {1, 1, 1},
+        {-1, 1, 1}
+};
+
+static const TriangleVertexIndices CUBE__VERTEX_POSITION_INDICES[CUBE__TRIANGLE_COUNT] = {
+        {0, 1, 2},
+        {1, 5, 6},
+        {5, 4, 7},
+        {4, 0, 3},
+        {3, 2, 6},
+        {1, 0, 4},
+        {0, 2, 3},
+        {1, 6, 2},
+        {5, 7, 6},
+        {4, 3, 7},
+        {3, 6, 7},
+        {1, 4, 5}
+};
+
+static const vec3 CUBE__VERTEX_NORMALS[CUBE__NORMAL_COUNT] = {
+        {0, 0, -1},
+        {1, 0, 0},
+        {0, 0, 1},
+        {-1, 0, 0},
+        {0, 1, 0},
+        {0, -1, 0}
+};
+static const TriangleVertexIndices CUBE__VERTEX_NORMAL_INDICES[CUBE__TRIANGLE_COUNT] = {
+        {0, 0, 0},
+        {1, 1, 1},
+        {2, 2, 2},
+        {3, 3, 3},
+        {4, 4, 4},
+        {5, 5, 5},
+        {0, 0, 0},
+        {1, 1, 1},
+        {2, 2, 2},
+        {3, 3, 3},
+        {4, 4, 4},
+        {5, 5, 5}
+};
+
+static const vec2 CUBE__VERTEX_UVS[CUBE__UV_COUNT] = {
+        {0, 0},
+        {0, 1},
+        {1, 1},
+        {1, 0},
+};
+static const TriangleVertexIndices CUBE__VERTEX_UV_INDICES[CUBE__TRIANGLE_COUNT] = {
+        {0, 1, 2},
+        {0, 1, 2},
+        {0, 1, 2},
+        {0, 1, 2},
+        {0, 1, 2},
+        {0, 1, 2},
+        {0, 2, 3},
+        {0, 2, 3},
+        {0, 2, 3},
+        {0, 2, 3},
+        {0, 2, 3},
+        {0, 2, 3}
+};
+
+void setMeshToCube(Mesh *mesh) {
+    mesh->triangle_count = CUBE__TRIANGLE_COUNT;
+    mesh->vertex_count   = CUBE__VERTEX_COUNT;
+    mesh->normals_count  = CUBE__NORMAL_COUNT;
+    mesh->uvs_count      = CUBE__UV_COUNT;
+
+    mesh->vertex_uvs       = (vec2*)CUBE__VERTEX_UVS;
+    mesh->vertex_normals   = (vec3*)CUBE__VERTEX_NORMALS;
+    mesh->vertex_positions = (vec3*)CUBE__VERTEX_POSITIONS;
+
+    mesh->vertex_uvs_indices      = (TriangleVertexIndices*)CUBE__VERTEX_UV_INDICES;
+    mesh->vertex_normal_indices   = (TriangleVertexIndices*)CUBE__VERTEX_NORMAL_INDICES;
+    mesh->vertex_position_indices = (TriangleVertexIndices*)CUBE__VERTEX_POSITION_INDICES;
+}
 typedef struct Selection {
     quat object_rotation;
     vec3 transformation_plane_origin,
@@ -1038,12 +1248,16 @@ typedef struct Selection {
 } Selection;
 
 typedef struct SceneSettings {
-    u32 cameras, primitives, meshes, curves, boxes, grids;
-    String file, *mesh_files;
+    u32 cameras, primitives, meshes, curves, boxes, grids, lights, materials, textures;
+    String file, *mesh_files, *texture_files;
 } SceneSettings;
 
 typedef struct Scene {
     SceneSettings settings;
+    AmbientLight ambient_light;
+    Light *lights;
+    Material *materials;
+    Texture *textures;
     Selection *selection;
     Camera *cameras;
     Mesh *meshes;
@@ -1105,6 +1319,7 @@ typedef struct App {
     Memory memory;
     Platform platform;
     Controls controls;
+    Rasterizer rasterizer;
     u32 *window_content;
     AppCallbacks on;
     Time time;
@@ -1518,6 +1733,8 @@ void setDefaultViewportSettings(ViewportSettings *settings) {
     settings->use_cube_NDC = false;
     settings->flip_z = false;
     settings->antialias = false;
+    settings->cull_back_faces = true;
+    settings->show_wire_frame = false;
     settings->background.color = Color(Black);
     settings->background.opacity = 0;
     settings->background.depth = INFINITY;
@@ -1558,10 +1775,9 @@ void initViewport(Viewport *viewport, ViewportSettings *viewport_settings, Navig
 void setDefaultSceneSettings(SceneSettings *settings) {
     settings->cameras = 1;
     settings->primitives = 0;
+    settings->materials = 0;
+    settings->lights = 0;
     settings->meshes = 0;
-    settings->curves = 0;
-    settings->boxes = 0;
-    settings->grids = 0;
     settings->mesh_files = null;
     settings->file.char_ptr = null;
     settings->file.length = 0;
@@ -1619,7 +1835,41 @@ bool initGrid(Grid *grid, u8 u_segments, u8 v_segments) {
     return true;
 }
 
+INLINE bool isEqualVec2(vec2 a, vec2 b) {
+    return a.x == b.x && a.y == b.y;
+}
 
+INLINE vec2 clampVec2ToZero(vec2 v) {
+    v.x = v.x > 0.0f ? v.x : 0.0f;
+    v.y = v.y > 0.0f ? v.y : 0.0f;
+    return v;
+}
+
+INLINE vec2 clampVec2ToUpper(vec2 v, vec2 upper) {
+    v.x = v.x < upper.x ? v.x : upper.x;
+    v.y = v.y < upper.y ? v.y : upper.y;
+    return v;
+}
+
+INLINE vec2 clampVec2(vec2 v) {
+    v.x = v.x > 0.0f ? v.x : 0.0f;
+    v.y = v.y > 0.0f ? v.y : 0.0f;
+
+    v.x = v.x < 1.0f ? v.x : 1.0f;
+    v.y = v.y < 1.0f ? v.y : 1.0f;
+
+    return v;
+}
+
+INLINE vec2 clampVec2To(vec2 v, const f32 min_value, const f32 max_value) {
+    v.x = v.x > min_value ? v.x : min_value;
+    v.y = v.y > min_value ? v.y : min_value;
+
+    v.x = v.x < max_value ? v.x : max_value;
+    v.y = v.y < max_value ? v.y : max_value;
+
+    return v;
+}
 
 INLINE vec2 getVec2Of(f32 value) {
     vec2 out;
@@ -1794,6 +2044,44 @@ INLINE vec2 reflectVec2(vec2 V, vec2 N) {
 }
 
 
+
+INLINE vec3 clampVec3ToZero(vec3 v) {
+    v.x = v.x > 0.0f ? v.x : 0.0f;
+    v.y = v.y > 0.0f ? v.y : 0.0f;
+    v.z = v.z > 0.0f ? v.z : 0.0f;
+    return v;
+}
+
+INLINE vec3 clampVec3ToUpper(vec3 v, vec3 upper) {
+    v.x = v.x < upper.x ? v.x : upper.x;
+    v.y = v.y < upper.y ? v.y : upper.y;
+    v.z = v.z < upper.z ? v.z : upper.z;
+    return v;
+}
+
+INLINE vec3 clampVec3(vec3 v) {
+    v.x = v.x > 0.0f ? v.x : 0.0f;
+    v.y = v.y > 0.0f ? v.y : 0.0f;
+    v.z = v.z > 0.0f ? v.z : 0.0f;
+
+    v.x = v.x < 1.0f ? v.x : 1.0f;
+    v.y = v.y < 1.0f ? v.y : 1.0f;
+    v.z = v.z < 1.0f ? v.z : 1.0f;
+
+    return v;
+}
+
+INLINE vec3 clampVec3To(vec3 v, const f32 min_value, const f32 max_value) {
+    v.x = v.x > min_value ? v.x : min_value;
+    v.y = v.y > min_value ? v.y : min_value;
+    v.z = v.z > min_value ? v.z : min_value;
+
+    v.x = v.x < max_value ? v.x : max_value;
+    v.y = v.y < max_value ? v.y : max_value;
+    v.z = v.z < max_value ? v.z : max_value;
+
+    return v;
+}
 
 INLINE bool isEqualVec3(vec3 a, vec3 b) {
     return a.x == b.x && a.y == b.y && a.z == b.z;
@@ -2917,8 +3205,6 @@ INLINE mat4 mat4fromMat3(mat3 m3) {
 }
 
 
-
-
 void drawHLine(i32 x_start, i32 x_end, i32 y, vec3 color, f32 opacity, Viewport *viewport) {
     x_start += viewport->position.x;
     x_end   += viewport->position.x;
@@ -3195,6 +3481,875 @@ INLINE void drawLine(f32 x1, f32 y1, f64 z1,
     }
 }
 
+INLINE f32 toneMappedBaked(f32 LinearColor) {
+    f32 x = LinearColor - 0.004f;
+    if (x < 0.0f) x = 0.0f;
+    f32 x2_times_sholder_strength = x * x * 6.2f;
+    return (x2_times_sholder_strength + x*0.5f)/(x2_times_sholder_strength + x*1.7f + 0.06f);
+}
+
+INLINE vec3 reflectWithDot(vec3 V, vec3 N, f32 NdotV) {
+    return scaleAddVec3(N, -2 * NdotV, V);
+}
+
+INLINE vec3 shadePointOnSurface(Shaded *shaded, f32 NdotL) {
+    if (shaded->has.specular) {
+        vec3 half_vector, color;
+        if (shaded->uses.blinn) {
+            half_vector = normVec3(subVec3(shaded->light_direction, shaded->viewing_direction));
+            color = scaleVec3(shaded->material->specular, powf(DotVec3(shaded->normal, half_vector), 16.0f * shaded->material->shininess));
+        } else
+            color = scaleVec3(shaded->material->specular, powf(DotVec3(shaded->reflected_direction, shaded->light_direction), 4.0f * shaded->material->shininess));
+
+        if (shaded->has.diffuse)
+            return scaleAddVec3(shaded->diffuse, clampValue(NdotL), color);
+        else
+            return color;
+    } else
+        return scaleVec3(shaded->diffuse, clampValue(NdotL));
+}
+
+
+u8 shadeMesh(Mesh *mesh, Rasterizer *rasterizer) {
+
+    // Transform the mesh's vertex positions into clip space and world space:
+    vec4 world_space;
+    for (u32 i = 0; i < mesh->vertex_count; i++) {
+        world_space = Vec4fromVec3(mesh->vertex_positions[i], 1.0f);
+        world_space = mulVec4Mat4(world_space, rasterizer->model_to_world);
+        rasterizer->clip_space_vertex_positions[i] = mulVec4Mat4(world_space, rasterizer->world_to_clip);
+        rasterizer->world_space_vertex_positions[i] = world_space.v3;
+    }
+
+    // Transform the mesh's vertex normals into world space:
+    for (u32 i = 0; i < mesh->normals_count; i++) {
+        world_space = Vec4fromVec3(mesh->vertex_normals[i], 0.0f);
+        world_space = mulVec4Mat4(world_space, rasterizer->model_to_world_inverted_transposed);
+        rasterizer->world_space_vertex_normals[i] = world_space.v3;
+    }
+
+    return INSIDE;
+}
+
+
+INLINE vec4 sampleTextureMip(TextureMip *mip, vec2 UV, bool filter) {
+    f32 u = UV.u;
+    f32 v = UV.v;
+    if (u > 1) u -= (f32)((u32)u);
+    if (v > 1) v -= (f32)((u32)v);
+
+    const f32 offset = filter ? 0.5f : -0.5f;
+
+    const f32 U = u * (f32)mip->width  + offset;
+    const f32 V = v * (f32)mip->height + offset;
+    const u32 x = (u32)U;
+    const u32 y = (u32)V;
+
+    if (!filter) return mip->texels[mip->width * y + x];
+
+    const f32 r = U - (f32)x;
+    const f32 b = V - (f32)y;
+    const f32 l = 1 - r;
+    const f32 t = 1 - b;
+    const f32 factors[4] = {
+            t * l, t * r,
+            b * l, b * r
+    };
+    const TexelQuad texel_quad = mip->texel_quad_lines[y][x];
+    vec4 texel = getVec4Of(0);
+    for (u8 i = 0; i < 4; i++) texel = scaleAddVec4(texel_quad.quadrants[i], factors[i], texel);
+
+    return texel;
+}
+
+INLINE vec4 sampleTexture(Texture *texture, vec2 UV, vec2 dUV) {
+    u8 mip_level = 0;
+    if (texture->mipmap) {
+        const f32 pixel_width  = dUV.u * (f32)texture->width;
+        const f32 pixel_height = dUV.v * (f32)texture->height;
+        f32 pixel_size = (f32)(pixel_width + pixel_height) * 0.5f;
+        const u8 last_mip = texture->mip_count - 1;
+
+        while (pixel_size > 1 && mip_level < last_mip) {
+            pixel_size /= 2;
+            mip_level += 1;
+        }
+    }
+
+    return sampleTextureMip(texture->mips + mip_level, UV, texture->filter);
+}
+
+INLINE u8 getCheckerBoardPixelValueByUV(vec2 UV, f32 half_step_count) {
+    f32 s = UV.u * half_step_count;
+    f32 t = UV.v * half_step_count;
+    s -= floorf(s);
+    t -= floorf(t);
+    return (s > 0.5f ? (u8)1 : (u8)0) ^ (t < 0.5f ? (u8)1 : (u8)0);
+}
+
+void shadePixelTextured(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs) {
+    outputs->color = sampleTexture(scene->textures + shaded->material->texture_ids[0], inputs->UV, inputs->dUV).v3;
+}
+
+void shadePixelDepth(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs) {
+    outputs->color = getVec3Of(inputs->depth > 10 ? 1 : inputs->depth * 0.1f);
+}
+
+void shadePixelUV(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs) {
+    outputs->color.v2 = inputs->UV;
+}
+
+void shadePixelPosition(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs) {
+    outputs->color = scaleVec3(addVec3(shaded->position, getVec3Of(2.0f)), 0.5f);
+}
+
+void shadePixelNormal(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs) {
+    outputs->color = scaleAddVec3(shaded->normal, 0.5f, getVec3Of(0.5f));
+}
+
+void shadePixelCheckerboard(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs) {
+    outputs->color = getVec3Of(getCheckerBoardPixelValueByUV(inputs->UV, 4));
+}
+
+void shadePixelClassic(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs) {
+    f32 NdotL, NdotRd, squared_distance;
+    decodeMaterialSpec(shaded->material->flags, &shaded->has, &shaded->uses);
+
+    shaded->diffuse = shaded->material->diffuse;
+
+    if (shaded->material->texture_count) {
+        shaded->diffuse = mulVec3(shaded->diffuse, sampleTexture(&scene->textures[shaded->material->texture_ids[0]], inputs->UV, inputs->dUV).v3);
+        if (shaded->material->texture_count > 1) {
+            vec3 normal = sampleTexture(&scene->textures[shaded->material->texture_ids[0]], inputs->UV, inputs->dUV).v3;
+            normal = scaleAddVec3(normal, 0.5f, Vec3(-0.5f, -0.5f, -0.5f));
+            shaded->normal = normVec3(addVec3(normal, shaded->normal));
+        }
+    }
+
+    outputs->color = scene->ambient_light.color;
+    shaded->viewing_direction = normVec3(subVec3(shaded->position, shaded->viewing_origin));
+    if (shaded->uses.phong) {
+        NdotRd = DotVec3(shaded->normal, shaded->viewing_direction);
+        shaded->reflected_direction = reflectWithDot(shaded->viewing_direction, shaded->normal, NdotRd);
+    }
+
+    Light *light = scene->lights;
+    for (u32 i = 0; i < scene->settings.lights; i++, light++) {
+        shaded->light_direction = subVec3(light->position_or_direction, shaded->position);
+        squared_distance = squaredLengthVec3(shaded->light_direction);
+        shaded->light_direction = scaleVec3(shaded->light_direction, 1.0f / sqrtf(squared_distance));
+        NdotL = dotVec3(shaded->normal, shaded->light_direction);
+        if (NdotL > 0)
+            outputs->color = mulAddVec3(
+                    shadePointOnSurface(shaded, NdotL),
+                    scaleVec3(light->color, light->intensity / squared_distance),
+                    outputs->color);
+    }
+
+    outputs->color.x = toneMappedBaked(outputs->color.x);
+    outputs->color.y = toneMappedBaked(outputs->color.y);
+    outputs->color.z = toneMappedBaked(outputs->color.z);
+}
+
+void shadePixelClassicCheckerboard(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs) {
+    shadePixelClassic(inputs, scene, shaded, outputs);
+
+    if (!getCheckerBoardPixelValueByUV(inputs->UV, 4))
+        outputs->color = scaleVec3(outputs->color, 0.5f);
+}
+INLINE mat4 getPrimitiveTransformationMatrix(Primitive *primitive) {
+    mat3 rotation_matrix = transposedMat3(convertQuaternionToRotationMatrix(primitive->rotation));
+
+    rotation_matrix.X = scaleVec3(rotation_matrix.X, primitive->scale.x);
+    rotation_matrix.Y = scaleVec3(rotation_matrix.Y, primitive->scale.y);
+    rotation_matrix.Z = scaleVec3(rotation_matrix.Z, primitive->scale.z);
+
+    mat4 matrix = mat4fromMat3(rotation_matrix);
+    matrix.W = Vec4fromVec3(primitive->position, 1);
+
+    return matrix;
+}
+void rasterize(Scene *scene, Viewport *viewport, Rasterizer *rasterizer) {
+    const f32 pz = viewport->projection_matrix.W.z;
+    const f32 n = viewport->settings.near_clipping_plane_distance;
+    const Dimensions dim = viewport->dimensions;
+    static vec3 world_space_vertex_positions[6], normals[6];
+    static vec4 positions[6];
+    static vec2 uvs[6];
+    static Shaded shaded;
+
+    mat4 world_to_view = mat4fromMat3(viewport->camera->transform.rotation_matrix);
+    world_to_view.W = Vec4fromVec3(viewport->camera->transform.position, 1);
+    world_to_view = invMat4(world_to_view);
+    rasterizer->world_to_clip = mulMat4(world_to_view, viewport->projection_matrix);
+
+    bool last_UV_taken;
+    f32 dot, t, one_minus_t, one_over_ABC, ABC, ABy, ABx, ACy, ACx, Cdx, Bdx, Cdy, Bdy,
+            A, B, B_start, C, C_start, pixel_depth;
+    u32 face_index, vertex_index, face_count, vertex_count, clipped_index,
+            v1_index, out1_index, in1_index, first_x, last_x,
+            v2_index, out2_index, in2_index, first_y, last_y,
+            v3_index;
+    u8 v1_flags, new_v2num, out1_num, in1_num,
+            v2_flags, new_v1num, out2_num, in2_num,
+            v3_flags, *vertex_flags = rasterizer->vertex_flags;
+
+    vec2 pixel_min, pixel_max, uv1, uv2, uv3, lastUV, screen_transform;
+    vec3 normal, attr_in, attr_out, new_v1, new_v2, pos1, pos2, pos3, norm1, norm2, norm3, ABCw, ABCp;
+    vec4 v1, v2, v3, *clipped, in1, in2, out1, out2, *position;
+
+    vec2 last_pixel_coord = Vec2(dim.f_width - 1, dim.f_height - 1);
+    f32 width = dim.f_width, height = dim.f_height;
+    i32 stride = dim.width;
+    if (viewport->settings.antialias) {
+        screen_transform.x = dim.f_width;
+        screen_transform.y = dim.f_height;
+        stride <<= 1;
+        width *= 2;
+        height *= 2;
+        last_pixel_coord = Vec2(width - 1, height - 1);
+    } else {
+        screen_transform.x = dim.h_width;
+        screen_transform.y = dim.h_height;
+    }
+
+    PixelShader pixel_shader;
+    PixelShaderInputs  pixel_shader_inputs;
+    PixelShaderOutputs pixel_shader_outputs;
+
+    shaded.viewing_origin = viewport->camera->transform.position;
+
+    bool mesh_has_normals, mesh_has_uvs, clipping_produced_an_extra_face;
+    TriangleVertexIndices position_indices, normal_indices, uvs_indices;
+    Pixel *pixel;
+    PixelQuad *pixel_quad;
+    Mesh *mesh;
+    Primitive *primitive = scene->primitives;
+    for (u32 primitive_id = 0; primitive_id < scene->settings.primitives; primitive_id++, primitive++) {
+        if (primitive->type == PrimitiveType_Box)
+            mesh = &rasterizer->default_cube_mesh;
+        else if (primitive->type == PrimitiveType_Mesh)
+            mesh = scene->meshes + primitive->id;
+        else
+            continue;
+
+        shaded.primitive = primitive;
+        shaded.material = scene->materials + primitive->material_id;
+        vertex_count = mesh->vertex_count;
+
+        // Prepare a matrix for converting from model space to clip space:
+        rasterizer->model_to_world = getPrimitiveTransformationMatrix(primitive);
+        rasterizer->model_to_world_inverted_transposed = transposeMat4(invMat4(rasterizer->model_to_world));
+
+        // Execute mesh shader and skip this geometry if it got culled:
+        if (!shaded.material->mesh_shader(mesh, rasterizer))
+            continue;
+
+        // Cull the vertices and skip this geometry if it's entirely outside the view frustum:
+
+
+        // Check vertex positions against the frustum:
+        // ----------------------------------------------------
+        // For each vertex, check where it is in relation to the view frustum,
+        // and collect the results into a flags array (single number bit-pattern per-vertex).
+        // While doing so, keep track of which side(s) of the frustum are shared by all vertices.
+        // When done, first analyze the results before continuing to phase 2.
+        // Early bail-out if any of these conditions are met:
+        // A. The entire mesh is outside the frustum - early return with the CULL flag.
+        // B. The entire mesh is inside the frustum - early return with the INSIDE flag.
+        // C. No geometric clipping is needed - early return with the INSIDE flag.
+        bool needs_clipping = false;
+        bool has_inside = false;
+
+        u8 shared_directions = IS_OUT;
+        u8        directions = IS_OUT;
+
+        u8 *flags = rasterizer->vertex_flags;
+        position = rasterizer->clip_space_vertex_positions;
+        for (vertex_index = 0; vertex_index < vertex_count; vertex_index++, position++, flags++) {
+            *flags = CULL;
+
+            if (position->z < 0) {
+                // Af at lease one vertex is outside the view frustum behind the near clipping plane,
+                // the geometry needs to be checked for clipping
+                needs_clipping = true;
+                *flags = IS_NEAR;
+                continue;
+            } else directions = position->z > position->w ? IS_FAR : 0;
+
+            if (     position->x >  position->w) directions |= IS_RIGHT;
+            else if (position->x < -position->w) directions |= IS_LEFT;
+
+            if (     position->y >  position->w) directions |= IS_ABOVE;
+            else if (position->y < -position->w) directions |= IS_BELOW;
+
+            if (directions) {
+                // This vertex is outside of the view frustum.
+                *flags = directions;
+                // Note: This flag 'may' get removed from this vertex before the perspective-devide
+                // (so it won't be skipped, essentially bringing it back) if it's still needed for culling/clipping.
+
+                // Intersect the shared directions so-far, against this current out-direction:
+                shared_directions &= directions;
+                // Note: This will end-up beign zero if either:
+                // A. All vertices are inside the frustum - no need for face clipping.
+                // B. All vertices are outside the frustum in at least one direction shared by all.
+                //   (All vertices are above and/or all vertices on the left and/or all vertices behind, etc.)
+            } else {
+                has_inside = true;
+                *flags = IS_NDC;
+            }
+        }
+
+        if (!has_inside && shared_directions)
+            // All vertices are completely outside, and all share at least one out-region.
+            // The entire mesh is completely outside the frustum and does not intersect it in any way.
+            // It can be safely culled altogether.
+            continue;
+
+        // The mesh intersects the frustum in some way
+
+        pixel_shader = shaded.material->pixel_shader;
+
+        mesh_has_uvs     = mesh->uvs_count     != 0;
+        mesh_has_normals = mesh->normals_count != 0;
+        face_count = mesh->triangle_count;
+
+        // Check its faces as well and check for clipping cases:
+        for (face_index = 0; face_index < face_count; face_index++) {
+            // Fetch the index and out-direction flags of each of the face's vertices:
+            position_indices = mesh->vertex_position_indices[face_index];
+
+            v1_index = position_indices.v1;
+            v2_index = position_indices.v2;
+            v3_index = position_indices.v3;
+
+            v1_flags = vertex_flags[v1_index] & IS_OUT;
+            v2_flags = vertex_flags[v2_index] & IS_OUT;
+            v3_flags = vertex_flags[v3_index] & IS_OUT;
+
+            positions[0] = rasterizer->clip_space_vertex_positions[v1_index];
+            positions[1] = rasterizer->clip_space_vertex_positions[v2_index];
+            positions[2] = rasterizer->clip_space_vertex_positions[v3_index];
+
+            world_space_vertex_positions[0] = rasterizer->world_space_vertex_positions[v1_index];
+            world_space_vertex_positions[1] = rasterizer->world_space_vertex_positions[v2_index];
+            world_space_vertex_positions[2] = rasterizer->world_space_vertex_positions[v3_index];
+
+            if (mesh_has_normals) {
+                normal_indices = mesh->vertex_normal_indices[face_index];
+                for (u8 i = 0; i < 3; i++) normals[i] = rasterizer->world_space_vertex_normals[normal_indices.ids[i]];
+            }
+
+            if (mesh_has_uvs) {
+                uvs_indices = mesh->vertex_uvs_indices[face_index];
+                for (u8 i = 0; i < 3; i++) uvs[i] = mesh->vertex_uvs[uvs_indices.ids[i]];
+            }
+
+            if (viewport->settings.cull_back_faces) {
+                // Check face orientation "early" (before the perspective divide)
+                // Compute a normal vector of the face from these 2 direction vectors:
+                pos1 = positions[0].v3;
+                pos2 = positions[1].v3;
+                pos3 = positions[2].v3;
+                normal = crossVec3(subVec3(pos3, pos1), subVec3(pos2, pos1));
+
+                // Dot the vector from the face to the origin with the normal:
+                dot = normal.z*(pz - pos1.z) - normal.y*pos1.y - normal.x*pos1.x;
+                if (dot < 0.0001f) {
+                    // if the angle is 90 the face is at grazing angle to the camera.
+                    // if the angle is greater than 90 degrees the face faces away from the camera.
+                    continue;
+                }
+            }
+
+            clipping_produced_an_extra_face = false;
+            if (needs_clipping) {
+                if ((v1_flags | v2_flags) | v3_flags) {
+                    // One or more vertices are outside - check edges for intersections:
+                    if ((v1_flags & v2_flags) & v3_flags) {
+                        // All vertices share one or more out-direction(s).
+                        // The face is fully outside the frustum, and does not intersect it.
+                        continue;
+                        // Note: This includes the cases where "all" 3 vertices cross the near clipping plane.
+                        // Below there are checks for when "any" of the vertices cross it (1 or 2, but not 3).
+                    }
+
+                    // One or more vertices are outside, and no out-direction is shared across them.
+                    // The face is visible in the view frustum in some way.
+                    vertex_flags[v1_index] |= IS_NDC;
+                    vertex_flags[v2_index] |= IS_NDC;
+                    vertex_flags[v3_index] |= IS_NDC;
+
+                    // Check if any vertex crosses the near clipping plane:
+                    if (v1_flags & IS_NEAR ||
+                        v2_flags & IS_NEAR ||
+                        v3_flags & IS_NEAR) {
+                        // There is at least one vertex behind the near clipping plane.
+                        // The face needs to be clipped
+                        // Clipping is done only against the near clipping plane, so there are only 2 possible cases:
+                        // 1: One vertex is inside the frustum and the other two are outside beyond the near clipping plane.
+                        // 2: Two vertices are inside the frustum and the third is outside beyond the near clipping plane.
+
+                        // Figure out which case applies to this current face, and which vertices are in/out:
+                        in2_num   = out2_num = 0;
+                        in2_index = out2_index = -1;
+                        if (v1_flags & IS_NEAR) {
+                            out1_index = v1_index;
+                            out1_num = 1;
+                            if (v2_flags & IS_NEAR) {
+                                out2_index = v2_index;
+                                out2_num = 2;
+                                in1_index = v3_index;
+                                in1_num = 3;
+                            } else {
+                                in1_index = v2_index;
+                                in1_num = 2;
+                                if (v3_flags & IS_NEAR) {
+                                    out2_index = v3_index;
+                                    out2_num = 3;
+                                } else {
+                                    in2_index = v3_index;
+                                    in2_num = 3;
+                                }
+                            }
+                        } else {
+                            in1_index = v1_index;
+                            in1_num = 1;
+                            if (v2_flags & IS_NEAR) {
+                                out1_index = v2_index;
+                                out1_num = 2;
+                                if (v3_flags & IS_NEAR) {
+                                    out2_index = v3_index;
+                                    out2_num = 3;
+                                } else {
+                                    in2_index = v3_index;
+                                    in2_num = 3;
+                                }
+                            } else {
+                                in2_index = v2_index;
+                                in2_num = 2;
+                                out1_index = v3_index;
+                                out1_num = 3;
+                            }
+                        }
+                        in1  = rasterizer->clip_space_vertex_positions[in1_index];
+                        out1 = rasterizer->clip_space_vertex_positions[out1_index];
+
+                        // Compute and store the (relative)amount by which the FIRST outside
+                        // vertex would need to be moved 'inwards' towards the FIRST inside vertex:
+                        t = out1.z / (out1.z - in1.z);
+                        one_minus_t = 1 - t;
+                        // Note:
+                        // Clip space is set up such that a depth of 0 is where the near clipping plane is.
+                        // So 'out1z' would be (negative)distance of the vertex from the near clipping plane,
+                        // representing the 'amount' by which the 'outside' vertex would needs to be 'pushed' forward
+                        // to land it on the near clipping plane. The denominator here is the 'full' depth-distance
+                        // between the 2 vertices - the sum of distances of the 2 vertices from to the clipping plane.
+                        // The ratio of the former from the latter is thus the (positive)interpolation amount 't' (0->1).
+                        // Since 'out1z' would be negative here, 'in1z' is negated as well to get the full (negative)sum.
+                        // Since both the numerator and the denominator here would be negative, the result is positive.
+                        // The interpolation value 't' is with respect to the 'outside' vertex, and so would be multiplied
+                        // by any attribute-value of the 'outside' vertex. The complement of that (1 - t) would be multiplied
+                        // by any attribute-value of the 'inside' vertex, and the sum would be the interpolated value.
+                        // *The same logic applies for the second interpolation in either of it's 2 cases below.
+
+                        // Compute the index of the "unshared" position-value(s) of the 'clipped' vertex of this face:
+                        clipped_index = out1_num - 1;
+                        clipped = positions + clipped_index;
+
+                        // Compute the new clip-space coordinates of the clipped-vertex:
+                        new_v1.z = fast_mul_add(out1.z, one_minus_t, t*in1.z);
+                        clipped->x = new_v1.x = fast_mul_add(out1.x, one_minus_t, t*in1.x);
+                        clipped->y = new_v1.y = fast_mul_add(out1.y, one_minus_t, t*in1.y);
+                        clipped->z = 0;
+                        clipped->w = n;
+                        // Note:
+                        // The 'Z' coordinate of this new vertex position in clip-space is set to '0' since it has
+                        // now been moved onto the clipping plane itself. Similarly, the 'W' coordinate is set to
+                        // what the "original" Z-depth value this vertex "would have had", had it been on the
+                        // near clipping plane in view-space in the first place.
+                        // *The same logic applies for the second interpolation in either of it's 2 cases below.
+
+                        attr_in  = rasterizer->world_space_vertex_positions[position_indices.ids[in1_num - 1]];
+                        attr_out = rasterizer->world_space_vertex_positions[position_indices.ids[out1_num - 1]];
+                        world_space_vertex_positions[clipped_index] = scaleAddVec3(attr_out, one_minus_t, scaleVec3(attr_in, t));
+
+                        if (mesh_has_normals) {
+                            attr_in  = rasterizer->world_space_vertex_normals[normal_indices.ids[in1_num - 1]];
+                            attr_out = rasterizer->world_space_vertex_normals[normal_indices.ids[out1_num - 1]];
+                            normals[clipped_index] = normVec3(scaleAddVec3(attr_out, one_minus_t, scaleVec3(attr_in, t)));
+                        }
+
+                        if (mesh_has_uvs) {
+                            attr_in.v2  = mesh->vertex_uvs[uvs_indices.ids[in1_num - 1]];
+                            attr_out.v2 = mesh->vertex_uvs[uvs_indices.ids[out1_num - 1]];
+                            uvs[clipped_index] = scaleAddVec2(attr_out.v2, one_minus_t, scaleVec2(attr_in.v2, t));
+                        }
+
+                        if (out2_num) {
+                            // One vertex is inside the frustum, and the other two are outside beyond the near clipping plane.
+                            // The triangle just needs to get smaller by moving the 2 outside-vertices back to the near clipping plane.
+
+                            // Compute and store the (relative)amount by which the SECOND outside
+                            // vertex needs to be moved inwards towards the FIRST inside vertex:
+                            out2 = rasterizer->clip_space_vertex_positions[out2_index];
+                            t = out2.z / (out2.z - in1.z);
+                            one_minus_t = 1 - t;
+
+                            // Compute the index of the "unshared" position-value(s) of the 'clipped' vertex of this face:
+                            clipped_index = out2_num - 1;
+                            clipped = positions + clipped_index;
+
+                            // Compute the new clip-space coordinates of the clipped-vertex:
+                            clipped->x = fast_mul_add(out2.x, one_minus_t, t*in1.x);
+                            clipped->y = fast_mul_add(out2.y, one_minus_t, t*in1.y);
+                            clipped->z = 0;
+                            clipped->w = n;
+
+                            attr_in  = rasterizer->world_space_vertex_positions[position_indices.ids[in1_num - 1]];
+                            attr_out = rasterizer->world_space_vertex_positions[position_indices.ids[out2_num - 1]];
+                            world_space_vertex_positions[clipped_index] = scaleAddVec3(attr_out, one_minus_t, scaleVec3(attr_in, t));
+
+                            if (mesh_has_normals) {
+                                attr_in  = rasterizer->world_space_vertex_normals[normal_indices.ids[in1_num - 1]];
+                                attr_out = rasterizer->world_space_vertex_normals[normal_indices.ids[out2_num - 1]];
+                                normals[clipped_index] = normVec3(scaleAddVec3(attr_out, one_minus_t, scaleVec3(attr_in, t)));
+                            }
+
+                            if (mesh_has_uvs) {
+                                attr_in.v2  = mesh->vertex_uvs[uvs_indices.ids[in1_num - 1]];
+                                attr_out.v2 = mesh->vertex_uvs[uvs_indices.ids[out2_num - 1]];
+                                uvs[clipped_index] = scaleAddVec2(attr_out.v2, one_minus_t, scaleVec2(attr_in.v2, t));
+                            }
+                        } else {
+                            // Two vertices are inside the frustum, and the third one is behind the near clipping plane.
+                            // Clipping forms a quad which needs to be split into 2 triangles.
+                            // The first one is formed from the original one, by moving the vertex that is behind the
+                            // clipping plane right up-to the near clipping plane itself (exactly as in the first case).
+                            // The second triangle is a new triangle that needs to be created, from the 2 vertices that
+                            // are inside, plus a new vertex that would need to be interpolated by moving the same vertex
+                            // that is outside up-to the near clipping plane but towards the other vertex that is inside.
+
+                            // Compute and store the (relative)amount by which the FIRST outside vertex
+                            // needs to be moved inwards towards the SECOND inside vertex:
+                            in2 = rasterizer->clip_space_vertex_positions[in2_index];
+                            t = out1.z / (out1.z - in2.z);
+                            one_minus_t = 1 - t;
+
+                            new_v2 = scaleAddVec3(out1.v3, one_minus_t, scaleVec3(in2.v3, t));
+
+                            // Determine orientation:
+                            // Compute 2 direction vectors forming a plane for the face:
+                            // Compute a normal vector of the face from these 2 direction vectors:
+                            normal = crossVec3(subVec3(new_v1, in2.v3), subVec3(new_v2, in2.v3));
+
+                            // Dot the vector from the face to the origin with the normal:
+                            dot = normal.z*(pz - in2.z) - normal.y*in2.y - normal.x*in2.x;
+                            if (dot > 0) {
+                                // if the angle is greater than 90 degrees the face is facing the camera
+                                new_v1num = 2;
+                                new_v2num = 1;
+                            } else {
+                                // if the angle is 90 the face is at grazing angle to the camera.
+                                // if the angle is greater than 90 degrees the face faces away from the camera.
+                                new_v1num = 1;
+                                new_v2num = 2;
+                            }
+
+                            // Since this vertex belongs to an 'extra' new face, the index is offset to that index-space
+                            clipped_index = 3 + new_v2num;
+                            positions[3] = in2;
+                            positions[3 + new_v1num] = *clipped;
+                            clipped = positions + clipped_index;
+
+                            // Compute the new clip-space coordinates of the clipped-vertex:
+                            clipped->x = new_v2.x;
+                            clipped->y = new_v2.y;
+                            clipped->z = 0;
+                            clipped->w = n;
+
+                            attr_in  = rasterizer->world_space_vertex_positions[position_indices.ids[in2_num - 1]];
+                            attr_out = rasterizer->world_space_vertex_positions[position_indices.ids[out1_num - 1]];
+                            world_space_vertex_positions[clipped_index] = scaleAddVec3(attr_out, one_minus_t, scaleVec3(attr_in, t));
+                            world_space_vertex_positions[3] = attr_in;
+                            world_space_vertex_positions[3 + new_v1num] = world_space_vertex_positions[out1_num - 1];
+
+                            if (mesh_has_normals) {
+                                attr_in  = rasterizer->world_space_vertex_normals[normal_indices.ids[in2_num - 1]];
+                                attr_out = rasterizer->world_space_vertex_normals[normal_indices.ids[out1_num - 1]];
+                                normals[clipped_index] = normVec3(scaleAddVec3(attr_out, one_minus_t, scaleVec3(attr_in, t)));
+                                normals[3] = attr_in;
+                                normals[3 + new_v1num] = normals[out1_num - 1];
+                            }
+
+                            if (mesh_has_uvs) {
+                                attr_in.v2  = mesh->vertex_uvs[uvs_indices.ids[in2_num - 1]];
+                                attr_out.v2 = mesh->vertex_uvs[uvs_indices.ids[out1_num - 1]];
+                                uvs[clipped_index] = scaleAddVec2(attr_out.v2, one_minus_t, scaleVec2(attr_in.v2, t));
+                                uvs[3] = attr_in.v2;
+                                uvs[3 + new_v1num] = uvs[out1_num - 1];
+                            }
+
+                            clipping_produced_an_extra_face = true;
+                        }
+                    }
+                    // Even if no vertices are behind the view frustum the face is still visible.
+                    // It either intersects the frustum in direction(s) other than the near clipping plane,
+                    // or it may fully surround the whole view frustum.
+                    // No geometric clipping is needed, but the face can not be culled.
+                } // else: No vertices are outside the frustum (the face is fully within it).
+            } // else: No vertex is behind the near clipping plane.
+            // Since geometric clipping is done only against the near clipping plane, there is nothing to clip.
+            // The other sides of the frustum would get raster-clipped later by clamping pixels outside the screen.
+
+            vertex_count = clipping_produced_an_extra_face ? 6 : 3;
+            position = positions;
+            for (vertex_index = 0; vertex_index < vertex_count; vertex_index++, position++) {
+                // The perspective divide should finalize normalizing the depth values
+                // into the 0 -> 1 space, by dividing clip-space 'z' by clip-space 'w'
+                // (coordinates that came out of the multiplication by the projection matrix)
+                // screen_z = clip_z / clip_w = Z[i] / W[i]
+                // However: The rasterizer is going to then need to convert this value
+                // into a spectrum of values that are all divided by 'clip_w'
+                // in order to linearly interpolate it there (from vertex values to a pixel value).
+
+                // Store reciprocals for use in rasterization:
+                position->w = 1.0f / position->w;
+                position->v3 = scaleVec3(position->v3, position->w);
+                // Scale the normalized screen to the pixel size:
+                // (from normalized size of -1->1 horizontally and vertically having a width and height of 2)
+                position->x *= screen_transform.x;
+                position->y *= -screen_transform.y;
+
+                // Move the screen up and to the right appropriately,
+                // such that it goes 0->width horizontally and 0->height vertically:
+                position->x += screen_transform.x;
+                position->y += screen_transform.y;
+
+                // Scale the normalized screen to the pixel size:
+                // (from normalized size of -1->1 horizontally and vertically having a width and height of 2)
+                // Then, move the screen up and to the right appropriately,
+                // such that it goes 0->width horizontally and 0->height vertically:
+//                position->x = fast_mul_add(position->x, screen_transform.x, screen_transform.x);
+//                position->x = fast_mul_add(position->y, -screen_transform.y, screen_transform.y);
+            }
+
+            vertex_count = clipping_produced_an_extra_face ? 2 : 1;
+            v1_index = 0;
+            v2_index = 1;
+            v3_index = 2;
+
+            for (vertex_index = 0; vertex_index < vertex_count; vertex_index++, v1_index += 3, v2_index += 3, v3_index += 3) {
+                if (pixel_shader) {
+                    v1 = positions[v1_index];
+                    v2 = positions[v2_index];
+                    v3 = positions[v3_index];
+
+                    // Cull this triangle against the edges of the viewport:
+                    pixel_min = minVec2(v1.v3.v2, minVec2(v2.v3.v2, v3.v3.v2));
+                    if (pixel_min.x >= width ||
+                        pixel_min.y >= height)
+                        continue;
+
+                    pixel_max = maxVec2(v1.v3.v2, maxVec2(v2.v3.v2, v3.v3.v2));
+                    if (pixel_max.x < 0 ||
+                        pixel_max.y < 0)
+                        continue;
+
+                    // Clip the bounds of the triangle to the viewport:
+                    pixel_min = clampVec2ToZero(pixel_min);
+                    pixel_max = clampVec2ToUpper(pixel_max, last_pixel_coord);
+
+                    // Compute area components:
+                    ABy = v2.y - v1.y;
+                    ABx = v2.x - v1.x;
+
+                    ACy = v3.y - v1.y;
+                    ACx = v3.x - v1.x;
+
+                    ABC = ACx*ABy - ACy*ABx; // (Cx - Ax)(By - Ay) - (Cy - Ay)(Bx - Ax)
+
+                    // Cull faces facing backwards:
+                    if (ABC <= 0)
+                        return;
+
+                    // Floor bounds coordinates down to their integral component:
+                    first_x = (u32)pixel_min.x;
+                    first_y = (u32)pixel_min.y;
+                    last_x  = (u32)pixel_max.x;
+                    last_y  = (u32)pixel_max.y;
+
+                    pixel_min.x = (f32)first_x;
+                    pixel_min.y = (f32)first_y;
+                    pixel_max.x = (f32)last_x;
+                    pixel_max.y = (f32)last_y;
+
+                    // Compute edge exclusions:
+                    // Drawing: Top-down
+                    // Origin: Top-left
+                    // Shadow rules: Top/Left
+                    // Winding: CW (Flipped vertically due to top-down drawing!)
+//                    const bool exclude_edge_1 = ABy > 0;
+//                    const bool exclude_edge_2 = v2.y > v3.y;
+//                    const bool exclude_edge_3 = ACy < 0;
+
+                    // Compute weight constants:
+                    one_over_ABC = 1.0f / ABC;
+
+                    Cdx =  ABy * one_over_ABC;
+                    Bdx = -ACy * one_over_ABC;
+
+                    Cdy = -ABx * one_over_ABC;
+                    Bdy =  ACx * one_over_ABC;
+
+                    // Compute initial areal coordinates for the first pixel center:
+                    pixel_min = addVec2(pixel_min, Vec2(0.5f, 0.5f));
+                    C_start = Cdx*pixel_min.x + Cdy*pixel_min.y + (v1.y*v2.x - v1.x*v2.y) * one_over_ABC;
+                    B_start = Bdx*pixel_min.x + Bdy*pixel_min.y + (v3.y*v1.x - v3.x*v1.y) * one_over_ABC;
+
+                    pos1 = world_space_vertex_positions[v1_index];
+                    pos2 = world_space_vertex_positions[v2_index];
+                    pos3 = world_space_vertex_positions[v3_index];
+
+                    norm1 = normals[v1_index];
+                    norm2 = normals[v2_index];
+                    norm3 = normals[v3_index];
+
+                    uv1 = uvs[v1_index];
+                    uv2 = uvs[v2_index];
+                    uv3 = uvs[v3_index];
+
+                    // Scan the bounds:
+                    for (u32 y = first_y; y <= last_y; y++, C_start += Cdy, B_start += Bdy) {
+                        B = B_start;
+                        C = C_start;
+
+                        last_UV_taken = false;
+
+                        for (u32 x = first_x; x <= last_x; x++, B += Bdx, C += Cdx) {
+                            if (Bdx < 0 && B < 0 ||
+                                Cdx < 0 && C < 0)
+                                break;
+
+                            A = 1 - B - C;
+
+                            // Skip the pixel if it's outside:
+                            if (fminf(A, fminf(B, C)) < 0)
+                                continue;
+
+                            // If the pixel is on a shadow-edge, skip it:
+//                             if ((A == 0 && exclude_edge_1) ||
+//                                 (B == 0 && exclude_edge_2) ||
+//                                 (C == 0 && exclude_edge_3))
+//                                 continue;
+
+                            // Cull and test pixel based on its depth:
+                            if (viewport->settings.antialias) {
+                                pixel_quad = viewport->pixels + (viewport->dimensions.stride * (y >> 1)) + (x >> 1);
+                                pixel = &pixel_quad->quad[y & 1][x & 1];
+                            } else {
+                                pixel_quad = viewport->pixels + (viewport->dimensions.stride * y) + x;
+                                pixel = &pixel_quad->TL;
+                            }
+                            pixel_depth = A*v1.z + B*v2.z + C*v3.z;
+                            if (pixel_depth < 0 ||
+                                pixel_depth > 1 ||
+                                pixel_depth > pixel->depth)
+                                continue;
+
+                            pixel->depth = pixel_depth;
+
+                            ABCw = Vec3(A*v1.w, B*v2.w, C*v3.w);
+                            pixel_shader_inputs.depth = 1.0f / (ABCw.A + ABCw.B + ABCw.C);
+                            ABCp = scaleVec3(ABCw, pixel_shader_inputs.depth);
+
+                            shaded.position = scaleAddVec3(pos1, ABCp.A, (scaleAddVec3(pos2, ABCp.B, scaleVec3(pos3, ABCp.C))));
+                            if (mesh_has_normals) shaded.normal = normVec3(scaleAddVec3(norm1,   ABCp.A, (scaleAddVec3(norm2,   ABCp.B, scaleVec3(norm3,   ABCp.C)))));
+                            if (mesh_has_uvs) {
+                                pixel_shader_inputs.UV = scaleAddVec2(uv1, ABCp.A, (scaleAddVec2(uv2, ABCp.B, scaleVec2(uv3, ABCp.C))));
+
+                                if (last_UV_taken) {
+                                    pixel_shader_inputs.dUV = subVec2(pixel_shader_inputs.UV, lastUV);
+                                } else {
+                                    ABCp.B = B + Bdx;
+                                    ABCp.C = C + Cdx;
+                                    ABCp.A =  v1.w * (1 - ABCp.B - ABCp.C);
+                                    ABCp.B *= v2.w;
+                                    ABCp.C *= v3.w;
+                                    ABCp = scaleVec3(ABCw, 1.0f / (ABCp.A + ABCp.B + ABCp.C));
+                                    pixel_shader_inputs.dUV = subVec2(scaleAddVec2(uv1, ABCp.A, (scaleAddVec2(uv2, ABCp.B, scaleVec2(uv3, ABCp.C)))), pixel_shader_inputs.UV);
+                                    last_UV_taken = true;
+                                }
+
+                                if (pixel_shader_inputs.dUV.u < 0) pixel_shader_inputs.dUV.u = -pixel_shader_inputs.dUV.u;
+                                if (pixel_shader_inputs.dUV.v < 0) pixel_shader_inputs.dUV.v = -pixel_shader_inputs.dUV.v;
+                                lastUV = pixel_shader_inputs.UV;
+                            }
+                            pixel_shader_inputs.coords.x = x;
+                            pixel_shader_inputs.coords.y = y;
+                            pixel_shader_outputs.color = getVec3Of(0);
+                            pixel_shader_outputs.z = pixel_depth;
+                            pixel_shader_outputs.opacity = 1;
+                            pixel_shader(&pixel_shader_inputs, scene, &shaded, &pixel_shader_outputs);
+                            pixel_shader_outputs.color.x *= FLOAT_TO_COLOR_COMPONENT;
+                            pixel_shader_outputs.color.y *= FLOAT_TO_COLOR_COMPONENT;
+                            pixel_shader_outputs.color.z *= FLOAT_TO_COLOR_COMPONENT;
+                            pixel_shader_outputs.color.x *= pixel_shader_outputs.color.x;
+                            pixel_shader_outputs.color.y *= pixel_shader_outputs.color.y;
+                            pixel_shader_outputs.color.z *= pixel_shader_outputs.color.z;
+                            setPixel((i32)x, (i32)y, pixel_shader_outputs.z, pixel_shader_outputs.color, pixel_shader_outputs.opacity, viewport);
+                        }
+                    }
+                }
+                if (viewport->settings.show_wire_frame || !pixel_shader) {
+                    vec3 color = Color(vertex_index ? Red : White);
+                    new_v1 = positions[v1_index].v3;
+                    new_v2 = positions[v2_index].v3;
+                    if (viewport->settings.antialias) {
+                        new_v1.x *= 0.5f;
+                        new_v1.y *= 0.5f;
+                        new_v2.x *= 0.5f;
+                        new_v2.y *= 0.5f;
+                    }
+                    new_v1.z -= 0.001f;
+                    new_v2.z -= 0.001f;
+                    drawLine(new_v1.x, new_v1.y, new_v1.z,
+                             new_v2.x, new_v2.y, new_v2.z,
+                             color, 1, 0, viewport);
+                    new_v1 = positions[v2_index].v3;
+                    new_v2 = positions[v3_index].v3;
+                    if (viewport->settings.antialias) {
+                        new_v1.x *= 0.5f;
+                        new_v1.y *= 0.5f;
+                        new_v2.x *= 0.5f;
+                        new_v2.y *= 0.5f;
+                    }
+                    new_v1.z -= 0.001f;
+                    new_v2.z -= 0.001f;
+                    drawLine(new_v1.x, new_v1.y, new_v1.z,
+                             new_v2.x, new_v2.y, new_v2.z,
+                             color, 1, 0, viewport);
+                    new_v1 = positions[v3_index].v3;
+                    new_v2 = positions[v1_index].v3;
+                    if (viewport->settings.antialias) {
+                        new_v1.x *= 0.5f;
+                        new_v1.y *= 0.5f;
+                        new_v2.x *= 0.5f;
+                        new_v2.y *= 0.5f;
+                    }
+                    new_v1.z -= 0.001f;
+                    new_v2.z -= 0.001f;
+                    drawLine(new_v1.x, new_v1.y, new_v1.z,
+                             new_v2.x, new_v2.y, new_v2.z,
+                             color, 1, 0, viewport);
+                }
+            }
+        }
+    }
+}
+
+
 
 
 INLINE void drawRect(Rect rect, vec3 color, f32 opacity, Viewport *viewport) {
@@ -3326,8 +4481,6 @@ INLINE void drawEdge(Edge *edge, vec3 color, f32 opacity, u8 line_width, Viewpor
                  edge->to.x,   edge->to.y,   edge->to.z,
                  color, opacity, line_width, viewport);
 }
-
-
 
 INLINE void convertPositionAndDirectionToObjectSpace(
         vec3 position,
@@ -3477,7 +4630,75 @@ INLINE void rotateXform3(xform3 *xform, f32 yaw, f32 pitch, f32 roll) {
     xform->matrix = mulMat3(xform->matrix, xform->rotation_matrix);
 }
 
+u32 getTextureMemorySize(Texture *texture, char* file_path, Platform *platform) {
+    void *file = platform->openFileForReading(file_path);
 
+    platform->readFromFile(&texture->width,  sizeof(u16),  file);
+    platform->readFromFile(&texture->height, sizeof(u16),  file);
+    platform->readFromFile(&texture->filter, sizeof(bool), file);
+    platform->readFromFile(&texture->mipmap, sizeof(bool), file);
+
+    u16 mip_width  = texture->width;
+    u16 mip_height = texture->height;
+
+    u32 memory_size = 0;
+
+    do {
+        memory_size += sizeof(TextureMip);
+        memory_size += mip_width * mip_height * sizeof(vec4);
+        if (texture->filter) {
+            memory_size += (mip_width + 1) * (mip_height + 1) * sizeof(TexelQuad);
+            memory_size += (mip_height + 1) * sizeof(TexelQuad*);
+        }
+
+        mip_width /= 2;
+        mip_height /= 2;
+    } while (texture->mipmap && mip_width > 2 && mip_height > 2);
+
+    platform->closeFile(file);
+
+    return memory_size;
+}
+
+void loadTextureFromFile(Texture *texture, char* file_path, Platform *platform, Memory *memory) {
+    void *file = platform->openFileForReading(file_path);
+    platform->readFromFile(&texture->width,  sizeof(u16),  file);
+    platform->readFromFile(&texture->height, sizeof(u16),  file);
+    platform->readFromFile(&texture->filter, sizeof(bool), file);
+    platform->readFromFile(&texture->mipmap, sizeof(bool), file);
+    platform->readFromFile(&texture->wrap,   sizeof(bool), file);
+    platform->readFromFile(&texture->mip_count, sizeof(u8), file);
+
+    texture->mips = (TextureMip*)allocateMemory(memory, sizeof(TextureMip) * texture->mip_count);
+
+    u32 size, height, stride;
+    TextureMip *texture_mip = texture->mips;
+    for (u8 mip_index = 0; mip_index < texture->mip_count; mip_index++, texture_mip++) {
+        platform->readFromFile(&texture_mip->width,  sizeof(u16), file);
+        platform->readFromFile(&texture_mip->height, sizeof(u16), file);
+
+        size = sizeof(vec4) * texture_mip->width * texture_mip->height;
+        texture_mip->texels = (vec4*)allocateMemory(memory, size);
+        platform->readFromFile(texture_mip->texels, size, file);
+
+        if (texture->filter) {
+            height = texture_mip->height + 1;
+            stride = texture_mip->width  + 1;
+
+            size = sizeof(TexelQuad) * height * stride;
+            texture_mip->texel_quads = (TexelQuad*)allocateMemory(memory, size);
+            platform->readFromFile(texture_mip->texel_quads, size, file);
+
+            size = sizeof(TexelQuad*) * height;
+            texture_mip->texel_quad_lines = (TexelQuad**)allocateMemory(memory, size);
+            TexelQuad *line_start = texture_mip->texel_quads;
+            TexelQuad **line = texture_mip->texel_quad_lines;
+            for (u16 y = 0; y < height; y++, line++, line_start += stride) *line = line_start;
+        }
+    }
+
+    platform->closeFile(file);
+}
 
 u32 getMeshMemorySize(Mesh *mesh, char *file_path, Platform *platform) {
     void *file = platform->openFileForReading(file_path);
@@ -4613,6 +5834,27 @@ void* allocateAppMemory(u64 size) {
     return null;
 }
 
+void initMaterial(Material *material) {
+    for (u8 i = 0; i < 3; i++) {
+        material->specular.components[i] = 1;
+        material->diffuse.components[i] = 1;
+    }
+    material->pixel_shader = shadePixelDepth;
+    material->mesh_shader = shadeMesh;
+    material->roughness  = 1;
+    material->shininess  = 1;
+    material->texture_count = 0;
+    for (u8 i = 0; i < 16; i++) material->texture_ids[i] = 0;
+}
+
+void initRasterizer(Rasterizer *rasterizer, u32 max_vertex_count, u32 max_normal_count, Memory *memory) {
+    rasterizer->vertex_flags = (u8*)allocateMemory(memory, max_vertex_count);
+    rasterizer->clip_space_vertex_positions  = (vec4*)allocateMemory(memory, sizeof(vec4) * max_vertex_count);
+    rasterizer->world_space_vertex_positions = (vec3*)allocateMemory(memory, sizeof(vec3) * max_vertex_count);
+    rasterizer->world_space_vertex_normals = (vec3*)allocateMemory(memory, sizeof(vec3) * max_normal_count);
+    setMeshToCube(&rasterizer->default_cube_mesh);
+}
+
 void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *platform) {
     scene->settings   = *settings;
     scene->primitives = null;
@@ -4669,6 +5911,31 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
                 initGrid(scene->grids + i, 3, 3);
     }
 
+    if (settings->lights) {
+        Light *light = scene->lights = (Light*)allocateMemory(memory, sizeof(Light) * settings->lights);
+        for (u32 i = 0; i < settings->lights; i++, light++) {
+            for (u8 c = 0; c < 3; c++) {
+                light->position_or_direction.components[c] = 0;
+                light->color.components[c]                 = 1;
+                light->attenuation.components[c]           = 1;
+            }
+            light->intensity = 1;
+            light->is_directional = false;
+        }
+    }
+
+    if (settings->materials)   {
+        Material *material = scene->materials = (Material*)allocateMemory(memory, sizeof(Material) * settings->materials);
+        for (u32 i = 0; i < settings->materials; i++, material++)
+            initMaterial(material);
+    }
+
+    if (settings->textures && settings->texture_files) {
+        scene->textures = (Texture*)allocateMemory(memory, sizeof(Texture) * settings->textures);
+        for (u32 i = 0; i < settings->textures; i++)
+            loadTextureFromFile(&scene->textures[i], settings->texture_files[i].char_ptr, platform, memory);
+    }
+
     scene->last_io_ticks = 0;
     scene->last_io_is_save = false;
 }
@@ -4710,25 +5977,45 @@ void _initApp(Defaults *defaults, u32* window_content) {
     initMouse(&app->controls.mouse);
     initApp(defaults);
 
-    u64 memory_size = defaults->additional_memory_size;
-    memory_size += sizeof(Selection);
+    u64 memory_size = sizeof(Selection) + defaults->additional_memory_size;
     memory_size += scene_settings->primitives * sizeof(Primitive);
+    memory_size += scene_settings->textures   * sizeof(Texture);
     memory_size += scene_settings->meshes     * sizeof(Mesh);
     memory_size += scene_settings->curves     * sizeof(Curve);
     memory_size += scene_settings->boxes      * sizeof(Box);
     memory_size += scene_settings->grids      * sizeof(Grid);
     memory_size += scene_settings->cameras    * sizeof(Camera);
+    memory_size += scene_settings->materials  * sizeof(Material);
+    memory_size += scene_settings->lights     * sizeof(Light);
     memory_size += viewport_settings->hud_line_count * sizeof(HUDLine);
-    if (scene_settings->meshes && scene_settings->mesh_files) {
-        Mesh mesh;
-        for (u32 i = 0; i < scene_settings->meshes; i++)
-            memory_size +=  getMeshMemorySize(&mesh, scene_settings->mesh_files[i].char_ptr, &app->platform);
+
+    if (scene_settings->textures && scene_settings->texture_files) {
+        Texture texture;
+        for (u32 i = 0; i < scene_settings->textures; i++)
+            memory_size += getTextureMemorySize(&texture, scene_settings->texture_files[i].char_ptr, &app->platform);
     }
 
-    memory_size += FRAME_BUFFER_MEMORY_SIZE;
-    initAppMemory(memory_size);
-    PixelQuad *pixels = (PixelQuad*)allocateAppMemory(FRAME_BUFFER_MEMORY_SIZE);
+    u32 max_triangle_count = CUBE__TRIANGLE_COUNT;
+    u32 max_vertex_count = CUBE__VERTEX_COUNT;
+    u32 max_normal_count = CUBE__NORMAL_COUNT;
+    if (scene_settings->meshes && scene_settings->mesh_files) {
+        Mesh mesh;
+        for (u32 i = 0; i < scene_settings->meshes; i++) {
+            memory_size += getMeshMemorySize(&mesh, scene_settings->mesh_files[i].char_ptr, &app->platform);
+            if (mesh.triangle_count > max_triangle_count) max_triangle_count = mesh.triangle_count;
+            if (mesh.vertex_count > max_vertex_count) max_vertex_count = mesh.vertex_count;
+            if (mesh.normals_count > max_normal_count) max_normal_count = mesh.normals_count;
+        }
+    }
 
+    memory_size += max_vertex_count * (sizeof(vec3) + sizeof(vec4) + 1);
+    memory_size += max_normal_count * sizeof(vec3);
+    memory_size += FRAME_BUFFER_MEMORY_SIZE;
+
+    initAppMemory(memory_size);
+
+    PixelQuad *pixels = (PixelQuad*)allocateAppMemory(FRAME_BUFFER_MEMORY_SIZE);
+    initRasterizer(&app->rasterizer, max_vertex_count, max_normal_count, &app->memory);
     initScene(&app->scene, scene_settings, &app->memory, &app->platform);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
 

@@ -9,6 +9,41 @@ INLINE vec2 getVec2Of(f32 value) {
 
     return out;
 }
+INLINE bool isEqualVec2(vec2 a, vec2 b) {
+    return a.x == b.x && a.y == b.y;
+}
+
+INLINE vec2 clampVec2ToZero(vec2 v) {
+    v.x = v.x > 0.0f ? v.x : 0.0f;
+    v.y = v.y > 0.0f ? v.y : 0.0f;
+    return v;
+}
+
+INLINE vec2 clampVec2ToUpper(vec2 v, vec2 upper) {
+    v.x = v.x < upper.x ? v.x : upper.x;
+    v.y = v.y < upper.y ? v.y : upper.y;
+    return v;
+}
+
+INLINE vec2 clampVec2(vec2 v) {
+    v.x = v.x > 0.0f ? v.x : 0.0f;
+    v.y = v.y > 0.0f ? v.y : 0.0f;
+
+    v.x = v.x < 1.0f ? v.x : 1.0f;
+    v.y = v.y < 1.0f ? v.y : 1.0f;
+
+    return v;
+}
+
+INLINE vec2 clampVec2To(vec2 v, const f32 min_value, const f32 max_value) {
+    v.x = v.x > min_value ? v.x : min_value;
+    v.y = v.y > min_value ? v.y : min_value;
+
+    v.x = v.x < max_value ? v.x : max_value;
+    v.y = v.y < max_value ? v.y : max_value;
+
+    return v;
+}
 
 INLINE vec2 invertedVec2(vec2 in) {
     vec2 out;

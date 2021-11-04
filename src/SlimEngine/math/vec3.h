@@ -6,6 +6,44 @@ INLINE bool isEqualVec3(vec3 a, vec3 b) {
     return a.x == b.x && a.y == b.y && a.z == b.z;
 }
 
+INLINE vec3 clampVec3ToZero(vec3 v) {
+    v.x = v.x > 0.0f ? v.x : 0.0f;
+    v.y = v.y > 0.0f ? v.y : 0.0f;
+    v.z = v.z > 0.0f ? v.z : 0.0f;
+    return v;
+}
+
+INLINE vec3 clampVec3ToUpper(vec3 v, vec3 upper) {
+    v.x = v.x < upper.x ? v.x : upper.x;
+    v.y = v.y < upper.y ? v.y : upper.y;
+    v.z = v.z < upper.z ? v.z : upper.z;
+    return v;
+}
+
+INLINE vec3 clampVec3(vec3 v) {
+    v.x = v.x > 0.0f ? v.x : 0.0f;
+    v.y = v.y > 0.0f ? v.y : 0.0f;
+    v.z = v.z > 0.0f ? v.z : 0.0f;
+
+    v.x = v.x < 1.0f ? v.x : 1.0f;
+    v.y = v.y < 1.0f ? v.y : 1.0f;
+    v.z = v.z < 1.0f ? v.z : 1.0f;
+
+    return v;
+}
+
+INLINE vec3 clampVec3To(vec3 v, const f32 min_value, const f32 max_value) {
+    v.x = v.x > min_value ? v.x : min_value;
+    v.y = v.y > min_value ? v.y : min_value;
+    v.z = v.z > min_value ? v.z : min_value;
+
+    v.x = v.x < max_value ? v.x : max_value;
+    v.y = v.y < max_value ? v.y : max_value;
+    v.z = v.z < max_value ? v.z : max_value;
+
+    return v;
+}
+
 INLINE vec3 getVec3Of(f32 value) {
     vec3 out;
 

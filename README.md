@@ -34,12 +34,23 @@ CPU Arch: x86, x64<br>
 
 Features:
 -
+
+<img src="src/examples/rasterization1.gif" alt="rasterization1" height="360"><br>
+<img src="src/examples/rasterization2.gif" alt="rasterization2" height="360"><br>
+
 All features of SlimApp are available here as well.<br>
 Additional features include basic facilities needed in interactive 3D application:<br>
-* A 3D viewport with wireframe rendering, a HUD and rich mouse/keyboard navigation.<br>
-* A scene with cameras, meshes and parametric shapes.<br>
+* 3D Triangle rasterisation with mesh shaders and pixel shaders.<br>
+  - Frustum and back-face culling<br>
+  - Triangle clipping<br>
+  - Vertex attribute interpolation<br>
+  - Perspective corrected baricentric coordinates for correct UV texture mapping.<br>
+  - Texture Mip-Mapping with auto-selection of mip-levels when sampling, based on UV derivatives<br>
+  - Bi-linear filtering<br>
+* 3D line drawing for wireframe rendering with multi-sampling producing very clean lines.<br>
+* 3D viewport with a HUD and rich mouse/keyboard navigation.<br>
+* A scene with cameras, lights, materials, textures, meshes and parametric curves.<br>
 * Scene selection and interactive transformations (moving, rotating and scaling).<br>
-* Line drawing is anti-aliased and multi-sampled (MSAA) producing very clean lines.<br>
 
 <img src="src/examples/MSAA.gif" alt="MSAA" height="360"><br>
 
@@ -121,6 +132,14 @@ Well documented example applications cover the features:<br>
 * <b><u>obj2mesh</b>:</u> Also privided is a separate CLI tool for converting `.obj` files to `.mesh` files.<br>
   It is also written in plain C, so should compile with either C or C++.<br>
   Usage is simple: `./obj2mesh my_obj_file.obj my_mesh_file.mesh`<br>
+  - invert_winding_order : Reverses the vertex ordering (for objs exported with clockwise order)<br>
+
+* <b><u>bmp2texture</b>:</u> Also privided is a separate CLI tool for converting `.bmp` files to `.texture` files.<br>
+  It is also written in plain C, so should compile with either C or C++.<br>
+  Usage is simple: `./bmp2texture my_bmp_file.obj my_texture_file.texture`<br>
+  - m : Generate mip-maps<br>
+  - w : Wrap-around<br>
+  - f : Filter<br>
 
 <b>SlimEngine</b> does not come with any GUI functionality at this point.<br>
 Some example apps have an optional HUD (heads up display) that shows additional information.<br>

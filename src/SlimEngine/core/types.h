@@ -215,7 +215,7 @@ typedef struct ViewportSettings {
     u32 hud_line_count;
     HUDLine *hud_lines;
     enum ColorID hud_default_color;
-    bool show_hud, use_cube_NDC, flip_z, antialias;
+    bool show_hud, use_cube_NDC, flip_z, antialias, cull_back_faces, show_wire_frame;
 } ViewportSettings;
 
 typedef struct Viewport {
@@ -242,8 +242,10 @@ typedef struct RayHit {
     bool from_behind;
 } RayHit;
 
+// Mesh:
+// =====
 typedef struct EdgeVertexIndices { u32 from, to; } EdgeVertexIndices;
-typedef struct TriangleVertexIndices { u32 ids[3]; } TriangleVertexIndices;
+typedef union TriangleVertexIndices { u32 ids[3]; struct { u32 v1, v2, v3; }; } TriangleVertexIndices;
 typedef struct Mesh {
     AABB aabb;
     u32 triangle_count, vertex_count, edge_count, normals_count, uvs_count;
@@ -252,8 +254,105 @@ typedef struct Mesh {
     TriangleVertexIndices *vertex_position_indices;
     TriangleVertexIndices *vertex_normal_indices;
     TriangleVertexIndices *vertex_uvs_indices;
-    EdgeVertexIndices *edge_vertex_indices;
+    EdgeVertexIndices     *edge_vertex_indices;
 } Mesh;
+
+typedef union TexelQuad {
+    struct {vec4 TL, TR, BL, BR;};
+    vec4 quadrants[4];
+} TexelQuad;
+
+typedef struct TextureMip {
+    u16 width, height;
+    vec4 *texels;
+    TexelQuad *texel_quads;
+    TexelQuad **texel_quad_lines;
+} TextureMip;
+
+typedef struct Texture {
+    u16 width, height;
+    u8 mip_count;
+    bool wrap, mipmap, filter;
+    TextureMip *mips;
+} Texture;
+
+// Materials:
+// =========
+typedef struct Material Material;
+
+enum BRDFType {
+    phong,
+    ggx
+};
+typedef struct Scene Scene;
+typedef struct Shaded Shaded;
+typedef struct PixelShaderInputs {
+    vec2 UV, dUV;
+    vec2u coords;
+    f32 depth;
+} PixelShaderInputs;
+
+typedef struct PixelShaderOutputs {
+    vec3 color;
+    f32 opacity;
+    f64 z;
+} PixelShaderOutputs;
+
+typedef struct Rasterizer {
+    Mesh default_cube_mesh;
+    mat4 model_to_world_inverted_transposed, model_to_world, world_to_clip;
+    vec4 *clip_space_vertex_positions;
+    vec3 *world_space_vertex_positions, *world_space_vertex_normals;
+    u8 *vertex_flags;
+} Rasterizer;
+
+typedef void (*PixelShader)(PixelShaderInputs *inputs, Scene *scene, Shaded *shaded, PixelShaderOutputs *outputs);
+typedef u8 (  *MeshShader )(Mesh *mesh, Rasterizer *rasterizer);
+
+typedef struct Material {
+    vec3 ambient, diffuse, specular;
+    f32 shininess, roughness;
+    u8 texture_count, texture_ids[16];
+    PixelShader pixel_shader;
+    MeshShader mesh_shader;
+    enum BRDFType brdf;
+    u8 flags;
+} Material;
+
+typedef struct MaterialHas {
+    bool diffuse, specular;
+} MaterialHas;
+
+typedef struct MaterialUses {
+    bool blinn, phong;
+} MaterialUses;
+
+INLINE void decodeMaterialSpec(u8 flags, MaterialHas *has, MaterialUses *uses) {
+    uses->phong = flags & (u8)PHONG;
+    uses->blinn = flags & (u8)BLINN;
+    has->diffuse = flags & (u8)LAMBERT;
+    has->specular = uses->phong || uses->blinn;
+}
+
+typedef struct Shaded {
+    Primitive *primitive;
+    Material *material;
+    MaterialHas has;
+    MaterialUses uses;
+    vec3 position, normal, viewing_direction, viewing_origin, reflected_direction, light_direction, diffuse;
+} Shaded;
+
+// Lights:
+// ======
+typedef struct AmbientLight{
+    vec3 color;
+} AmbientLight;
+
+typedef struct Light {
+    vec3 attenuation, position_or_direction, color;
+    f32 intensity;
+    bool is_directional;
+} Light;
 
 typedef struct Selection {
     quat object_rotation;
@@ -274,12 +373,16 @@ typedef struct Selection {
 } Selection;
 
 typedef struct SceneSettings {
-    u32 cameras, primitives, meshes, curves, boxes, grids;
-    String file, *mesh_files;
+    u32 cameras, primitives, meshes, curves, boxes, grids, lights, materials, textures;
+    String file, *mesh_files, *texture_files;
 } SceneSettings;
 
 typedef struct Scene {
     SceneSettings settings;
+    AmbientLight ambient_light;
+    Light *lights;
+    Material *materials;
+    Texture *textures;
     Selection *selection;
     Camera *cameras;
     Mesh *meshes;
@@ -346,6 +449,7 @@ typedef struct App {
     Time time;
     Scene scene;
     Viewport viewport;
+    Rasterizer rasterizer;
     bool is_running;
     void *user_data;
 } App;

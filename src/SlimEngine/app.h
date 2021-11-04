@@ -164,6 +164,31 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
                 initGrid(scene->grids + i, 3, 3);
     }
 
+    if (settings->lights) {
+        Light *light = scene->lights = (Light*)allocateMemory(memory, sizeof(Light) * settings->lights);
+        for (u32 i = 0; i < settings->lights; i++, light++) {
+            for (u8 c = 0; c < 3; c++) {
+                light->position_or_direction.components[c] = 0;
+                light->color.components[c]                 = 1;
+                light->attenuation.components[c]           = 1;
+            }
+            light->intensity = 1;
+            light->is_directional = false;
+        }
+    }
+
+    if (settings->materials)   {
+        Material *material = scene->materials = (Material*)allocateMemory(memory, sizeof(Material) * settings->materials);
+        for (u32 i = 0; i < settings->materials; i++, material++)
+            initMaterial(material);
+    }
+
+    if (settings->textures && settings->texture_files) {
+        scene->textures = (Texture*)allocateMemory(memory, sizeof(Texture) * settings->textures);
+        for (u32 i = 0; i < settings->textures; i++)
+            loadTextureFromFile(&scene->textures[i], settings->texture_files[i].char_ptr, platform, memory);
+    }
+
     scene->last_io_ticks = 0;
     scene->last_io_is_save = false;
 }
@@ -205,25 +230,45 @@ void _initApp(Defaults *defaults, u32* window_content) {
     initMouse(&app->controls.mouse);
     initApp(defaults);
 
-    u64 memory_size = defaults->additional_memory_size;
-    memory_size += sizeof(Selection);
+    u64 memory_size = sizeof(Selection) + defaults->additional_memory_size;
     memory_size += scene_settings->primitives * sizeof(Primitive);
+    memory_size += scene_settings->textures   * sizeof(Texture);
     memory_size += scene_settings->meshes     * sizeof(Mesh);
     memory_size += scene_settings->curves     * sizeof(Curve);
     memory_size += scene_settings->boxes      * sizeof(Box);
     memory_size += scene_settings->grids      * sizeof(Grid);
     memory_size += scene_settings->cameras    * sizeof(Camera);
+    memory_size += scene_settings->materials  * sizeof(Material);
+    memory_size += scene_settings->lights     * sizeof(Light);
     memory_size += viewport_settings->hud_line_count * sizeof(HUDLine);
-    if (scene_settings->meshes && scene_settings->mesh_files) {
-        Mesh mesh;
-        for (u32 i = 0; i < scene_settings->meshes; i++)
-            memory_size +=  getMeshMemorySize(&mesh, scene_settings->mesh_files[i].char_ptr, &app->platform);
+
+    if (scene_settings->textures && scene_settings->texture_files) {
+        Texture texture;
+        for (u32 i = 0; i < scene_settings->textures; i++)
+            memory_size += getTextureMemorySize(&texture, scene_settings->texture_files[i].char_ptr, &app->platform);
     }
 
-    memory_size += FRAME_BUFFER_MEMORY_SIZE;
-    initAppMemory(memory_size);
-    PixelQuad *pixels = (PixelQuad*)allocateAppMemory(FRAME_BUFFER_MEMORY_SIZE);
+    u32 max_triangle_count = CUBE__TRIANGLE_COUNT;
+    u32 max_vertex_count = CUBE__VERTEX_COUNT;
+    u32 max_normal_count = CUBE__NORMAL_COUNT;
+    if (scene_settings->meshes && scene_settings->mesh_files) {
+        Mesh mesh;
+        for (u32 i = 0; i < scene_settings->meshes; i++) {
+            memory_size += getMeshMemorySize(&mesh, scene_settings->mesh_files[i].char_ptr, &app->platform);
+            if (mesh.triangle_count > max_triangle_count) max_triangle_count = mesh.triangle_count;
+            if (mesh.vertex_count > max_vertex_count) max_vertex_count = mesh.vertex_count;
+            if (mesh.normals_count > max_normal_count) max_normal_count = mesh.normals_count;
+        }
+    }
 
+    memory_size += max_vertex_count * (sizeof(vec3) + sizeof(vec4) + 1);
+    memory_size += max_normal_count * sizeof(vec3);
+    memory_size += FRAME_BUFFER_MEMORY_SIZE;
+
+    initAppMemory(memory_size);
+
+    PixelQuad *pixels = (PixelQuad*)allocateAppMemory(FRAME_BUFFER_MEMORY_SIZE);
+    initRasterizer(&app->rasterizer, max_vertex_count, max_normal_count, &app->memory);
     initScene(&app->scene, scene_settings, &app->memory, &app->platform);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
 

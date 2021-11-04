@@ -21,8 +21,14 @@ add_executable(SlimEngine_6_mesh WIN32 src/examples/6_mesh.c)
 project(SlimEngine_7_scene)
 add_executable(SlimEngine_7_scene WIN32 src/examples/7_scene.c)
 
+project(SlimEngine_8_rasterization)
+add_executable(SlimEngine_8_rasterization WIN32 src/examples/8_rasterization.c)
+
 project(PerspectiveProjection)
 add_executable(PerspectiveProjection WIN32 src/examples/visualizations/perspective_projection.c)
 
 project(obj2mesh)
 add_executable(obj2mesh src/obj2mesh.c)
+
+project(bmp2texture)
+add_executable(bmp2texture src/bmp2texture.c)

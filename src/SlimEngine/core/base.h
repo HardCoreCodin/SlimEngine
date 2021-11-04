@@ -113,10 +113,31 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.001f
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
 
+// Culling flags:
+// ======================
+#define IS_NEAR  0b00000001
+#define IS_FAR   0b00000010
+#define IS_BELOW 0b00000100
+#define IS_ABOVE 0b00001000
+#define IS_RIGHT 0b00010000
+#define IS_LEFT  0b00100000
+#define IS_OUT   0b00111111
+#define IS_NDC   0b01000000
+
+// Clipping flags:
+// ===============
+#define CULL    0b00000000
+#define INSIDE  0b00000010
+
+#define LAMBERT 1
+#define PHONG 2
+#define BLINN 4
+
 typedef struct u8_3 { u8 x, y, z; } u8_3;
 typedef struct vec2i { i32 x, y; } vec2i;
+typedef struct vec2u { u32 x, y; } vec2u;
 typedef union vec2 { struct {f32 x, y;        }; struct {f32 u, v;       }; f32 components[2]; } vec2;
-typedef union vec3 { struct {f32 x, y, z;     }; struct {f32 u, v, w;    }; struct {f32 r, g, b; }; struct {f32 red, green, blue; }; f32 components[3]; } vec3;
+typedef union vec3 { struct {f32 x, y, z;     }; struct {f32 u, v, W;    }; struct {vec2 v2; f32 _; }; struct {f32 r, g, b; }; struct {f32 red, green, blue; }; struct {f32 A, B, C; }; f32 components[3]; } vec3;
 typedef union vec4 { struct {f32 x, y, z, w;  }; struct {f32 r, g, b, a; }; struct {vec3 v3; f32 _; }; f32 components[4]; } vec4;
 typedef union mat2 { struct {vec2 X, Y;       }; vec2 axis[2]; } mat2;
 typedef union mat3 { struct {vec3 X, Y, Z;    }; vec3 axis[3]; } mat3;
