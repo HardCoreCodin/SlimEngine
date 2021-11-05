@@ -1,17 +1,18 @@
 <img src="SlimEngine_logo.png" alt="SlimEngine_logo"><br>
 
-A minimalist and platform-agnostic base project for interactive graphical applications (2D/3D)<br>
-A bare-bone application executable on Windows measures at around 17 KB(!)<br>
-Strong emphasis on simplicity, ease of use and virtually no setup to get started with.<br>  
-Available as either a single header file, or a directory of headers (a "unity build").<br>
-Written in plain C and can be complied in either C or C++.<br>
-This project uses [SlimApp](https://github.com/HardCoreCodin/SlimApp) as it's base platform/application layer(s)..<br>
-An example of a project that is using this one as it's base is [SlimTracin](https://github.com/HardCoreCodin/SlimTracin).<br>
+Minimalist base-project for interactive graphical applications (2D/3D)<br>
+Written in plain C (compatible with C++)<br>
+Pure-software (no hardware acceleration of any kind)<br>
+Focuses on simplicity, ease of use and brain-dead setup (single header file, no dependencies)<br>
+<br>
+Built on: [SlimApp](https://github.com/HardCoreCodin/SlimApp) <br>
+Used in: [SlimTracin](https://github.com/HardCoreCodin/SlimTracin) <br>
 
 Architecture:
 -
-The platform layer only uses operating-system headers (no standard library used).<br>
-The application layer itself has no dependencies, apart from the standard math header.<br>
+SlimEngine is platform-agnostic by design, though currently only supports Windows.<br>
+The platform layer only uses operating-system headers - no standard library used.<br>
+The application layer itself has no 3rd-party dependencies - only uses standard math headers.<br>
 It is just a library that the platform layer uses - it has no knowledge of the platform.<br>
 
 More details on this architecture [here](https://youtu.be/Ev_TeQmus68).
@@ -27,39 +28,41 @@ For manual builds on Windows, the typical system libraries need to be linked<br>
 (winmm.lib, gdi32.lib, shell32.lib, user32.lib) and the SUBSYSTEM needs to be set to WINDOWS<br>
 
 All examples were tested in all combinations of:<br>
-Source: Single header file (SlimApp.h), Directory of headers (specific includes) <br>
+Source: Single header file (SlimEngine.h), Directory of headers (specific includes) <br>
 Compiler: MSVC, MinGW, CLang<br>
 Language: C, C++<br>
 CPU Arch: x86, x64<br>
 
 Features:
 -
-
 <img src="src/examples/rasterization1.gif" alt="rasterization1" height="360"><br>
 <img src="src/examples/rasterization2.gif" alt="rasterization2" height="360"><br>
 
-All features of SlimApp are available here as well.<br>
-Additional features include basic facilities needed in interactive 3D application:<br>
-* 3D Triangle rasterisation with mesh shaders and pixel shaders.<br>
-  - Frustum and back-face culling<br>
-  - Triangle clipping<br>
-  - Vertex attribute interpolation<br>
-  - Perspective corrected baricentric coordinates for correct UV texture mapping.<br>
-  - Texture Mip-Mapping with auto-selection of mip-levels when sampling, based on UV derivatives<br>
-  - Bi-linear filtering<br>
-* 3D line drawing for wireframe rendering with multi-sampling producing very clean lines.<br>
-* 3D viewport with a HUD and rich mouse/keyboard navigation.<br>
-* A scene with cameras, lights, materials, textures, meshes and parametric curves.<br>
-* Scene selection and interactive transformations (moving, rotating and scaling).<br>
-
+SlimEngine extends SlimApp and so inherits all it's features<br>
+Additional features include facilities for interactive 3D applications:<br>
+* A scene with cameras, lights, materials, textures, meshes and parametric curves<br>
+* Scene selection and interactive transformations (moving, rotating and scaling)<br>
+* 3D Viewport with a HUD and rich mouse/keyboard navigation<br>
+* 3D Line drawing for wireframe rendering (optionally multi-sampled for very clean lines)<br>
+* 3D Triangle rasterization:
+  - Mesh Shaders
+  - Pixel Shaders
+  - Vertex attribute interpolation
+  - Perspective corrected barycentric coordinates
+  - Texture Mip-Mapping (auto-selected mip-level based on UV derivatives)
+  - Bi-Linear filtering
+  - Triangle clipping
+  - Frustum culling (per-vertex/full-triangles)
+  - Early back-face culling (optional)
+<br>
 <img src="src/examples/MSAA.gif" alt="MSAA" height="360"><br>
 
 Well documented example applications cover the features:<br>
-* <b><u>Viewport</b>:</u> Head-Up Display (a.k.a: HUD)<br>
+* <b><u>3D Viewports:</b></u><br>
   <img src="src/examples/1_viewport_HUD.gif" alt="1_viewport_HUD" height="360"><br>
   Viewports come with a HUD that can be toggled on/off<br>
   SlimEngine comes with an empty scene, apart from a default camera bound to a default viewport.<br>
-  The window content is bound to the default viewport so they resize together.<br>
+  The window content is bound to the default viewport, so they resize together.<br>
   Customizing the scene/viewport can be done in callbacks that get invoked when they're ready.<br>
   The HUD is fully customizable, and can hold any number of lines set at viewport-initialization time.<br>
   <p float="left">
@@ -130,13 +133,13 @@ Well documented example applications cover the features:<br>
   </p>
 
 * <b><u>obj2mesh</b>:</u> Also privided is a separate CLI tool for converting `.obj` files to `.mesh` files.<br>
-  It is also written in plain C, so should compile with either C or C++.<br>
-  Usage is simple: `./obj2mesh my_obj_file.obj my_mesh_file.mesh`<br>
+  It is also written in plain C (so is compatible with C++)<br>
+  Usage: `./obj2mesh src.obj trg.mesh`<br>
   - invert_winding_order : Reverses the vertex ordering (for objs exported with clockwise order)<br>
 
-* <b><u>bmp2texture</b>:</u> Also privided is a separate CLI tool for converting `.bmp` files to `.texture` files.<br>
-  It is also written in plain C, so should compile with either C or C++.<br>
-  Usage is simple: `./bmp2texture my_bmp_file.obj my_texture_file.texture`<br>
+* <b><u>bmp2texture</b>:</u> Also provided is a separate CLI tool for converting `.bmp` files to `.texture` files.<br>
+  It is also written in plain C (so is compatible with C++)<br>
+  Usage: `./bmp2texture src.bmp trg.texture`<br>
   - m : Generate mip-maps<br>
   - w : Wrap-around<br>
   - f : Filter<br>
