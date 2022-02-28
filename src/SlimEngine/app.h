@@ -116,6 +116,7 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
     scene->boxes      = null;
     scene->grids      = null;
     scene->meshes     = null;
+    scene->textures   = null;
 
     scene->selection = (Selection*)allocateMemory(memory, sizeof(Selection));
     scene->selection->object_type = scene->selection->object_id = 0;
