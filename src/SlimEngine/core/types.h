@@ -257,25 +257,6 @@ typedef struct Mesh {
     EdgeVertexIndices     *edge_vertex_indices;
 } Mesh;
 
-typedef union TexelQuad {
-    struct {vec4 TL, TR, BL, BR;};
-    vec4 quadrants[4];
-} TexelQuad;
-
-typedef struct TextureMip {
-    u16 width, height;
-    vec4 *texels;
-    TexelQuad *texel_quads;
-    TexelQuad **texel_quad_lines;
-} TextureMip;
-
-typedef struct Texture {
-    u16 width, height;
-    u8 mip_count;
-    bool wrap, mipmap, filter;
-    TextureMip *mips;
-} Texture;
-
 typedef struct Selection {
     quat object_rotation;
     vec3 transformation_plane_origin,
@@ -295,13 +276,12 @@ typedef struct Selection {
 } Selection;
 
 typedef struct SceneSettings {
-    u32 cameras, primitives, meshes, curves, boxes, grids, textures;
-    String file, *mesh_files, *texture_files;
+    u32 cameras, primitives, meshes, curves, boxes, grids;
+    String file, *mesh_files;
 } SceneSettings;
 
 typedef struct Scene {
     SceneSettings settings;
-    Texture *textures;
     Selection *selection;
     Camera *cameras;
     Mesh *meshes;

@@ -1044,25 +1044,6 @@ typedef struct Mesh {
     EdgeVertexIndices     *edge_vertex_indices;
 } Mesh;
 
-typedef union TexelQuad {
-    struct {vec4 TL, TR, BL, BR;};
-    vec4 quadrants[4];
-} TexelQuad;
-
-typedef struct TextureMip {
-    u16 width, height;
-    vec4 *texels;
-    TexelQuad *texel_quads;
-    TexelQuad **texel_quad_lines;
-} TextureMip;
-
-typedef struct Texture {
-    u16 width, height;
-    u8 mip_count;
-    bool wrap, mipmap, filter;
-    TextureMip *mips;
-} Texture;
-
 #define CUBE__UV_COUNT 4
 #define CUBE__NORMAL_COUNT 6
 #define CUBE__VERTEX_COUNT 8
@@ -1171,13 +1152,12 @@ typedef struct Selection {
 } Selection;
 
 typedef struct SceneSettings {
-    u32 cameras, primitives, meshes, curves, boxes, grids, textures;
-    String file, *mesh_files, *texture_files;
+    u32 cameras, primitives, meshes, curves, boxes, grids;
+    String file, *mesh_files;
 } SceneSettings;
 
 typedef struct Scene {
     SceneSettings settings;
-    Texture *textures;
     Selection *selection;
     Camera *cameras;
     Mesh *meshes;
@@ -1695,10 +1675,8 @@ void setDefaultSceneSettings(SceneSettings *settings) {
     settings->curves = 0;
     settings->boxes = 0;
     settings->grids = 0;
-    settings->textures = 0;
     settings->meshes = 0;
     settings->mesh_files = null;
-    settings->texture_files = null;
     settings->file.char_ptr = null;
     settings->file.length = 0;
 }
@@ -3401,53 +3379,6 @@ INLINE void drawLine(f32 x1, f32 y1, f64 z1,
     }
 }
 
-INLINE vec4 sampleTextureMip(TextureMip *mip, vec2 UV, bool filter) {
-    f32 u = UV.u;
-    f32 v = UV.v;
-    if (u > 1) u -= (f32)((u32)u);
-    if (v > 1) v -= (f32)((u32)v);
-
-    const f32 offset = filter ? 0.5f : -0.5f;
-
-    const f32 U = u * (f32)mip->width  + offset;
-    const f32 V = v * (f32)mip->height + offset;
-    const u32 x = (u32)U;
-    const u32 y = (u32)V;
-
-    if (!filter) return mip->texels[mip->width * y + x];
-
-    const f32 r = U - (f32)x;
-    const f32 b = V - (f32)y;
-    const f32 l = 1 - r;
-    const f32 t = 1 - b;
-    const f32 factors[4] = {
-            t * l, t * r,
-            b * l, b * r
-    };
-    const TexelQuad texel_quad = mip->texel_quad_lines[y][x];
-    vec4 texel = getVec4Of(0);
-    for (u8 i = 0; i < 4; i++) texel = scaleAddVec4(texel_quad.quadrants[i], factors[i], texel);
-
-    return texel;
-}
-
-INLINE vec4 sampleTexture(Texture *texture, vec2 UV, vec2 dUV) {
-    u8 mip_level = 0;
-    if (texture->mipmap) {
-        const f32 pixel_width  = dUV.u * (f32)texture->width;
-        const f32 pixel_height = dUV.v * (f32)texture->height;
-        f32 pixel_size = (f32)(pixel_width + pixel_height) * 0.5f;
-        const u8 last_mip = texture->mip_count - 1;
-
-        while (pixel_size > 1 && mip_level < last_mip) {
-            pixel_size /= 2;
-            mip_level += 1;
-        }
-    }
-
-    return sampleTextureMip(texture->mips + mip_level, UV, texture->filter);
-}
-
 INLINE void drawRect(Rect rect, vec3 color, f32 opacity, Viewport *viewport) {
     if (rect.max.x < 0 || rect.min.x >= viewport->dimensions.width ||
         rect.max.y < 0 || rect.min.y >= viewport->dimensions.height)
@@ -3672,76 +3603,6 @@ INLINE void rotateXform3(xform3 *xform, f32 yaw, f32 pitch, f32 roll) {
     xform->rotation_inverted = convertRotationMatrixToQuaternion(xform->rotation_matrix_inverted);
 
     xform->matrix = mulMat3(xform->matrix, xform->rotation_matrix);
-}
-
-u32 getTextureMemorySize(Texture *texture, char* file_path, Platform *platform) {
-    void *file = platform->openFileForReading(file_path);
-
-    platform->readFromFile(&texture->width,  sizeof(u16),  file);
-    platform->readFromFile(&texture->height, sizeof(u16),  file);
-    platform->readFromFile(&texture->filter, sizeof(bool), file);
-    platform->readFromFile(&texture->mipmap, sizeof(bool), file);
-
-    u16 mip_width  = texture->width;
-    u16 mip_height = texture->height;
-
-    u32 memory_size = 0;
-
-    do {
-        memory_size += sizeof(TextureMip);
-        memory_size += mip_width * mip_height * sizeof(vec4);
-        if (texture->filter) {
-            memory_size += (mip_width + 1) * (mip_height + 1) * sizeof(TexelQuad);
-            memory_size += (mip_height + 1) * sizeof(TexelQuad*);
-        }
-
-        mip_width /= 2;
-        mip_height /= 2;
-    } while (texture->mipmap && mip_width > 2 && mip_height > 2);
-
-    platform->closeFile(file);
-
-    return memory_size;
-}
-
-void loadTextureFromFile(Texture *texture, char* file_path, Platform *platform, Memory *memory) {
-    void *file = platform->openFileForReading(file_path);
-    platform->readFromFile(&texture->width,  sizeof(u16),  file);
-    platform->readFromFile(&texture->height, sizeof(u16),  file);
-    platform->readFromFile(&texture->filter, sizeof(bool), file);
-    platform->readFromFile(&texture->mipmap, sizeof(bool), file);
-    platform->readFromFile(&texture->wrap,   sizeof(bool), file);
-    platform->readFromFile(&texture->mip_count, sizeof(u8), file);
-
-    texture->mips = (TextureMip*)allocateMemory(memory, sizeof(TextureMip) * texture->mip_count);
-
-    u32 size, height, stride;
-    TextureMip *texture_mip = texture->mips;
-    for (u8 mip_index = 0; mip_index < texture->mip_count; mip_index++, texture_mip++) {
-        platform->readFromFile(&texture_mip->width,  sizeof(u16), file);
-        platform->readFromFile(&texture_mip->height, sizeof(u16), file);
-
-        size = sizeof(vec4) * texture_mip->width * texture_mip->height;
-        texture_mip->texels = (vec4*)allocateMemory(memory, size);
-        platform->readFromFile(texture_mip->texels, size, file);
-
-        if (texture->filter) {
-            height = texture_mip->height + 1;
-            stride = texture_mip->width  + 1;
-
-            size = sizeof(TexelQuad) * height * stride;
-            texture_mip->texel_quads = (TexelQuad*)allocateMemory(memory, size);
-            platform->readFromFile(texture_mip->texel_quads, size, file);
-
-            size = sizeof(TexelQuad*) * height;
-            texture_mip->texel_quad_lines = (TexelQuad**)allocateMemory(memory, size);
-            TexelQuad *line_start = texture_mip->texel_quads;
-            TexelQuad **line = texture_mip->texel_quad_lines;
-            for (u16 y = 0; y < height; y++, line++, line_start += stride) *line = line_start;
-        }
-    }
-
-    platform->closeFile(file);
 }
 
 u32 getMeshMemorySize(Mesh *mesh, char *file_path, Platform *platform) {
@@ -4886,7 +4747,6 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
     scene->boxes      = null;
     scene->grids      = null;
     scene->meshes     = null;
-    scene->textures   = null;
 
     scene->selection = (Selection*)allocateMemory(memory, sizeof(Selection));
     scene->selection->object_type = scene->selection->object_id = 0;
@@ -4935,12 +4795,6 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
                 initGrid(scene->grids + i, 3, 3);
     }
 
-    if (settings->textures && settings->texture_files) {
-        scene->textures = (Texture*)allocateMemory(memory, sizeof(Texture) * settings->textures);
-        for (u32 i = 0; i < settings->textures; i++)
-            loadTextureFromFile(&scene->textures[i], settings->texture_files[i].char_ptr, platform, memory);
-    }
-
     scene->last_io_ticks = 0;
     scene->last_io_is_save = false;
 }
@@ -4984,19 +4838,12 @@ void _initApp(Defaults *defaults, u32* window_content) {
 
     u64 memory_size = sizeof(Selection) + defaults->additional_memory_size;
     memory_size += scene_settings->primitives * sizeof(Primitive);
-    memory_size += scene_settings->textures   * sizeof(Texture);
     memory_size += scene_settings->meshes     * sizeof(Mesh);
     memory_size += scene_settings->curves     * sizeof(Curve);
     memory_size += scene_settings->boxes      * sizeof(Box);
     memory_size += scene_settings->grids      * sizeof(Grid);
     memory_size += scene_settings->cameras    * sizeof(Camera);
     memory_size += viewport_settings->hud_line_count * sizeof(HUDLine);
-
-    if (scene_settings->textures && scene_settings->texture_files) {
-        Texture texture;
-        for (u32 i = 0; i < scene_settings->textures; i++)
-            memory_size += getTextureMemorySize(&texture, scene_settings->texture_files[i].char_ptr, &app->platform);
-    }
 
     u32 max_triangle_count = CUBE__TRIANGLE_COUNT;
     u32 max_vertex_count = CUBE__VERTEX_COUNT;

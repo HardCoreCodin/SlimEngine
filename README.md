@@ -38,7 +38,7 @@ Features:
 
 SlimEngine extends SlimApp and so inherits all it's features<br>
 Additional features include facilities for interactive 3D applications:<br>
-* A scene with cameras, textures, meshes and parametric curves<br>
+* A scene with cameras, meshes and parametric curves<br>
 * Scene selection and interactive transformations (moving, rotating and scaling)<br>
 * 3D Viewport with a HUD and rich mouse/keyboard navigation<br>
 * 3D Line drawing for wireframe rendering (optionally multi-sampled for very clean lines)<br>
@@ -124,13 +124,6 @@ Well documented example applications cover the features:<br>
   It is also written in plain C (so is compatible with C++)<br>
   Usage: `./obj2mesh src.obj trg.mesh`<br>
   - invert_winding_order : Reverses the vertex ordering (for objs exported with clockwise order)<br>
-
-* <b><u>bmp2texture</b>:</u> Also provided is a separate CLI tool for converting `.bmp` files to `.texture` files.<br>
-  It is also written in plain C (so is compatible with C++)<br>
-  Usage: `./bmp2texture src.bmp trg.texture`<br>
-  - m : Generate mip-maps<br>
-  - w : Wrap-around<br>
-  - f : Filter<br>
 
 <b>SlimEngine</b> does not come with any GUI functionality at this point.<br>
 Some example apps have an optional HUD (heads up display) that shows additional information.<br>

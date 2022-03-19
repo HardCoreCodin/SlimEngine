@@ -116,7 +116,6 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
     scene->boxes      = null;
     scene->grids      = null;
     scene->meshes     = null;
-    scene->textures   = null;
 
     scene->selection = (Selection*)allocateMemory(memory, sizeof(Selection));
     scene->selection->object_type = scene->selection->object_id = 0;
@@ -165,12 +164,6 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
                 initGrid(scene->grids + i, 3, 3);
     }
 
-    if (settings->textures && settings->texture_files) {
-        scene->textures = (Texture*)allocateMemory(memory, sizeof(Texture) * settings->textures);
-        for (u32 i = 0; i < settings->textures; i++)
-            loadTextureFromFile(&scene->textures[i], settings->texture_files[i].char_ptr, platform, memory);
-    }
-
     scene->last_io_ticks = 0;
     scene->last_io_is_save = false;
 }
@@ -214,19 +207,12 @@ void _initApp(Defaults *defaults, u32* window_content) {
 
     u64 memory_size = sizeof(Selection) + defaults->additional_memory_size;
     memory_size += scene_settings->primitives * sizeof(Primitive);
-    memory_size += scene_settings->textures   * sizeof(Texture);
     memory_size += scene_settings->meshes     * sizeof(Mesh);
     memory_size += scene_settings->curves     * sizeof(Curve);
     memory_size += scene_settings->boxes      * sizeof(Box);
     memory_size += scene_settings->grids      * sizeof(Grid);
     memory_size += scene_settings->cameras    * sizeof(Camera);
     memory_size += viewport_settings->hud_line_count * sizeof(HUDLine);
-
-    if (scene_settings->textures && scene_settings->texture_files) {
-        Texture texture;
-        for (u32 i = 0; i < scene_settings->textures; i++)
-            memory_size += getTextureMemorySize(&texture, scene_settings->texture_files[i].char_ptr, &app->platform);
-    }
 
     u32 max_triangle_count = CUBE__TRIANGLE_COUNT;
     u32 max_vertex_count = CUBE__VERTEX_COUNT;

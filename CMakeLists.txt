@@ -24,8 +24,5 @@ add_executable(SlimEngine_7_scene WIN32 src/examples/7_scene.c)
 project(PerspectiveProjection)
 add_executable(PerspectiveProjection WIN32 src/examples/visualizations/perspective_projection.c)
 
-project(obj2mesh)
-add_executable(obj2mesh src/obj2mesh.c)
-
-project(bmp2texture)
-add_executable(bmp2texture src/bmp2texture.c)
+project(Obj2mesh)
+add_executable(Obj2mesh src/obj2mesh.c)

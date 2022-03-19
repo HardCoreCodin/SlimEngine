@@ -258,10 +258,8 @@ void setDefaultSceneSettings(SceneSettings *settings) {
     settings->curves = 0;
     settings->boxes = 0;
     settings->grids = 0;
-    settings->textures = 0;
     settings->meshes = 0;
     settings->mesh_files = null;
-    settings->texture_files = null;
     settings->file.char_ptr = null;
     settings->file.length = 0;
 }
