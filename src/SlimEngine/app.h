@@ -165,25 +165,6 @@ void initScene(Scene *scene, SceneSettings *settings, Memory *memory, Platform *
                 initGrid(scene->grids + i, 3, 3);
     }
 
-    if (settings->lights) {
-        Light *light = scene->lights = (Light*)allocateMemory(memory, sizeof(Light) * settings->lights);
-        for (u32 i = 0; i < settings->lights; i++, light++) {
-            for (u8 c = 0; c < 3; c++) {
-                light->position_or_direction.components[c] = 0;
-                light->color.components[c]                 = 1;
-                light->attenuation.components[c]           = 1;
-            }
-            light->intensity = 1;
-            light->is_directional = false;
-        }
-    }
-
-    if (settings->materials)   {
-        Material *material = scene->materials = (Material*)allocateMemory(memory, sizeof(Material) * settings->materials);
-        for (u32 i = 0; i < settings->materials; i++, material++)
-            initMaterial(material);
-    }
-
     if (settings->textures && settings->texture_files) {
         scene->textures = (Texture*)allocateMemory(memory, sizeof(Texture) * settings->textures);
         for (u32 i = 0; i < settings->textures; i++)
@@ -239,8 +220,6 @@ void _initApp(Defaults *defaults, u32* window_content) {
     memory_size += scene_settings->boxes      * sizeof(Box);
     memory_size += scene_settings->grids      * sizeof(Grid);
     memory_size += scene_settings->cameras    * sizeof(Camera);
-    memory_size += scene_settings->materials  * sizeof(Material);
-    memory_size += scene_settings->lights     * sizeof(Light);
     memory_size += viewport_settings->hud_line_count * sizeof(HUDLine);
 
     if (scene_settings->textures && scene_settings->texture_files) {
@@ -262,14 +241,11 @@ void _initApp(Defaults *defaults, u32* window_content) {
         }
     }
 
-    memory_size += max_vertex_count * (sizeof(vec3) + sizeof(vec4) + 1);
-    memory_size += max_normal_count * sizeof(vec3);
     memory_size += FRAME_BUFFER_MEMORY_SIZE;
 
     initAppMemory(memory_size);
 
     PixelQuad *pixels = (PixelQuad*)allocateAppMemory(FRAME_BUFFER_MEMORY_SIZE);
-    initRasterizer(&app->rasterizer, max_vertex_count, max_normal_count, &app->memory);
     initScene(&app->scene, scene_settings, &app->memory, &app->platform);
     if (app->on.sceneReady) app->on.sceneReady(&app->scene);
 

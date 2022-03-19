@@ -6,7 +6,7 @@ Pure-software (no hardware acceleration of any kind)<br>
 Focuses on simplicity, ease of use and brain-dead setup (single header file, no dependencies)<br>
 <br>
 Built on: [SlimApp](https://github.com/HardCoreCodin/SlimApp) <br>
-Used in: [SlimTracin](https://github.com/HardCoreCodin/SlimTracin) <br>
+Used in: [SlimTracin](https://github.com/HardCoreCodin/SlimTracin) and [SlimRaster](https://github.com/HardCoreCodin/SlimRaster) <br>
 
 Architecture:
 -
@@ -35,25 +35,13 @@ CPU Arch: x86, x64<br>
 
 Features:
 -
-<img src="src/examples/rasterization1.gif" alt="rasterization1" height="360"><br>
-<img src="src/examples/rasterization2.gif" alt="rasterization2" height="360"><br>
 
 SlimEngine extends SlimApp and so inherits all it's features<br>
 Additional features include facilities for interactive 3D applications:<br>
-* A scene with cameras, lights, materials, textures, meshes and parametric curves<br>
+* A scene with cameras, textures, meshes and parametric curves<br>
 * Scene selection and interactive transformations (moving, rotating and scaling)<br>
 * 3D Viewport with a HUD and rich mouse/keyboard navigation<br>
 * 3D Line drawing for wireframe rendering (optionally multi-sampled for very clean lines)<br>
-* 3D Triangle rasterization:
-  - Mesh Shaders
-  - Pixel Shaders
-  - Vertex attribute interpolation
-  - Perspective corrected barycentric coordinates
-  - Texture Mip-Mapping (auto-selected mip-level based on UV derivatives)
-  - Bi-Linear filtering
-  - Triangle clipping
-  - Frustum culling (per-vertex/full-triangles)
-  - Early back-face culling (optional)
 <br>
 <img src="src/examples/MSAA.gif" alt="MSAA" height="360"><br>
 
