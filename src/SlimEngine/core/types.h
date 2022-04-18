@@ -248,13 +248,13 @@ typedef struct EdgeVertexIndices { u32 from, to; } EdgeVertexIndices;
 typedef union TriangleVertexIndices { u32 ids[3]; struct { u32 v1, v2, v3; }; } TriangleVertexIndices;
 typedef struct Mesh {
     AABB aabb;
-    u32 triangle_count, vertex_count, edge_count, normals_count, uvs_count;
     vec3 *vertex_positions, *vertex_normals;
     vec2 *vertex_uvs;
     TriangleVertexIndices *vertex_position_indices;
     TriangleVertexIndices *vertex_normal_indices;
     TriangleVertexIndices *vertex_uvs_indices;
     EdgeVertexIndices     *edge_vertex_indices;
+    u32 triangle_count, vertex_count, edge_count, normals_count, uvs_count;
 } Mesh;
 
 typedef struct Selection {

@@ -99,7 +99,7 @@ void onKeyChanged(u8 key, bool is_pressed) {
 }
 void setupScene(Scene *scene) {
     xform3 *xf = &scene->cameras[0].transform;
-    xf->position = Vec3(0, 7, -11);
+    xf->position = Vec3(0, 10, -15);
     rotateXform3(xf, 0, -0.2f, 0);
 
     Primitive *grid = &scene->primitives[0];
@@ -109,14 +109,21 @@ void setupScene(Scene *scene) {
 
     Primitive *mesh1 = &scene->primitives[1];
     Primitive *mesh2 = &scene->primitives[2];
-    mesh1->position = Vec3(10, 5, 4);
-    mesh1->color = Magenta;
+    Primitive *mesh3 = &scene->primitives[3];
     mesh1->type = PrimitiveType_Mesh;
     mesh1->id = 0;
+    mesh1->color = Yellow;
+    mesh1->position = Vec3(8, 5, 0);
 
-    *mesh2 = *mesh1;
+    mesh2->type = PrimitiveType_Mesh;
+    mesh2->id = 0;
     mesh2->color = Cyan;
-    mesh2->position.x = -10;
+    mesh2->position = Vec3(-8, 5, 0);
+
+    mesh3->type = PrimitiveType_Mesh;
+    mesh3->id = 1;
+    mesh3->color = Blue;
+    mesh3->position = Vec3(0, 5, 5);
 }
 
 void initApp(Defaults *defaults) {
@@ -127,12 +134,12 @@ void initApp(Defaults *defaults) {
     mesh1->char_ptr = string_buffers[0];
     mesh2->char_ptr = string_buffers[1];
     u32 offset = getDirectoryLength((char*)__FILE__);
-    mergeString(mesh2, (char*)__FILE__, (char*)"dragon.mesh",  offset);
     mergeString(mesh1, (char*)__FILE__, (char*)"suzanne.mesh", offset);
+    mergeString(mesh2, (char*)__FILE__, (char*)"dragon.mesh",  offset);
     defaults->settings.scene.mesh_files = mesh_files;
     defaults->settings.scene.meshes = 2;
     defaults->settings.scene.grids  = 1;
-    defaults->settings.scene.primitives = 3;
+    defaults->settings.scene.primitives = 4;
     defaults->settings.viewport.hud_line_count = 2;
     defaults->settings.viewport.hud_default_color = Green;
     app->on.keyChanged               = onKeyChanged;

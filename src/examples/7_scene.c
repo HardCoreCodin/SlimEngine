@@ -105,9 +105,9 @@ void updateAndRender() {
     endFrame(timer, mouse);
 }
 void setupScene(Scene *scene) {
-    Primitive *dragon   = &scene->primitives[1];
-    Primitive *suzanne1 = &scene->primitives[2];
-    Primitive *suzanne2 = &scene->primitives[3];
+    Primitive *mesh1 = &scene->primitives[1];
+    Primitive *mesh2 = &scene->primitives[2];
+    Primitive *mesh3 = &scene->primitives[3];
     Primitive *grid  = &scene->primitives[0];
     Primitive *helix = &scene->primitives[4];
     Primitive *coil  = &scene->primitives[5];
@@ -136,19 +136,20 @@ void setupScene(Scene *scene) {
     initGrid(scene->grids,11, 11);
     rotatePrimitive(grid, 0.5f, 0, 0);
 
-    suzanne1->position = Vec3(10, 5, 4);
-    suzanne1->color = Magenta;
-    suzanne1->type = PrimitiveType_Mesh;
-    suzanne1->id = 0;
+    mesh1->type = PrimitiveType_Mesh;
+    mesh1->id = 0;
+    mesh1->color = Yellow;
+    mesh1->position = Vec3(8, 5, 0);
 
-    *suzanne2 = *suzanne1;
-    suzanne2->color = Cyan;
-    suzanne2->position.x = -10;
+    mesh2->type = PrimitiveType_Mesh;
+    mesh2->id = 0;
+    mesh2->color = Cyan;
+    mesh2->position = Vec3(-8, 5, 0);
 
-    *dragon = *suzanne1;
-    dragon->id = 1;
-    dragon->position.z = 10;
-    dragon->color = Blue;
+    mesh3->type = PrimitiveType_Mesh;
+    mesh3->id = 1;
+    mesh3->color = Blue;
+    mesh3->position = Vec3(0, 5, 5);
 }
 void onKeyChanged(u8 key, bool is_pressed) {
     NavigationMove *move = &app->viewport.navigation.move;
@@ -168,8 +169,7 @@ void onKeyChanged(u8 key, bool is_pressed) {
 
     Scene *scene = &app->scene;
     Platform *platform = &app->platform;
-    if (app->controls.is_pressed.ctrl &&
-        !is_pressed && key == 'S' || key == 'Z') {
+    if (app->controls.is_pressed.ctrl && !is_pressed && key == 'S' || key == 'Z') {
         scene->last_io_is_save = key == 'S';
         char *file = scene->settings.file.char_ptr;
         if (scene->last_io_is_save)
@@ -190,8 +190,8 @@ void initApp(Defaults *defaults) {
     scene->char_ptr = string_buffers[2];
     u32 offset = getDirectoryLength((char*)__FILE__);
     mergeString(scene, (char*)__FILE__, (char*)"this.scene",   offset);
-    mergeString(mesh2, (char*)__FILE__, (char*)"dragon.mesh",  offset);
     mergeString(mesh1, (char*)__FILE__, (char*)"suzanne.mesh", offset);
+    mergeString(mesh2, (char*)__FILE__, (char*)"dragon.mesh",  offset);
     defaults->settings.scene.mesh_files = files;
     defaults->settings.scene.meshes     = 2;
     defaults->settings.scene.boxes      = 1;

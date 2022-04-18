@@ -81,6 +81,8 @@ typedef void (*CallbackWithCharPtr)(char* str);
 #define COLOR_COMPONENT_TO_FLOAT 0.00392156862f
 #define FLOAT_TO_COLOR_COMPONENT 255.0f
 
+#define DEG_TO_RAD 0.0174533f
+
 #define MAX_COLOR_VALUE 0xFF
 
 #define MAX_WIDTH 3840
@@ -112,26 +114,6 @@ typedef void (*CallbackWithCharPtr)(char* str);
 
 #define VIEWPORT_DEFAULT__NEAR_CLIPPING_PLANE_DISTANCE 0.001f
 #define VIEWPORT_DEFAULT__FAR_CLIPPING_PLANE_DISTANCE 1000.0f
-
-// Culling flags:
-// ======================
-#define IS_NEAR  0b00000001
-#define IS_FAR   0b00000010
-#define IS_BELOW 0b00000100
-#define IS_ABOVE 0b00001000
-#define IS_RIGHT 0b00010000
-#define IS_LEFT  0b00100000
-#define IS_OUT   0b00111111
-#define IS_NDC   0b01000000
-
-// Clipping flags:
-// ===============
-#define CULL    0b00000000
-#define INSIDE  0b00000010
-
-#define LAMBERT 1
-#define PHONG 2
-#define BLINN 4
 
 typedef struct u8_3 { u8 x, y, z; } u8_3;
 typedef struct vec2i { i32 x, y; } vec2i;
